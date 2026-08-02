@@ -92,7 +92,7 @@ O protótipo da interface do projeto está disponível no Figma:
 
 A documentação completa do projeto pode ser encontrada na Wiki:
 
-🔗 [https://github.com/EduardaMarinsBrandao/TCC-ReStore.wiki.git](https://github.com/EduardaMarinsBrandao/TCC-ReStore.wiki.git)
+🔗 https://github.com/EduardaMarinsBrandao/TCC-ReStore/wiki
 
 ---
 
