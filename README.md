@@ -68,7 +68,6 @@ O RE-STORE contará com funcionalidades como:
 - HeidiSQL
 - Git e GitHub
 - Figma
-- Apache Cordova
 
 ---
 
