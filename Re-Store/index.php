@@ -40,7 +40,7 @@ initializeDatabase();
   
   <!-- Custom CSS & Accessibility -->
   <link rel="stylesheet" href="assets/css/style.css">
-  <link rel="icon" type="image/png" href="assets/images/logo-icon.png">
+  <link rel="icon" type="image/png" href="assets/images/favicon.png">
 </head>
 <body class="bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-300 min-h-screen flex flex-col justify-between">
 
@@ -51,7 +51,7 @@ initializeDatabase();
         
         <!-- LOGO & BRAND -->
         <div class="flex items-center gap-0 cursor-pointer group py-2" onclick="App.navigateTo('home')">
-          <img src="assets/images/logo-icon.png" class="h-16 md:h-20 w-auto object-contain transition-transform group-hover:scale-105 drop-shadow-sm" alt="Re-Store Icon">
+          <img src="assets/images/favicon.png" class="h-14 md:h-18 w-auto object-contain transition-transform group-hover:scale-105 drop-shadow-sm" alt="Re-Store Icon">
           <img src="assets/images/logo-text.png" class="h-18 md:h-20 w-auto object-contain transition-transform group-hover:scale-105" alt="Re-Store Logo">
         </div>
 
@@ -166,7 +166,7 @@ initializeDatabase();
       <div class="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
         <div>
           <div class="flex items-center gap-0 mb-4 justify-center md:justify-start cursor-pointer" onclick="App.navigateTo('home')">
-            <img src="assets/images/logo-icon.png" class="h-16 md:h-20 w-auto object-contain" alt="Re-Store Icon">
+            <img src="assets/images/favicon.png" class="h-16 md:h-20 w-auto object-contain" alt="Re-Store Icon">
             <img src="assets/images/logo-text.png" class="h-18 md:h-24 w-auto object-contain" alt="Re-Store Logo">
           </div>
           <p class="text-xs text-gray-500 leading-relaxed">
