@@ -46,7 +46,7 @@ initializeDatabase();
 
   <!-- HEADER NAVEGAÇÃO -->
   <header class="sticky top-0 z-40 header-glass transition-colors">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-3">
       <div class="flex items-center justify-between h-20">
         
         <!-- LOGO & BRAND -->
@@ -56,7 +56,7 @@ initializeDatabase();
         </div>
 
         <!-- BUSCA RÁPIDA DESKTOP -->
-        <div class="hidden md:flex flex-1 max-w-md mx-8">
+        <div class="hidden md:flex flex-1 max-w-md mx-1">
           <form onsubmit="event.preventDefault(); App.navigateTo('search', { search: document.getElementById('header-search-input').value });" class="relative w-full">
             <input type="text" 
                    id="header-search-input"
@@ -166,7 +166,7 @@ initializeDatabase();
       <div class="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
         <div>
           <div class="flex items-center gap-0 mb-4 justify-center md:justify-start cursor-pointer" onclick="App.navigateTo('home')">
-            <img src="assets/images/favicon.png" class="h-16 md:h-20 w-auto object-contain" alt="Re-Store Icon">
+            <img src="assets/images/logo-icon.png" class="h-16 md:h-20 w-auto object-contain" alt="Re-Store Icon">
             <img src="assets/images/logo-text.png" class="h-18 md:h-24 w-auto object-contain" alt="Re-Store Logo">
           </div>
           <p class="text-xs text-gray-500 leading-relaxed">
