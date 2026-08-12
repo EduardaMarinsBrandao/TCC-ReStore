@@ -239,7 +239,7 @@ function initializeDatabase() {
                 'points' => 150,
                 'rating' => 4.9,
                 'total_reviews' => 12,
-                'img' => 'https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=800'
+                'img' => 'uploads/products/garrafa_termica_inox_eco.webp'
             ],
             [
                 'seller_id' => 1,
@@ -254,7 +254,7 @@ function initializeDatabase() {
                 'points' => 80,
                 'rating' => 4.8,
                 'total_reviews' => 8,
-                'img' => 'https://images.unsplash.com/photo-1597484661643-2f5fef640dd1?w=800'
+                'img' => 'uploads/products/bolsa_tote_bag_algodao_organico.webp'
             ],
             [
                 'seller_id' => 1,
@@ -269,7 +269,7 @@ function initializeDatabase() {
                 'points' => 600,
                 'rating' => 5.0,
                 'total_reviews' => 4,
-                'img' => 'https://images.unsplash.com/photo-1580481072645-022f9a6d8310?w=800'
+                'img' => 'uploads/products/cadeira_de_balanco_restaurada_em_madeira_demolicao.jpg'
             ],
             [
                 'seller_id' => 2,
@@ -284,7 +284,7 @@ function initializeDatabase() {
                 'points' => 250,
                 'rating' => 4.7,
                 'total_reviews' => 6,
-                'img' => 'https://images.unsplash.com/photo-1576995853123-5a10305d93c0?w=800'
+                'img' => 'uploads/products/jaqueta_jeans_vintage_upcycled.webp'
             ],
             [
                 'seller_id' => 1,
@@ -329,7 +329,7 @@ function initializeDatabase() {
                 'points' => 320,
                 'rating' => 4.8,
                 'total_reviews' => 7,
-                'img' => 'https://images.unsplash.com/photo-1609592424089-9831969a5833?w=800'
+                'img' => 'uploads/products/carregador_solar_portatil_eco_power.webp'
             ],
             [
                 'seller_id' => 2,
