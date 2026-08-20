@@ -1693,7 +1693,7 @@ const App = {
 
           <div id="seller-extra-fields" class="hidden space-y-3 p-3 bg-teal-50 dark:bg-teal-950/40 rounded-xl border border-teal-200 dark:border-teal-900">
             <div>
-              <label class="block text-xs font-bold text-teal-800 dark:text-teal-300 mb-1">Nome Fantasia da Loja *</label>
+              <label class="block text-xs font-bold text-teal-800 dark:text-teal-300 mb-1">Nome da Loja *</label>
               <input type="text" id="reg-business-name" placeholder="Ex: EcoStore Brasil" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 text-sm">
             </div>
             <div>
