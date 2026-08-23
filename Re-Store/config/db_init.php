@@ -194,7 +194,7 @@ function initializeDatabase() {
                3,
                1,
                'EcoStore Brasil',
-               '12.345.678/0001-90'
+               '00.000.000/0001-91'
            ]);
 
         // Usuário 2: Comprador Padrão

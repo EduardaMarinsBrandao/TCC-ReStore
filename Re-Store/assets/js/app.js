@@ -1744,9 +1744,55 @@ const App = {
     }
   },
 
-  checkPasswordStrength(val) {
-    const bar = document.getElementById('pass-strength-bar');
-    const txt = document.getElementById('pass-strength-text');
+  isValidPhone(phone) {
+    if (!phone) return false;
+    const clean = phone.replace(/\D/g, '');
+    if (clean.length < 10 || clean.length > 11) return false;
+    const ddd = parseInt(clean.substring(0, 2), 10);
+    if (ddd < 11 || ddd > 99) return false;
+    if (clean.length === 11 && clean.charAt(2) !== '9') return false;
+    return true;
+  },
+
+  isValidCNPJ(cnpj) {
+    if (!cnpj) return false;
+    const clean = cnpj.replace(/\D/g, '');
+    if (clean.length !== 14) return false;
+    if (/^(\d)\1{13}$/.test(clean)) return false;
+
+    let size = clean.length - 2;
+    let numbers = clean.substring(0, size);
+    const digits = clean.substring(size);
+    let sum = 0;
+    let pos = size - 7;
+
+    for (let i = size; i >= 1; i--) {
+      sum += parseInt(numbers.charAt(size - i), 10) * pos--;
+      if (pos < 2) pos = 9;
+    }
+
+    let result = sum % 11 < 2 ? 0 : 11 - (sum % 11);
+    if (result !== parseInt(digits.charAt(0), 10)) return false;
+
+    size = size + 1;
+    numbers = clean.substring(0, size);
+    sum = 0;
+    pos = size - 7;
+
+    for (let i = size; i >= 1; i--) {
+      sum += parseInt(numbers.charAt(size - i), 10) * pos--;
+      if (pos < 2) pos = 9;
+    }
+
+    result = sum % 11 < 2 ? 0 : 11 - (sum % 11);
+    if (result !== parseInt(digits.charAt(1), 10)) return false;
+
+    return true;
+  },
+
+  checkPasswordStrength(val, barId = 'pass-strength-bar', textId = 'pass-strength-text') {
+    const bar = document.getElementById(barId);
+    const txt = document.getElementById(textId);
     if (!bar || !txt) return;
 
     if (val.length === 0) {
@@ -1770,12 +1816,26 @@ const App = {
   async submitRegister(e) {
     e.preventDefault();
     const btn = document.getElementById('btn-reg-submit');
-    if (btn) btn.innerHTML = 'Criando conta...';
 
     const name = document.getElementById('reg-name').value;
     const email = document.getElementById('reg-email').value;
     const phone = document.getElementById('reg-phone').value;
     const pass = document.getElementById('reg-password').value;
+    const isVerifiedBusiness = this.selectedRole === 'seller' ? 1 : 0;
+    const businessName = document.getElementById('reg-business-name') ? document.getElementById('reg-business-name').value : '';
+    const cnpj = document.getElementById('reg-cnpj') ? document.getElementById('reg-cnpj').value : '';
+
+    if (!this.isValidPhone(phone)) {
+      ToastManager.show('Por favor, informe um número de telefone válido (DDD + 8 ou 9 dígitos). Ex: (11) 99999-9999', 'error');
+      return;
+    }
+
+    if ((isVerifiedBusiness || cnpj.trim() !== '') && !this.isValidCNPJ(cnpj)) {
+      ToastManager.show('Por favor, informe um CNPJ válido com 14 dígitos. Ex: 00.000.000/0001-00', 'error');
+      return;
+    }
+
+    if (btn) btn.innerHTML = 'Criando conta...';
 
     const res = await AuthManager.register(name, email, pass, phone);
     if (res.success) {
@@ -1786,6 +1846,44 @@ const App = {
     } else {
       if (btn) btn.innerHTML = 'Criar Conta e Ganhar +500 pts';
       ToastManager.show(res.error, 'error');
+    }
+  },
+
+  async submitEditProfile(e) {
+    e.preventDefault();
+    const name = document.getElementById('prof-name').value;
+    const phone = document.getElementById('prof-phone') ? document.getElementById('prof-phone').value : '';
+    const isVerifiedBusiness = document.getElementById('prof-verified') ? document.getElementById('prof-verified').value : '0';
+    const cnpj = document.getElementById('prof-cnpj') ? document.getElementById('prof-cnpj').value : '';
+    const avatarInput = document.getElementById('prof-avatar');
+
+    if (phone && !this.isValidPhone(phone)) {
+      ToastManager.show('Por favor, informe um número de telefone válido (DDD + 8 ou 9 dígitos).', 'error');
+      return;
+    }
+
+    if ((isVerifiedBusiness === '1' || cnpj.trim() !== '') && !this.isValidCNPJ(cnpj)) {
+      ToastManager.show('Por favor, informe um número de CNPJ válido (14 dígitos).', 'error');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('name', name);
+    formData.append('phone', phone);
+    formData.append('is_verified_business', isVerifiedBusiness);
+    formData.append('cnpj', cnpj);
+
+    if (avatarInput && avatarInput.files[0]) {
+      formData.append('avatar', avatarInput.files[0]);
+    }
+
+    const res = await AuthManager.updateProfile(formData);
+    if (res.success) {
+      ToastManager.show(res.message || 'Perfil atualizado com sucesso!', 'success');
+      this.updateHeaderUI();
+      this.renderCurrentScreen();
+    } else {
+      ToastManager.show(res.error || 'Erro ao atualizar perfil.', 'error');
     }
   },
 
@@ -1900,8 +1998,14 @@ const App = {
 
         <form onsubmit="App.submitForgotStep3(event)" class="space-y-4">
           <div>
-            <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Nova Senha</label>
-            <input type="password" id="forgot-newpass" required minlength="6" placeholder="••••••••" class="w-full px-4 py-2.5 border rounded-xl dark:bg-gray-700 dark:border-gray-600 text-sm">
+            <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Nova Senha (mínimo 6 caracteres) *</label>
+            <input type="password" id="forgot-newpass" oninput="App.checkPasswordStrength(this.value, 'forgot-pass-bar', 'forgot-pass-txt')" required minlength="6" placeholder="••••••••" class="w-full px-4 py-2.5 border rounded-xl dark:bg-gray-700 dark:border-gray-600 text-sm">
+            <div class="mt-1 flex items-center gap-2">
+              <div class="flex-1 bg-gray-200 dark:bg-gray-700 h-1.5 rounded-full overflow-hidden">
+                <div id="forgot-pass-bar" class="h-full w-0 transition-all duration-300 bg-red-500"></div>
+              </div>
+              <span id="forgot-pass-txt" class="text-[10px] font-semibold text-gray-400">---</span>
+            </div>
           </div>
           <button type="submit" class="btn-primary w-full py-3 text-sm cursor-pointer">Salvar Nova Senha</button>
         </form>

@@ -19,6 +19,42 @@ if (empty($data) && !empty($_POST)) {
 
 $action = $_GET['action'] ?? $_POST['action'] ?? $data['action'] ?? '';
 
+// ============================================================
+// FUNÇÕES AUXILIARES DE VALIDAÇÃO
+// ============================================================
+function isValidPhone($phone) {
+    if (empty($phone)) return false;
+    $clean = preg_replace('/[^0-9]/', '', $phone);
+    if (strlen($clean) < 10 || strlen($clean) > 11) return false;
+    $ddd = (int)substr($clean, 0, 2);
+    if ($ddd < 11 || $ddd > 99) return false;
+    if (strlen($clean) === 11 && substr($clean, 2, 1) !== '9') return false;
+    return true;
+}
+
+function isValidCNPJ($cnpj) {
+    if (empty($cnpj)) return false;
+    $clean = preg_replace('/[^0-9]/', '', $cnpj);
+    if (strlen($clean) !== 14) return false;
+    if (preg_match('/^(\d)\1{13}$/', $clean)) return false;
+
+    for ($i = 0, $j = 5, $sum = 0; $i < 12; $i++) {
+        $sum += (int)$clean[$i] * $j;
+        $j = ($j == 2) ? 9 : $j - 1;
+    }
+    $rest = $sum % 11;
+    if ((int)$clean[12] !== ($rest < 2 ? 0 : 11 - $rest)) return false;
+
+    for ($i = 0, $j = 6, $sum = 0; $i < 13; $i++) {
+        $sum += (int)$clean[$i] * $j;
+        $j = ($j == 2) ? 9 : $j - 1;
+    }
+    $rest = $sum % 11;
+    if ((int)$clean[13] !== ($rest < 2 ? 0 : 11 - $rest)) return false;
+
+    return true;
+}
+
 
 // ============================================================
 // 1. VERIFICAR USUÁRIO LOGADO
@@ -166,6 +202,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'error' => 'A senha deve conter pelo menos 6 caracteres.'
             ]);
 
+            exit;
+        }
+
+        if (!empty($phone) && !isValidPhone($phone)) {
+            echo json_encode([
+                'success' => false,
+                'error' => 'Por favor, informe um número de telefone válido com DDD (10 ou 11 dígitos).'
+            ]);
+            exit;
+        }
+
+        $cnpj = trim($data['cnpj'] ?? '');
+        $isVerifiedBusiness = isset($data['is_verified_business']) ? (int)$data['is_verified_business'] : 0;
+        if (($isVerifiedBusiness || !empty($cnpj)) && !isValidCNPJ($cnpj)) {
+            echo json_encode([
+                'success' => false,
+                'error' => 'Por favor, informe um número de CNPJ válido com 14 dígitos.'
+            ]);
             exit;
         }
 
@@ -344,6 +398,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $data['cnpj'] ??
             ''
         );
+
+        if (!empty($phone) && !isValidPhone($phone)) {
+            echo json_encode([
+                'success' => false,
+                'error' => 'Por favor, informe um número de telefone válido com DDD (10 ou 11 dígitos).'
+            ]);
+            exit;
+        }
+
+        if (($isVerifiedBusiness || !empty($cnpj)) && !isValidCNPJ($cnpj)) {
+            echo json_encode([
+                'success' => false,
+                'error' => 'Por favor, informe um número de CNPJ válido com 14 dígitos.'
+            ]);
+            exit;
+        }
 
 
         // ----------------------------------------------------

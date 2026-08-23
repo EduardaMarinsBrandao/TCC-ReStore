@@ -7,7 +7,7 @@ const ToastManager = {
     if (!this.container) {
       this.container = document.createElement('div');
       this.container.id = 'toast-container';
-      this.container.className = 'fixed top-5 right-5 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none';
+      this.container.className = 'fixed top-5 right-5 z-[99999] flex flex-col gap-2 max-w-sm w-full pointer-events-none';
       document.body.appendChild(this.container);
     }
   },
