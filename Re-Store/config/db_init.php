@@ -6,14 +6,23 @@ function initializeDatabase() {
     static $alreadyRan = false;
     if ($alreadyRan) return;
 
+    $db = getDbConnection();
+    $driver = $db->getAttribute(PDO::ATTR_DRIVER_NAME);
+
+    // Migrations de colunas adicionais executadas com segurança
+    if ($driver === 'sqlite') {
+        try { $db->exec("ALTER TABLE orders ADD COLUMN coupon_code TEXT NULL"); } catch (Exception $e) {}
+        try { $db->exec("ALTER TABLE orders ADD COLUMN discount_amount REAL DEFAULT 0.0"); } catch (Exception $e) {}
+    } else {
+        try { $db->exec("ALTER TABLE orders ADD COLUMN coupon_code VARCHAR(50) NULL"); } catch (Exception $e) {}
+        try { $db->exec("ALTER TABLE orders ADD COLUMN discount_amount DECIMAL(10,2) DEFAULT 0.00"); } catch (Exception $e) {}
+    }
+
     $flagFile = __DIR__ . '/.db_initialized';
     if (file_exists($flagFile)) {
         $alreadyRan = true;
         return;
     }
-
-    $db = getDbConnection();
-    $driver = $db->getAttribute(PDO::ATTR_DRIVER_NAME);
 
     if ($driver === 'sqlite') {
         // Esquema compatível com SQLite
@@ -81,6 +90,8 @@ function initializeDatabase() {
                 shipping_state TEXT,
                 shipping_zip TEXT,
                 status TEXT DEFAULT 'pending',
+                coupon_code TEXT NULL,
+                discount_amount REAL DEFAULT 0.0,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (buyer_id) REFERENCES users(id) ON DELETE CASCADE
@@ -159,6 +170,10 @@ function initializeDatabase() {
         foreach ($queries as $q) {
             $db->exec($q);
         }
+
+        // Migrations automáticas para colunas adicionais
+        try { $db->exec("ALTER TABLE orders ADD COLUMN coupon_code TEXT NULL"); } catch (Exception $e) {}
+        try { $db->exec("ALTER TABLE orders ADD COLUMN discount_amount REAL DEFAULT 0.0"); } catch (Exception $e) {}
     } else {
         // Esquema MySQL
         $sqlPath = __DIR__ . '/../database.sql';

@@ -126,11 +126,13 @@ if ($method === 'POST' && ($action === 'create' || $action === 'checkout')) {
         $status = 'confirmed'; // Confirmação imediata no fluxo 100% simulado
 
         $orderStmt = $db->prepare("INSERT INTO orders 
-            (buyer_id, order_number, total, points_earned, payment_method, shipping_address, shipping_city, shipping_state, shipping_zip, status) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            (buyer_id, order_number, total, points_earned, payment_method, shipping_address, shipping_city, shipping_state, shipping_zip, status, coupon_code, discount_amount) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         $orderStmt->execute([
             $userId, $orderNumber, $finalTotal, $totalPointsEarned, 
-            $paymentMethod, $shippingAddress, $shippingCity, $shippingState, $shippingZip, $status
+            $paymentMethod, $shippingAddress, $shippingCity, $shippingState, $shippingZip, $status,
+            (!empty($couponCode) && $discountId) ? $couponCode : null,
+            $discountAmount
         ]);
         $orderId = $db->lastInsertId();
 
@@ -171,7 +173,10 @@ if ($method === 'POST' && ($action === 'create' || $action === 'checkout')) {
             'message' => 'Compra realizada com sucesso!',
             'order_id' => $orderId,
             'order_number' => $orderNumber,
-            'total' => $totalAmount,
+            'subtotal' => $totalAmount,
+            'discount_amount' => $discountAmount,
+            'coupon_code' => $couponCode,
+            'total' => $finalTotal,
             'points_earned' => $totalPointsEarned,
             'new_level' => $newLevel
         ]);
@@ -257,9 +262,51 @@ if ($method === 'POST' && $action === 'cancel') {
         exit;
     }
 
-    $db->prepare("UPDATE orders SET status = 'cancelled' WHERE id = ?")->execute([$orderId]);
-    echo json_encode(['success' => true, 'message' => 'Pedido cancelado com sucesso.']);
-    exit;
+    $db->beginTransaction();
+    try {
+        $db->prepare("UPDATE orders SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = ?")->execute([$orderId]);
+
+        // 1. Reativar o cupom de desconto para ficar disponível novamente!
+        $couponRestored = false;
+        if (!empty($order['coupon_code'])) {
+            $db->prepare("UPDATE discounts SET is_used = 0 WHERE code = ? AND user_id = ?")->execute([$order['coupon_code'], $userId]);
+            $couponRestored = true;
+        }
+
+        // 2. Restaurar estoque dos produtos comprados
+        $itemsStmt = $db->prepare("SELECT product_id, quantity FROM order_items WHERE order_id = ?");
+        $itemsStmt->execute([$orderId]);
+        $orderItems = $itemsStmt->fetchAll();
+        foreach ($orderItems as $oi) {
+            $db->prepare("UPDATE products SET stock = stock + ? WHERE id = ?")->execute([$oi['quantity'], $oi['product_id']]);
+        }
+
+        // 3. Estornar pontos ganhos com a compra
+        if ((int)$order['points_earned'] > 0) {
+            $db->prepare("UPDATE users SET points = MAX(0, points - ?) WHERE id = ?")->execute([(int)$order['points_earned'], $userId]);
+            $db->prepare("INSERT INTO points_history (user_id, points, type, description, order_id) VALUES (?, ?, 'reversal', ?, ?)")
+               ->execute([$userId, -(int)$order['points_earned'], "Estorno de pontos pelo cancelamento do pedido #{$order['order_number']}", $orderId]);
+        }
+
+        $db->commit();
+
+        $msg = 'Pedido cancelado com sucesso.';
+        if ($couponRestored) {
+            $msg .= " O cupom {$order['coupon_code']} foi reativado e já está disponível para uso novamente!";
+        }
+
+        echo json_encode([
+            'success' => true, 
+            'message' => $msg, 
+            'coupon_restored' => $couponRestored,
+            'coupon_code' => $order['coupon_code'] ?? null
+        ]);
+        exit;
+    } catch (Exception $e) {
+        $db->rollBack();
+        echo json_encode(['success' => false, 'error' => 'Erro ao cancelar pedido: ' . $e->getMessage()]);
+        exit;
+    }
 }
 
 echo json_encode(['success' => false, 'error' => 'Ação inválida.']);

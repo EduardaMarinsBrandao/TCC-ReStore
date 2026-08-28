@@ -407,12 +407,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
-        if (($isVerifiedBusiness || !empty($cnpj)) && !isValidCNPJ($cnpj)) {
-            echo json_encode([
-                'success' => false,
-                'error' => 'Por favor, informe um número de CNPJ válido com 14 dígitos.'
-            ]);
-            exit;
+        if ($isVerifiedBusiness === 0) {
+            $cnpj = null;
+            $businessName = null;
+        } else {
+            if (empty($cnpj) || !isValidCNPJ($cnpj)) {
+                echo json_encode([
+                    'success' => false,
+                    'error' => 'Por favor, informe um número de CNPJ válido com 14 dígitos para conta PJ.'
+                ]);
+                exit;
+            }
         }
 
 

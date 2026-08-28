@@ -55,15 +55,15 @@ initializeDatabase();
           <img src="assets/images/logo-text.png" class="h-18 md:h-20 w-auto object-contain transition-transform group-hover:scale-105" alt="Re-Store Logo">
         </div>
 
-        <!-- BUSCA RÁPIDA DESKTOP -->
-        <div class="hidden md:flex flex-1 max-w-md mx-1">
-          <form onsubmit="event.preventDefault(); App.navigateTo('search', { search: document.getElementById('header-search-input').value });" class="relative w-full">
+        <!-- BUSCA RÁPIDA (RESPONSIVA) -->
+        <div class="flex flex-1 max-w-[160px] sm:max-w-xs md:max-w-md mx-2">
+          <form onsubmit="event.preventDefault(); const val = document.getElementById('header-search-input').value; App.navigateTo('search', { search: val });" class="relative w-full">
             <input type="text" 
                    id="header-search-input"
-                   placeholder="Buscar produtos reutilizáveis..." 
+                   placeholder="Buscar no Re-Store..." 
                    onkeyup="if(event.key==='Enter') App.navigateTo('search', { search: this.value })"
-                   class="w-full pl-10 pr-10 py-2 rounded-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
-            <button type="submit" title="Buscar" class="absolute left-3.5 top-2.5 text-gray-400 hover:text-teal-600 cursor-pointer border-none bg-transparent">
+                   class="w-full pl-8 sm:pl-9 pr-3 py-1.5 sm:py-2 rounded-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
+            <button type="submit" title="Buscar" class="absolute left-2.5 top-1.5 sm:top-2.5 text-gray-400 hover:text-teal-600 cursor-pointer border-none bg-transparent text-xs sm:text-sm">
               🔍
             </button>
           </form>

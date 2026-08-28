@@ -173,6 +173,7 @@ const App = {
           <p class="text-teal-100 text-sm md:text-base mb-6 leading-relaxed">
             Acumule Pontos Verdes a cada compra sustentável e troque por cupons exclusivos no Re-Store.
           </p>
+
           <div class="flex flex-wrap gap-3">
             <button type="button" onclick="App.navigateTo('search')" class="bg-white text-teal-700 font-bold px-5 py-2.5 rounded-full shadow hover:bg-teal-50 transition cursor-pointer">
               Explorar Produtos
@@ -591,11 +592,18 @@ const App = {
     } catch (e) {}
 
     let discountPercentage = 0;
+    let appliedCoupon = null;
     if (this.appliedCouponCode) {
-      if (this.appliedCouponCode.includes('5')) discountPercentage = 0.05;
-      else if (this.appliedCouponCode.includes('10')) discountPercentage = 0.10;
-      else if (this.appliedCouponCode.includes('15')) discountPercentage = 0.15;
-      else if (this.appliedCouponCode.includes('20')) discountPercentage = 0.20;
+      appliedCoupon = availableCoupons.find(c => c.code.toUpperCase() === this.appliedCouponCode.toUpperCase());
+      if (appliedCoupon) {
+        if (appliedCoupon.discount_type === '5%') discountPercentage = 0.05;
+        else if (appliedCoupon.discount_type === '10%') discountPercentage = 0.10;
+        else if (appliedCoupon.discount_type === '15%') discountPercentage = 0.15;
+        else if (appliedCoupon.discount_type === '20%') discountPercentage = 0.20;
+        else if (appliedCoupon.discount_type === 'free_shipping') discountPercentage = 0.0;
+      } else {
+        this.appliedCouponCode = '';
+      }
     }
 
     const discountValue = total * discountPercentage;
@@ -634,24 +642,46 @@ const App = {
             <!-- CAMPO DE CUPOM DE DESCONTO -->
             <div class="p-6 rounded-2xl border dark:border-gray-800 bg-white dark:bg-gray-800">
               <h2 class="font-bold text-base mb-2">2. Cupom de Desconto de Uso Único 🏷️</h2>
-              <p class="text-xs text-gray-500 mb-4">Digite seu código de cupom ou clique nos cupons que você resgatou com seus Pontos Verdes.</p>
+              <p class="text-xs text-gray-500 mb-4">Digite seu código de cupom ou selecione um dos cupons resgatados com seus Pontos Verdes.</p>
               
-              <div class="flex gap-2 mb-3">
-                <input type="text" id="chk-coupon-input" placeholder="Digite o código (ex: ECO10-1234)" value="${this.appliedCouponCode}" class="flex-1 px-4 py-2 border rounded-xl dark:bg-gray-700 font-mono text-sm uppercase">
-                <button type="button" onclick="App.applyCouponCheckout()" class="btn-primary text-xs py-2 px-5 cursor-pointer">
-                  Aplicar Cupom
-                </button>
-              </div>
+              ${this.appliedCouponCode && appliedCoupon ? `
+                <div class="p-3.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 rounded-2xl flex items-center justify-between mb-3">
+                  <div class="flex items-center gap-3">
+                    <span class="text-2xl">🎟️</span>
+                    <div>
+                      <div class="text-xs font-bold text-emerald-800 dark:text-emerald-200">
+                        Cupom Ativo: <span class="font-mono bg-white dark:bg-gray-800 px-2 py-0.5 rounded border border-emerald-300 dark:border-emerald-700 font-extrabold">${appliedCoupon.code}</span> (${appliedCoupon.discount_type} OFF)
+                      </div>
+                      <div class="text-[11px] text-emerald-700 dark:text-emerald-300 mt-0.5">
+                        Economia aplicada: <strong>- R$ ${discountValue.toFixed(2).replace('.', ',')}</strong>
+                      </div>
+                    </div>
+                  </div>
+                  <button type="button" onclick="App.removeCouponCheckout()" class="text-xs text-red-500 hover:text-red-700 font-bold px-2 py-1 cursor-pointer">
+                    Remover ✕
+                  </button>
+                </div>
+              ` : `
+                <div class="flex gap-2 mb-3">
+                  <input type="text" id="chk-coupon-input" placeholder="Digite o código (ex: ECO10-1234)" value="" class="flex-1 px-4 py-2 border rounded-xl dark:bg-gray-700 font-mono text-sm uppercase">
+                  <button type="button" onclick="App.applyCouponCheckout()" class="btn-primary text-xs py-2 px-5 cursor-pointer">
+                    Aplicar Cupom
+                  </button>
+                </div>
+              `}
 
               ${availableCoupons.length > 0 ? `
                 <div class="mt-3">
                   <span class="text-[11px] font-bold text-gray-500">Seus Cupons Disponíveis:</span>
-                  <div class="flex flex-wrap gap-2 mt-1">
-                    ${availableCoupons.map(c => `
-                      <button type="button" onclick="document.getElementById('chk-coupon-input').value='${c.code}'; App.applyCouponCheckout();" class="text-xs font-mono bg-teal-50 dark:bg-teal-950 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 px-3 py-1 rounded-full hover:bg-teal-100 cursor-pointer">
-                        🏷️ ${c.code} (${c.discount_type})
-                      </button>
-                    `).join('')}
+                  <div class="flex flex-wrap gap-2 mt-1.5">
+                    ${availableCoupons.map(c => {
+                      const isSelected = this.appliedCouponCode.toUpperCase() === c.code.toUpperCase();
+                      return `
+                        <button type="button" onclick="App.applyCouponDirect('${c.code}')" class="text-xs font-mono ${isSelected ? 'bg-teal-600 text-white font-bold shadow' : 'bg-teal-50 dark:bg-teal-950 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 hover:bg-teal-100'} px-3 py-1 rounded-full cursor-pointer transition">
+                          🏷️ ${c.code} (${c.discount_type}) ${isSelected ? '✓' : ''}
+                        </button>
+                      `;
+                    }).join('')}
                   </div>
                 </div>
               ` : '<div class="text-xs text-gray-400 mt-2">Você não tem cupons ativos. Troque seus pontos na aba "Extrato de Pontos" para obter cupons!</div>'}
@@ -782,15 +812,41 @@ const App = {
     `;
   },
 
-  async applyCouponCheckout() {
+  removeCouponCheckout() {
+    this.appliedCouponCode = '';
+    ToastManager.show('Cupom removido.', 'info');
+    const main = document.getElementById('main-content');
+    if (main && this.currentScreen === 'checkout') {
+      this.renderCheckoutScreen(main);
+    }
+  },
+
+  applyCouponDirect(code) {
+    if (this.appliedCouponCode && this.appliedCouponCode.toUpperCase() === code.toUpperCase()) {
+      ToastManager.show(`O cupom ${code} já está aplicado ao seu pedido!`, 'info');
+      return;
+    }
     const input = document.getElementById('chk-coupon-input');
-    const code = input ? input.value.trim().toUpperCase() : '';
+    if (input) input.value = code;
+    this.applyCouponCheckout(code);
+  },
+
+  async applyCouponCheckout(directCode = null) {
+    if (this.isApplyingCoupon) return;
+    const input = document.getElementById('chk-coupon-input');
+    const code = (directCode || (input ? input.value : '')).trim().toUpperCase();
 
     if (!code) {
       ToastManager.show('Digite um código de cupom.', 'error');
       return;
     }
 
+    if (this.appliedCouponCode && this.appliedCouponCode.toUpperCase() === code) {
+      ToastManager.show(`O cupom ${code} já está aplicado ao seu pedido!`, 'info');
+      return;
+    }
+
+    this.isApplyingCoupon = true;
     try {
       const res = await fetch('api/points.php?action=discounts');
       const data = await res.json();
@@ -812,39 +868,53 @@ const App = {
       this.renderCheckoutScreen(document.getElementById('main-content'));
     } catch (e) {
       ToastManager.show('Erro ao validar cupom.', 'error');
+    } finally {
+      this.isApplyingCoupon = false;
     }
   },
 
   async submitCheckout(e) {
     e.preventDefault();
+    if (this.isSubmittingCheckout) return;
+
     const btn = document.getElementById('btn-submit-chk');
+    this.isSubmittingCheckout = true;
     if (btn) {
       btn.disabled = true;
-      btn.innerHTML = `<span>⏳ Processando...</span>`;
+      btn.innerHTML = `<span>⏳ Processando pedido...</span>`;
     }
 
-    const paymentMethod = document.querySelector('input[name="payment_method"]:checked').value;
-    const shippingData = {
-      address: document.getElementById('chk-address').value,
-      city: document.getElementById('chk-city').value,
-      state: document.getElementById('chk-state').value,
-      zip: document.getElementById('chk-zip').value
-    };
+    try {
+      const paymentMethod = document.querySelector('input[name="payment_method"]:checked').value;
+      const shippingData = {
+        address: document.getElementById('chk-address').value,
+        city: document.getElementById('chk-city').value,
+        state: document.getElementById('chk-state').value,
+        zip: document.getElementById('chk-zip').value
+      };
 
-    const res = await CartManager.processCheckout(paymentMethod, shippingData, this.appliedCouponCode);
-    if (res.success) {
-      ToastManager.show(`Pedido #${res.order_number} confirmado!`, 'success');
-      this.appliedCouponCode = '';
-      await AuthManager.checkAuth();
-      this.updateHeaderUI();
-      // Sumir do carrinho e ir para a aba de Pedidos
-      this.navigateTo('orders');
-    } else {
+      const res = await CartManager.processCheckout(paymentMethod, shippingData, this.appliedCouponCode);
+      if (res.success) {
+        ToastManager.show(`Pedido #${res.order_number} confirmado com sucesso!`, 'success', 5000);
+        this.appliedCouponCode = '';
+        await AuthManager.checkAuth();
+        this.updateHeaderUI();
+        this.navigateTo('orders');
+      } else {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = `Confirmar Pedido Simulado`;
+        }
+        ToastManager.show(res.error || 'Erro ao concluir o checkout.', 'error');
+      }
+    } catch (err) {
       if (btn) {
         btn.disabled = false;
         btn.innerHTML = `Confirmar Pedido Simulado`;
       }
-      ToastManager.show(res.error || 'Erro ao concluir o checkout.', 'error');
+      ToastManager.show('Erro ao processar pedido.', 'error');
+    } finally {
+      this.isSubmittingCheckout = false;
     }
   },
 
@@ -873,8 +943,9 @@ const App = {
           </div>
 
           ${orders.length > 0 ? orders.map(o => {
-            const statusBadge = o.status === 'cancelled' 
-              ? '<span class="bg-red-100 text-red-800 text-xs px-2.5 py-0.5 rounded-full font-bold">Cancelado</span>'
+            const isCancelled = o.status === 'cancelled';
+            const statusBadge = isCancelled 
+              ? `<span class="bg-red-100 text-red-800 text-xs px-2.5 py-0.5 rounded-full font-bold">Cancelado ${o.coupon_code ? '(Cupom Reativado ✓)' : ''}</span>`
               : '<span class="bg-emerald-100 text-emerald-800 text-xs px-2.5 py-0.5 rounded-full font-bold">✓ Confirmado / Em Separação</span>';
 
             return `
@@ -903,11 +974,20 @@ const App = {
                 </div>
 
                 <div class="flex flex-wrap items-center justify-between pt-3 border-t dark:border-gray-700 gap-2">
-                  <div class="text-xs text-gray-500">
-                    Total: <strong class="text-gray-900 dark:text-white">R$ ${parseFloat(o.total).toFixed(2).replace('.', ',')}</strong> | Pontos Ganhos: <strong class="text-emerald-600">+${o.points_earned} pts</strong>
+                  <div class="text-xs text-gray-500 space-y-1">
+                    ${o.coupon_code ? `
+                      <div class="text-teal-600 dark:text-teal-400 font-semibold flex items-center gap-1.5">
+                        <span>🏷️ Cupom Aplicado:</span>
+                        <span class="font-mono bg-teal-50 dark:bg-teal-950 px-2 py-0.5 rounded border border-teal-200 dark:border-teal-800 font-bold">${o.coupon_code}</span>
+                        ${parseFloat(o.discount_amount) > 0 ? `<span class="text-emerald-600">(- R$ ${parseFloat(o.discount_amount).toFixed(2).replace('.', ',')})</span>` : ''}
+                      </div>
+                    ` : ''}
+                    <div>
+                      Total Pago: <strong class="text-gray-900 dark:text-white text-sm">R$ ${parseFloat(o.total).toFixed(2).replace('.', ',')}</strong> | Pontos Ganhos: <strong class="text-emerald-600">+${o.points_earned} pts</strong>
+                    </div>
                   </div>
                   <div class="flex gap-2">
-                    ${o.status !== 'cancelled' ? `
+                    ${!isCancelled ? `
                       <button type="button" onclick="App.cancelOrder(${o.id})" class="text-xs font-semibold text-red-500 hover:underline px-2 py-1 cursor-pointer">Cancelar Pedido</button>
                     ` : ''}
                     <button type="button" onclick="App.navigateTo('help')" class="btn-outline text-xs py-1 px-3 cursor-pointer">Suporte</button>
@@ -1021,7 +1101,7 @@ const App = {
 
           <div>
             <h2 class="text-xl font-bold mb-4">Resgatar Cupons de Desconto</h2>
-            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
               ${[
                 { type: '5%', name: 'Desconto de 5%', cost: 150 },
                 { type: '10%', name: 'Desconto de 10%', cost: 300 },
@@ -1034,7 +1114,7 @@ const App = {
                     <div class="font-bold text-sm text-gray-900 dark:text-white">${c.name}</div>
                     <div class="text-xs text-gray-500 mt-1">Custo: ${c.cost} Pontos</div>
                   </div>
-                  <button type="button" onclick="App.redeemCoupon('${c.type}')" ${points < c.cost ? 'disabled' : ''} 
+                  <button type="button" onclick="App.redeemCoupon('${c.type}', this)" ${points < c.cost ? 'disabled' : ''} 
                     class="mt-4 btn-primary text-xs py-2 w-full cursor-pointer ${points < c.cost ? 'opacity-50 cursor-not-allowed' : ''}">
                     ${points >= c.cost ? 'Resgatar Cupom' : 'Pontos Insuficientes'}
                   </button>
@@ -1042,11 +1122,107 @@ const App = {
               `).join('')}
             </div>
           </div>
+
+          <!-- SEÇÃO MEUS CUPONS RESGATADOS -->
+          <div class="p-6 rounded-3xl border dark:border-gray-800 bg-white dark:bg-gray-800 shadow-sm">
+            <div class="flex items-center justify-between mb-4">
+              <h2 class="text-xl font-bold">Meus Cupons Resgatados 🎟️</h2>
+              <span class="text-xs text-gray-400">${discounts.length} cupom(ns) encontrado(s)</span>
+            </div>
+
+            ${discounts.length > 0 ? `
+              <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                ${discounts.map(d => {
+                  const isUsed = parseInt(d.is_used) === 1;
+                  return `
+                    <div class="p-4 rounded-2xl border ${isUsed ? 'border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40 opacity-60' : 'border-teal-200 dark:border-teal-900 bg-teal-50/50 dark:bg-teal-950/30'} flex flex-col justify-between">
+                      <div>
+                        <div class="flex items-center justify-between mb-2">
+                          <span class="font-extrabold text-sm ${isUsed ? 'text-gray-500' : 'text-teal-600 dark:text-teal-400'}">${d.discount_type === 'free_shipping' ? '🚚 Frete Grátis' : `${d.discount_type} OFF`}</span>
+                          <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${isUsed ? 'bg-gray-200 text-gray-600' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-300'}">
+                            ${isUsed ? 'Utilizado' : 'Disponível ✓'}
+                          </span>
+                        </div>
+                        <div class="bg-white dark:bg-gray-800 p-2 rounded-xl border dark:border-gray-700 text-center font-mono font-bold text-sm tracking-wider my-2 select-all text-gray-800 dark:text-gray-200">
+                          ${d.code}
+                        </div>
+                        <div class="text-[11px] text-gray-400 text-center">Custo: ${d.points_cost} pontos</div>
+                      </div>
+
+                      ${!isUsed ? `
+                        <div class="flex gap-2 mt-3">
+                          <button type="button" onclick="navigator.clipboard.writeText('${d.code}'); ToastManager.show('Código ${d.code} copiado!', 'info');" class="btn-outline text-[11px] py-1.5 flex-1 cursor-pointer">
+                            Copiar
+                          </button>
+                          <button type="button" onclick="App.appliedCouponCode = '${d.code}'; ToastManager.show('Cupom ${d.code} selecionado para o checkout!', 'success'); App.navigateTo('cart');" class="btn-primary text-[11px] py-1.5 flex-1 cursor-pointer">
+                            Usar no Carrinho
+                          </button>
+                        </div>
+                      ` : `
+                        <div class="text-center text-[10px] text-gray-400 mt-3 italic">Já utilizado em compra anterior</div>
+                      `}
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            ` : `
+              <div class="text-center py-8 text-gray-400 text-xs">
+                Você ainda não resgatou nenhum cupom. Use seus pontos acumulados acima para resgatar descontos exclusivos!
+              </div>
+            `}
+          </div>
         </div>
       `;
 
     } catch (e) {
       container.innerHTML = `<div class="text-center py-12 text-red-500">Erro ao carregar sistema de pontos.</div>`;
+    }
+  },
+
+  async redeemCoupon(discountType, btnElement = null) {
+    if (this.isRedeemingCoupon) return;
+
+    if (!AuthManager.currentUser) {
+      this.showLoginModal();
+      return;
+    }
+
+    this.isRedeemingCoupon = true;
+    let originalText = '';
+    if (btnElement) {
+      originalText = btnElement.innerText;
+      btnElement.disabled = true;
+      btnElement.innerText = 'Resgatando... ⏳';
+    }
+
+    try {
+      const res = await fetch('api/points.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'redeem', discount_type: discountType })
+      });
+      const data = await res.json();
+      if (data.success) {
+        ToastManager.show(data.message || `Cupom ${data.code} resgatado com sucesso!`, 'success', 5000);
+        if (data.remaining_points !== undefined) {
+          AuthManager.currentUser.points = data.remaining_points;
+        }
+        this.updateHeaderUI();
+        const main = document.getElementById('main-content');
+        if (main && this.currentScreen === 'points') {
+          this.renderPointsScreen(main);
+        }
+      } else {
+        ToastManager.show(data.error || 'Erro ao resgatar cupom.', 'error');
+      }
+    } catch (e) {
+      ToastManager.show('Erro ao processar resgate de cupom.', 'error');
+    } finally {
+      this.isRedeemingCoupon = false;
+      if (btnElement && btnElement.disabled) {
+        btnElement.disabled = false;
+        btnElement.innerText = originalText;
+      }
     }
   },
 
@@ -1060,6 +1236,8 @@ const App = {
       return;
     }
 
+    const isPJ = parseInt(user.is_verified_business) === 1;
+
     container.innerHTML = `
       <div class="max-w-3xl mx-auto space-y-8 animate-fade-in">
         <div class="p-6 rounded-3xl border dark:border-gray-800 bg-white dark:bg-gray-800 flex items-center justify-between shadow-sm">
@@ -1068,7 +1246,7 @@ const App = {
             <div>
               <h1 class="text-xl font-extrabold text-gray-900 dark:text-white flex items-center gap-2">
                 ${user.name}
-                ${user.is_verified_business ? '<span class="text-xs bg-teal-100 text-teal-800 px-2 py-0.5 rounded-full font-bold">CNPJ Verificado ✓</span>' : ''}
+                ${isPJ ? '<span class="text-xs bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200 px-2 py-0.5 rounded-full font-bold">CNPJ Verificado ✓</span>' : ''}
               </h1>
               <div class="text-xs text-gray-500">${user.email} • ${user.city || 'São Paulo'}, ${user.state || 'SP'}</div>
               <div class="mt-2 flex items-center gap-2">
@@ -1092,18 +1270,18 @@ const App = {
               </div>
               <div>
                 <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Telefone / WhatsApp</label>
-                <input type="text" id="prof-phone" value="${user.phone || ''}" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 text-sm">
+                <input type="text" id="prof-phone" value="${user.phone || ''}" placeholder="(11) 99999-9999" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 text-sm">
               </div>
               <div>
-                <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Empresa Verificada (CNPJ)?</label>
-                <select id="prof-verified" onchange="document.getElementById('cnpj-box').style.display = this.value === '1' ? 'block' : 'none'" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 text-sm">
-                  <option value="0" ${!user.is_verified_business ? 'selected' : ''}>Pessoa Física</option>
-                  <option value="1" ${user.is_verified_business ? 'selected' : ''}>Empresa Sustentável Verificada (PJ)</option>
+                <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Tipo de Conta / Empresa Verificada</label>
+                <select id="prof-verified" onchange="const box = document.getElementById('cnpj-box'); if (this.value === '1') { box.style.display = 'block'; } else { box.style.display = 'none'; document.getElementById('prof-cnpj').value = ''; }" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 text-sm">
+                  <option value="0" ${!isPJ ? 'selected' : ''}>Pessoa Física (PF)</option>
+                  <option value="1" ${isPJ ? 'selected' : ''}>Empresa Sustentável Verificada (PJ)</option>
                 </select>
               </div>
-              <div id="cnpj-box" style="display: ${user.is_verified_business ? 'block' : 'none'};">
+              <div id="cnpj-box" style="display: ${isPJ ? 'block' : 'none'};">
                 <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Número de CNPJ</label>
-                <input type="text" id="prof-cnpj" value="${user.cnpj || ''}" placeholder="00.000.000/0001-00" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 text-sm font-mono">
+                <input type="text" id="prof-cnpj" value="${isPJ ? (user.cnpj || '') : ''}" placeholder="00.000.000/0001-00" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 text-sm font-mono">
               </div>
               <div>
                 <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Foto de Perfil (Upload Local)</label>
@@ -1287,14 +1465,133 @@ const App = {
           </div>
 
           <div>
-            <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Fotos do Produto (Upload Local)</label>
-            <input type="file" id="prod-images" multiple accept="image/*" class="w-full text-xs text-gray-500">
+            <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Fotos do Produto (1 foto obrigatória, até 5 fotos) *</label>
+            <input type="file" id="prod-images" multiple accept="image/png,image/jpeg,image/jpg,image/webp" onchange="App.previewProductImages(event)" class="w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100 cursor-pointer">
+            <p class="text-[11px] text-gray-400 mt-1">Selecione de 1 a 5 fotos reais do produto. A primeira foto será a capa principal.</p>
+            <div id="prod-images-preview" class="hidden mt-3 p-3 bg-gray-50 dark:bg-gray-700/40 rounded-2xl border dark:border-gray-700"></div>
           </div>
 
           <button type="submit" id="btn-add-prod" class="btn-primary w-full py-3 text-sm cursor-pointer">Publicar Anúncio no Marketplace</button>
         </form>
       </div>
     `;
+  },
+
+  previewProductImages(e) {
+    const files = e.target.files;
+    const previewContainer = document.getElementById('prod-images-preview');
+    if (!previewContainer) return;
+
+    previewContainer.innerHTML = '';
+    if (!files || files.length === 0) {
+      previewContainer.classList.add('hidden');
+      return;
+    }
+
+    if (files.length > 5) {
+      ToastManager.show('Atenção: Você pode anexar no máximo 5 fotos por produto! Apenas as primeiras 5 serão enviadas.', 'warning');
+    }
+
+    previewContainer.classList.remove('hidden');
+
+    const header = document.createElement('div');
+    header.className = 'text-xs font-bold text-teal-700 dark:text-teal-300 mb-2 flex items-center justify-between';
+    header.innerHTML = `
+      <span>📸 ${Math.min(files.length, 5)} foto(s) selecionada(s) (máximo 5)</span>
+      <span class="text-[10px] text-gray-400 font-normal">A foto #1 será a capa</span>
+    `;
+    previewContainer.appendChild(header);
+
+    const grid = document.createElement('div');
+    grid.className = 'grid grid-cols-5 gap-2';
+
+    const maxCount = Math.min(files.length, 5);
+    for (let i = 0; i < maxCount; i++) {
+      const file = files[i];
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const thumb = document.createElement('div');
+        thumb.className = 'relative aspect-square rounded-xl overflow-hidden border-2 ' + (i === 0 ? 'border-teal-500 ring-2 ring-teal-300' : 'border-gray-200 dark:border-gray-600') + ' shadow-sm bg-gray-100 dark:bg-gray-800';
+        thumb.innerHTML = `
+          <img src="${event.target.result}" class="w-full h-full object-cover" alt="Preview ${i + 1}">
+          <span class="absolute bottom-0 inset-x-0 ${i === 0 ? 'bg-teal-600' : 'bg-black/60'} text-white text-[9px] font-bold text-center py-0.5">
+            ${i === 0 ? 'Principal' : `#${i + 1}`}
+          </span>
+        `;
+        grid.appendChild(thumb);
+      };
+      reader.readAsDataURL(file);
+    }
+    previewContainer.appendChild(grid);
+  },
+
+  async submitAddProduct(e) {
+    e.preventDefault();
+    const btn = document.getElementById('btn-add-prod');
+
+    const name = document.getElementById('prod-name').value.trim();
+    const price = parseFloat(document.getElementById('prod-price').value);
+    const category = document.getElementById('prod-category').value;
+    const condition = document.getElementById('prod-condition').value;
+    const stock = parseInt(document.getElementById('prod-stock').value) || 1;
+    const material = document.getElementById('prod-material').value.trim();
+    const description = document.getElementById('prod-desc').value.trim();
+    const imagesInput = document.getElementById('prod-images');
+    const files = imagesInput ? imagesInput.files : null;
+
+    if (!name || !description || isNaN(price) || price <= 0 || !category) {
+      ToastManager.show('Por favor, preencha todos os campos obrigatórios do produto.', 'error');
+      return;
+    }
+
+    if (!files || files.length === 0) {
+      ToastManager.show('É obrigatório incluir pelo menos 1 foto do produto.', 'error');
+      return;
+    }
+
+    if (files.length > 5) {
+      ToastManager.show('Você pode anexar no máximo 5 fotos por produto.', 'error');
+      return;
+    }
+
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = 'Publicando anúncio... ⏳';
+    }
+
+    const formData = new FormData();
+    formData.append('name', name);
+    formData.append('price', price);
+    formData.append('category', category);
+    formData.append('product_condition', condition);
+    formData.append('stock', stock);
+    formData.append('material', material);
+    formData.append('description', description);
+
+    for (let i = 0; i < files.length; i++) {
+      formData.append('images[]', files[i]);
+    }
+
+    try {
+      const res = await SellerManager.addProduct(formData);
+      if (res.success) {
+        ToastManager.show(res.message || 'Produto cadastrado com sucesso no marketplace!', 'success', 5000);
+        this.productsCache = null;
+        this.navigateTo('seller');
+      } else {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = 'Publicar Anúncio no Marketplace';
+        }
+        ToastManager.show(res.error || 'Erro ao cadastrar produto.', 'error');
+      }
+    } catch (err) {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = 'Publicar Anúncio no Marketplace';
+      }
+      ToastManager.show('Erro de conexão ao enviar produto.', 'error');
+    }
   },
 
   // ----------------------------------------------------
@@ -1476,15 +1773,113 @@ const App = {
         </div>
 
         <div class="p-6 rounded-3xl border dark:border-gray-800 bg-white dark:bg-gray-800 shadow-sm">
-          <h2 class="text-xl font-bold mb-4">❓ Central de Dúvidas / FAQ</h2>
-          <div class="space-y-4">
-            <details class="p-4 rounded-xl border dark:border-gray-700 cursor-pointer">
-              <summary class="font-bold text-sm">Como funcionam os Pontos Verdes?</summary>
-              <p class="text-xs text-gray-600 dark:text-gray-300 mt-2 leading-relaxed">Cada produto comprado ou cadastrado recompensa você com Pontos Verdes. Ganhe +500 pontos ao se cadastrar e +50 pontos ao avaliar uma compra.</p>
+          <div class="flex items-center gap-3 mb-6">
+            <span class="text-3xl">❓</span>
+            <div>
+              <h2 class="text-xl font-bold">Central de Dúvidas / FAQ</h2>
+              <p class="text-xs text-gray-500">Tudo o que você precisa saber sobre o Re-Store e a economia circular</p>
+            </div>
+          </div>
+
+          <div class="space-y-3">
+            <details class="p-4 rounded-2xl border dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 cursor-pointer group">
+              <summary class="font-bold text-sm text-gray-900 dark:text-white flex items-center justify-between">
+                <span>🌱 Como funcionam os Pontos Verdes e os Níveis?</span>
+                <span class="text-xs text-teal-600 group-open:rotate-180 transition-transform">▼</span>
+              </summary>
+              <p class="text-xs text-gray-600 dark:text-gray-300 mt-3 leading-relaxed">
+                A cada produto sustentável comprado você ganha Pontos Verdes equivalentes ao valor (cerca de 2 pts por R$ 1,00). Você também ganha <strong>+500 pontos de boas-vindas</strong> ao se cadastrar e <strong>+50 pontos</strong> ao avaliar uma compra. Seus pontos acumulados aumentam seu nível de engajamento (Iniciante 🌱, Sustentável 🌿, Eco Warrior ⚔️ e Eco Master 👑) e podem ser trocados por cupons de desconto reais.
+              </p>
             </details>
-            <details class="p-4 rounded-xl border dark:border-gray-700 cursor-pointer">
-              <summary class="font-bold text-sm">Como é feito o envio do produto?</summary>
-              <p class="text-xs text-gray-600 dark:text-gray-300 mt-2 leading-relaxed">O vendedor e o comprador combinam a entrega diretamente pelo Chat ou através do frete ecológico cadastrado no sistema.</p>
+
+            <details class="p-4 rounded-2xl border dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 cursor-pointer group">
+              <summary class="font-bold text-sm text-gray-900 dark:text-white flex items-center justify-between">
+                <span>🎟️ Como resgatar e aplicar meus cupons de desconto?</span>
+                <span class="text-xs text-teal-600 group-open:rotate-180 transition-transform">▼</span>
+              </summary>
+              <p class="text-xs text-gray-600 dark:text-gray-300 mt-3 leading-relaxed">
+                Acesse a aba <strong>"Extrato de Pontos"</strong> no topo da página. Na seção de cupons, escolha o desconto desejado (5%, 10%, 15% ou Frete Grátis) e clique em <em>"Resgatar Cupom"</em>. Seus cupons resgatados aparecerão na seção <strong>"Meus Cupons Resgatados"</strong>. Na hora de finalizar a compra no Checkout, você poderá aplicar o cupom com apenas 1 clique ou digitando o código correspondente.
+              </p>
+            </details>
+
+            <details class="p-4 rounded-2xl border dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 cursor-pointer group">
+              <summary class="font-bold text-sm text-gray-900 dark:text-white flex items-center justify-between">
+                <span>🏪 Como anunciar e vender produtos no Re-Store?</span>
+                <span class="text-xs text-teal-600 group-open:rotate-180 transition-transform">▼</span>
+              </summary>
+              <p class="text-xs text-gray-600 dark:text-gray-300 mt-3 leading-relaxed">
+                Clique em <strong>"Área Vendedor"</strong> no menu superior e selecione o botão <em>"Novo Anúncio"</em>. Preencha o nome do produto, categoria, preço, quantidade em estoque, condição (Novo, Usado ou Restaurado/Upcycled) e envie as fotos. Assim que publicado, o item fica imediatamente disponível para compra em todo o Brasil.
+              </p>
+            </details>
+
+            <details class="p-4 rounded-2xl border dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 cursor-pointer group">
+              <summary class="font-bold text-sm text-gray-900 dark:text-white flex items-center justify-between">
+                <span>📸 Quantas fotos posso colocar por produto?</span>
+                <span class="text-xs text-teal-600 group-open:rotate-180 transition-transform">▼</span>
+              </summary>
+              <p class="text-xs text-gray-600 dark:text-gray-300 mt-3 leading-relaxed">
+                É obrigatório enviar pelo menos <strong>1 foto real</strong> do produto, sendo permitido anexar <strong>até 5 fotos</strong> por anúncio (formatos JPG, JPEG, PNG e WEBP). A primeira foto será a capa principal da vitrine, e as demais aparecerão em miniatura clicável na página de detalhes do produto.
+              </p>
+            </details>
+
+            <details class="p-4 rounded-2xl border dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 cursor-pointer group">
+              <summary class="font-bold text-sm text-gray-900 dark:text-white flex items-center justify-between">
+                <span>🏢 Qual a diferença entre Pessoa Física (PF) e Empresa Verificada (PJ)?</span>
+                <span class="text-xs text-teal-600 group-open:rotate-180 transition-transform">▼</span>
+              </summary>
+              <p class="text-xs text-gray-600 dark:text-gray-300 mt-3 leading-relaxed">
+                Qualquer pessoa pode se cadastrar como <strong>Pessoa Física (PF)</strong> para comprar e desapegar de itens. Já as lojas, cooperativas ou artesãos podem optar por <strong>Empresa Sustentável Verificada (PJ)</strong> informando um CNPJ válido de 14 dígitos. Ao ser validado, o perfil recebe o selo <em>"CNPJ Verificado ✓"</em>, gerando maior autoridade perante os clientes. É possível alternar entre PF e PJ quando quiser na tela de edição de perfil.
+              </p>
+            </details>
+
+            <details class="p-4 rounded-2xl border dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 cursor-pointer group">
+              <summary class="font-bold text-sm text-gray-900 dark:text-white flex items-center justify-between">
+                <span>💳 Quais são os métodos de pagamento disponíveis?</span>
+                <span class="text-xs text-teal-600 group-open:rotate-180 transition-transform">▼</span>
+              </summary>
+              <p class="text-xs text-gray-600 dark:text-gray-300 mt-3 leading-relaxed">
+                Você pode pagar via <strong>PIX instantâneo</strong> (com QR Code dinâmico e código copia-e-cola), <strong>Cartão de Crédito</strong> (com opção de parcelamento em até 3x sem juros) ou <strong>Boleto Ecológico Digital</strong> (sem impressão ou desperdício de papel).
+              </p>
+            </details>
+
+            <details class="p-4 rounded-2xl border dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 cursor-pointer group">
+              <summary class="font-bold text-sm text-gray-900 dark:text-white flex items-center justify-between">
+                <span>💬 Como falar com o vendedor antes de comprar?</span>
+                <span class="text-xs text-teal-600 group-open:rotate-180 transition-transform">▼</span>
+              </summary>
+              <p class="text-xs text-gray-600 dark:text-gray-300 mt-3 leading-relaxed">
+                Na página de qualquer produto, há um botão <em>"💬 Chat"</em> junto ao perfil do anunciante. Clicando nele, abre-se uma conversa direta e privada em tempo real onde você pode tirar dúvidas sobre dimensões, estado de conservação, frete ou negociar propostas.
+              </p>
+            </details>
+
+            <details class="p-4 rounded-2xl border dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 cursor-pointer group">
+              <summary class="font-bold text-sm text-gray-900 dark:text-white flex items-center justify-between">
+                <span>📦 Como funciona a entrega e o frete dos produtos?</span>
+                <span class="text-xs text-teal-600 group-open:rotate-180 transition-transform">▼</span>
+              </summary>
+              <p class="text-xs text-gray-600 dark:text-gray-300 mt-3 leading-relaxed">
+                O envio pode ser realizado via transportadora parceira com compensação de carbono (Frete Ecológico) ou combinado diretamente entre comprador e vendedor para retirada presencial caso ambos residam na mesma cidade/região.
+              </p>
+            </details>
+
+            <details class="p-4 rounded-2xl border dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 cursor-pointer group">
+              <summary class="font-bold text-sm text-gray-900 dark:text-white flex items-center justify-between">
+                <span>♻️ Quais produtos se encaixam na proposta da Economia Circular?</span>
+                <span class="text-xs text-teal-600 group-open:rotate-180 transition-transform">▼</span>
+              </summary>
+              <p class="text-xs text-gray-600 dark:text-gray-300 mt-3 leading-relaxed">
+                Priorizamos itens usados em bom estado de uso, produtos restaurados (upcycling), artesanatos com reaproveitamento de materiais recicláveis, móveis reformados, eletrônicos revisados e utilidades reutilizáveis (como ecobags e garrafas térmicas inox), diminuindo a geração de lixo nos aterros sanitários.
+              </p>
+            </details>
+
+            <details class="p-4 rounded-2xl border dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 cursor-pointer group">
+              <summary class="font-bold text-sm text-gray-900 dark:text-white flex items-center justify-between">
+                <span>🔒 Como meus dados e senhas são protegidos?</span>
+                <span class="text-xs text-teal-600 group-open:rotate-180 transition-transform">▼</span>
+              </summary>
+              <p class="text-xs text-gray-600 dark:text-gray-300 mt-3 leading-relaxed">
+                Todas as senhas são armazenadas com hash criptográfico irreversível (Bcrypt). Números de telefone e CNPJs são validados por algoritmos estritos de integridade de dados e as sessões são protegidas com autenticação segura contra acessos indevidos.
+              </p>
             </details>
           </div>
         </div>
@@ -1851,10 +2246,10 @@ const App = {
 
   async submitEditProfile(e) {
     e.preventDefault();
-    const name = document.getElementById('prof-name').value;
-    const phone = document.getElementById('prof-phone') ? document.getElementById('prof-phone').value : '';
+    const name = document.getElementById('prof-name').value.trim();
+    const phone = document.getElementById('prof-phone') ? document.getElementById('prof-phone').value.trim() : '';
     const isVerifiedBusiness = document.getElementById('prof-verified') ? document.getElementById('prof-verified').value : '0';
-    const cnpj = document.getElementById('prof-cnpj') ? document.getElementById('prof-cnpj').value : '';
+    let cnpj = document.getElementById('prof-cnpj') ? document.getElementById('prof-cnpj').value.trim() : '';
     const avatarInput = document.getElementById('prof-avatar');
 
     if (phone && !this.isValidPhone(phone)) {
@@ -1862,9 +2257,13 @@ const App = {
       return;
     }
 
-    if ((isVerifiedBusiness === '1' || cnpj.trim() !== '') && !this.isValidCNPJ(cnpj)) {
-      ToastManager.show('Por favor, informe um número de CNPJ válido (14 dígitos).', 'error');
-      return;
+    if (isVerifiedBusiness === '0') {
+      cnpj = ''; // Limpar CNPJ para voltar a ser Pessoa Física
+    } else {
+      if (!this.isValidCNPJ(cnpj)) {
+        ToastManager.show('Por favor, informe um número de CNPJ válido (14 dígitos).', 'error');
+        return;
+      }
     }
 
     const formData = new FormData();
@@ -1881,7 +2280,10 @@ const App = {
     if (res.success) {
       ToastManager.show(res.message || 'Perfil atualizado com sucesso!', 'success');
       this.updateHeaderUI();
-      this.renderCurrentScreen();
+      const main = document.getElementById('main-content');
+      if (main && this.currentScreen === 'profile') {
+        this.renderProfileScreen(main);
+      }
     } else {
       ToastManager.show(res.error || 'Erro ao atualizar perfil.', 'error');
     }
@@ -2287,18 +2689,24 @@ const App = {
   },
 
   async cancelOrder(orderId) {
-    if (confirm('Deseja realmente solicitar o cancelamento deste pedido?')) {
-      const res = await fetch('api/orders.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'cancel', order_id: orderId })
-      });
-      const data = await res.json();
-      if (data.success) {
-        ToastManager.show('Pedido cancelado com sucesso!', 'info');
-        this.renderOrdersScreen(document.getElementById('main-content'));
-      } else {
-        ToastManager.show(data.error, 'error');
+    if (confirm('Deseja realmente solicitar o cancelamento deste pedido? Se você utilizou um cupom de desconto, ele será reativado para a sua conta.')) {
+      try {
+        const res = await fetch('api/orders.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'cancel', order_id: orderId })
+        });
+        const data = await res.json();
+        if (data.success) {
+          ToastManager.show(data.message || 'Pedido cancelado com sucesso!', 'info', 6000);
+          await AuthManager.checkAuth();
+          this.updateHeaderUI();
+          this.renderOrdersScreen(document.getElementById('main-content'));
+        } else {
+          ToastManager.show(data.error || 'Erro ao cancelar pedido.', 'error');
+        }
+      } catch (e) {
+        ToastManager.show('Erro de conexão ao cancelar pedido.', 'error');
       }
     }
   },
@@ -2307,29 +2715,6 @@ const App = {
     document.getElementById('pay-box-pix').className = tab === 'pix' ? 'p-4 bg-emerald-50 dark:bg-emerald-950/40 rounded-xl border border-emerald-200 dark:border-emerald-900 text-center space-y-3' : 'hidden';
     document.getElementById('pay-box-credit').className = tab === 'credit' ? 'p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl border dark:border-gray-600 space-y-3' : 'hidden';
     document.getElementById('pay-box-boleto').className = tab === 'boleto' ? 'p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl border dark:border-gray-600 space-y-3' : 'hidden';
-  },
-
-  async submitEditProfile(e) {
-    e.preventDefault();
-    const formData = new FormData();
-    formData.append('name', document.getElementById('prof-name').value);
-    formData.append('phone', document.getElementById('prof-phone').value);
-    formData.append('is_verified_business', document.getElementById('prof-verified').value);
-    formData.append('cnpj', document.getElementById('prof-cnpj') ? document.getElementById('prof-cnpj').value : '');
-
-    const avatarFile = document.getElementById('prof-avatar').files[0];
-    if (avatarFile) {
-      formData.append('avatar', avatarFile);
-    }
-
-    const res = await AuthManager.updateProfile(formData);
-    if (res.success) {
-      ToastManager.show(res.message, 'success');
-      this.updateHeaderUI();
-      this.renderProfileScreen(document.getElementById('main-content'));
-    } else {
-      ToastManager.show(res.error, 'error');
-    }
   },
 
   confirmLogout() {

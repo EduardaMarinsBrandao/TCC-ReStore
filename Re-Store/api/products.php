@@ -193,15 +193,22 @@ if ($method === 'POST' && ($action === 'create' || $action === 'add')) {
     $stmt->execute([$sellerId, $name, $description, $price, $category, $condition, $material, $stock, $location, $points]);
     $productId = $db->lastInsertId();
 
-    // Processamento de Upload Local de Múltiplas Imagens
+    // Processamento de Upload Local de Múltiplas Imagens (1 foto obrigatória, até 5 fotos)
     $uploadedImages = [];
-    if (isset($_FILES['images']) && is_array($_FILES['images']['name'])) {
-        $allowedExts = ['jpg', 'jpeg', 'png', 'webp'];
-        $uploadDir = __DIR__ . '/../uploads/products/';
+    $uploadDir = __DIR__ . '/../uploads/products/';
+    if (!is_dir($uploadDir)) {
+        mkdir($uploadDir, 0755, true);
+    }
+    $allowedExts = ['jpg', 'jpeg', 'png', 'webp'];
 
-        foreach ($_FILES['images']['name'] as $key => $filename) {
+    if (isset($_FILES['images']) && is_array($_FILES['images']['name'])) {
+        $count = count($_FILES['images']['name']);
+        $maxUploads = min($count, 5);
+
+        for ($key = 0; $key < $maxUploads; $key++) {
             if ($_FILES['images']['error'][$key] === UPLOAD_ERR_OK) {
                 $fileTmp = $_FILES['images']['tmp_name'][$key];
+                $filename = $_FILES['images']['name'][$key];
                 $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
 
                 if (in_array($ext, $allowedExts)) {
@@ -210,24 +217,44 @@ if ($method === 'POST' && ($action === 'create' || $action === 'add')) {
 
                     if (move_uploaded_file($fileTmp, $targetPath)) {
                         $relUrl = 'uploads/products/' . $newFileName;
-                        $isPrimary = ($key === 0) ? 1 : 0;
+                        $isPrimary = (count($uploadedImages) === 0) ? 1 : 0;
                         
                         $imgStmt = $db->prepare("INSERT INTO product_images (product_id, image_url, is_primary, image_order) VALUES (?, ?, ?, ?)");
-                        $imgStmt->execute([$productId, $relUrl, $isPrimary, $key]);
+                        $imgStmt->execute([$productId, $relUrl, $isPrimary, count($uploadedImages)]);
                         $uploadedImages[] = $relUrl;
                     }
                 }
             }
         }
+    } elseif (isset($_FILES['images']) && is_string($_FILES['images']['name']) && $_FILES['images']['error'] === UPLOAD_ERR_OK) {
+        $fileTmp = $_FILES['images']['tmp_name'];
+        $filename = $_FILES['images']['name'];
+        $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+        if (in_array($ext, $allowedExts)) {
+            $newFileName = 'prod_' . $productId . '_' . uniqid() . '_0.' . $ext;
+            $targetPath = $uploadDir . $newFileName;
+            if (move_uploaded_file($fileTmp, $targetPath)) {
+                $relUrl = 'uploads/products/' . $newFileName;
+                $imgStmt = $db->prepare("INSERT INTO product_images (product_id, image_url, is_primary, image_order) VALUES (?, ?, 1, 0)");
+                $imgStmt->execute([$productId, $relUrl]);
+                $uploadedImages[] = $relUrl;
+            }
+        }
     }
 
-    // Se nenhuma imagem foi enviada via upload, usar uma imagem sustentável padrão de fallback
+    // Se nenhuma imagem válida foi enviada, cancelar o cadastro e retornar erro (1 foto obrigatória)
     if (empty($uploadedImages)) {
-        $defaultImg = 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=600';
-        $db->prepare("INSERT INTO product_images (product_id, image_url, is_primary) VALUES (?, ?, 1)")->execute([$productId, $defaultImg]);
+        $db->prepare("DELETE FROM products WHERE id = ?")->execute([$productId]);
+        echo json_encode(['success' => false, 'error' => 'É obrigatório enviar pelo menos 1 foto válida do produto (JPG, PNG ou WEBP).']);
+        exit;
     }
 
-    echo json_encode(['success' => true, 'message' => 'Produto cadastrado com sucesso!', 'product_id' => $productId]);
+    echo json_encode([
+        'success' => true, 
+        'message' => 'Produto cadastrado com sucesso!', 
+        'product_id' => $productId,
+        'images_count' => count($uploadedImages)
+    ]);
     exit;
 }
 
