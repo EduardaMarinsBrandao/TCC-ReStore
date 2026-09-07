@@ -174,13 +174,13 @@ function initializeDatabase() {
         // Migrations automáticas para colunas adicionais
         try { $db->exec("ALTER TABLE orders ADD COLUMN coupon_code TEXT NULL"); } catch (Exception $e) {}
         try { $db->exec("ALTER TABLE orders ADD COLUMN discount_amount REAL DEFAULT 0.0"); } catch (Exception $e) {}
-    } else {
+    } /*else {
         // Esquema MySQL
         $sqlPath = __DIR__ . '/../database.sql';
         if (file_exists($sqlPath)) {
             $sqlContent = file_get_contents($sqlPath);
             $db->exec($sqlContent);
-        }
+        }*/
     }
 
     // Inserção de dados iniciais de demonstração se a tabela users estiver vazia

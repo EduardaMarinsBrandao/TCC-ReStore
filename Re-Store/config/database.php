@@ -1,10 +1,10 @@
 <?php
 // config/database.php
 
-define('DB_HOST', '127.0.0.1');
-define('DB_NAME', 'restore_db');
-define('DB_USER', 'root');
-define('DB_PASS', '');
+define('DB_HOST', 'sql204.infinityfree.com');
+define('DB_NAME', 'if0_42831392_restore');
+define('DB_USER', 'if0_42831392');
+define('DB_PASS', 'CaEdEyFeLaLe');
 
 function getDbConnection() {
     static $pdo = null;
@@ -20,9 +20,9 @@ function getDbConnection() {
             PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8mb4"
         ];
         
-        $pdoServer = new PDO("mysql:host=" . DB_HOST . ";charset=utf8mb4", DB_USER, DB_PASS, $options);
+        /*$pdoServer = new PDO("mysql:host=" . DB_HOST . ";charset=utf8mb4", DB_USER, DB_PASS, $options);
         $pdoServer->exec("CREATE DATABASE IF NOT EXISTS `" . DB_NAME . "` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
-        $pdoServer = null;
+        $pdoServer = null;*/
 
         // Conecta ao banco de dados restore_db
         $pdo = new PDO("mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=utf8mb4", DB_USER, DB_PASS, $options);
