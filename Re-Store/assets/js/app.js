@@ -366,6 +366,7 @@ const App = {
   // TELA 7: DETALHES DO PRODUTO
   // ----------------------------------------------------
   async renderProductDetailScreen(container) {
+    const user = AuthManager.currentUser;
     if (!this.selectedProductId) {
       container.innerHTML = `<div class="text-center py-12">Produto não selecionado.</div>`;
       return;
@@ -530,6 +531,7 @@ const App = {
       `;
 
     } catch (e) {
+      console.error('Erro ao renderizar produto:', e);
       container.innerHTML = `<div class="text-center py-12 text-red-500">Erro ao carregar o produto.</div>`;
     }
   },
