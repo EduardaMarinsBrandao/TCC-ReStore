@@ -259,7 +259,150 @@ if ($method === 'POST' && ($action === 'create' || $action === 'add')) {
 }
 
 // ----------------------------------------------------
-// 5. DELETAR / INATIVAR PRODUTO
+// 5. ATUALIZAR PRODUTO EXISTENTE (ÁREA DO VENDEDOR)
+// ----------------------------------------------------
+if ($method === 'POST' && ($action === 'update' || $action === 'edit')) {
+    if (!isset($_SESSION['user_id'])) {
+        echo json_encode(['success' => false, 'error' => 'Não autenticado.']);
+        exit;
+    }
+
+    $sellerId = $_SESSION['user_id'];
+    $productId = (int)($_POST['id'] ?? $_POST['product_id'] ?? 0);
+
+    if ($productId <= 0) {
+        echo json_encode(['success' => false, 'error' => 'ID do produto inválido.']);
+        exit;
+    }
+
+    // Verificar se o produto existe e pertence ao vendedor
+    $checkStmt = $db->prepare("SELECT * FROM products WHERE id = ? AND seller_id = ?");
+    $checkStmt->execute([$productId, $sellerId]);
+    $existingProduct = $checkStmt->fetch();
+
+    if (!$existingProduct) {
+        echo json_encode(['success' => false, 'error' => 'Produto não encontrado ou você não tem permissão para editá-lo.']);
+        exit;
+    }
+
+    $name = trim($_POST['name'] ?? '');
+    $description = trim($_POST['description'] ?? '');
+    $price = (float)($_POST['price'] ?? 0);
+    $category = trim($_POST['category'] ?? '');
+    $condition = trim($_POST['product_condition'] ?? $_POST['condition'] ?? 'used');
+    $material = trim($_POST['material'] ?? '');
+    $stock = (int)($_POST['stock'] ?? 0);
+
+    if (empty($name) || empty($description) || $price <= 0 || empty($category)) {
+        echo json_encode(['success' => false, 'error' => 'Preencha os campos obrigatórios (Nome, Descrição, Preço e Categoria).']);
+        exit;
+    }
+
+    // Atualiza pontos verdes de acordo com o novo preço
+    $points = (int)round($price * 2);
+
+    $upStmt = $db->prepare("UPDATE products SET 
+        name = ?, description = ?, price = ?, category = ?, product_condition = ?, material = ?, stock = ?, points = ? 
+        WHERE id = ? AND seller_id = ?");
+    $upStmt->execute([$name, $description, $price, $category, $condition, $material, $stock, $points, $productId, $sellerId]);
+
+    // 1. Processar exclusão de imagens removidas pelo usuário
+    $removedImageIds = $_POST['removed_image_ids'] ?? [];
+    if (!is_array($removedImageIds) && !empty($removedImageIds)) {
+        $removedImageIds = explode(',', $removedImageIds);
+    }
+    if (!empty($removedImageIds)) {
+        foreach ($removedImageIds as $remId) {
+            $remId = (int)$remId;
+            if ($remId > 0) {
+                $imgRow = $db->prepare("SELECT image_url FROM product_images WHERE id = ? AND product_id = ?");
+                $imgRow->execute([$remId, $productId]);
+                $imgData = $imgRow->fetch();
+                if ($imgData) {
+                    $delStmt = $db->prepare("DELETE FROM product_images WHERE id = ? AND product_id = ?");
+                    $delStmt->execute([$remId, $productId]);
+                    // Se o arquivo for local, tentar remover do disco
+                    $filePath = __DIR__ . '/../' . $imgData['image_url'];
+                    if (file_exists($filePath) && strpos($imgData['image_url'], 'uploads/products/') === 0) {
+                        @unlink($filePath);
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Contar quantas imagens o produto tem atualmente
+    $curImgStmt = $db->prepare("SELECT COUNT(*) as total FROM product_images WHERE product_id = ?");
+    $curImgStmt->execute([$productId]);
+    $currentImageCount = (int)$curImgStmt->fetch()['total'];
+
+    // 3. Processar upload de novas imagens (respeitando limite de 5 fotos no total)
+    $uploadedImages = [];
+    $uploadDir = __DIR__ . '/../uploads/products/';
+    if (!is_dir($uploadDir)) {
+        mkdir($uploadDir, 0755, true);
+    }
+    $allowedExts = ['jpg', 'jpeg', 'png', 'webp'];
+
+    if (isset($_FILES['images']) && is_array($_FILES['images']['name'])) {
+        $count = count($_FILES['images']['name']);
+        $availableSlots = max(0, 5 - $currentImageCount);
+        $maxUploads = min($count, $availableSlots);
+
+        for ($key = 0; $key < $maxUploads; $key++) {
+            if ($_FILES['images']['error'][$key] === UPLOAD_ERR_OK) {
+                $fileTmp = $_FILES['images']['tmp_name'][$key];
+                $filename = $_FILES['images']['name'][$key];
+                $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+
+                if (in_array($ext, $allowedExts)) {
+                    $newFileName = 'prod_' . $productId . '_' . uniqid() . '_' . $key . '.' . $ext;
+                    $targetPath = $uploadDir . $newFileName;
+
+                    if (move_uploaded_file($fileTmp, $targetPath)) {
+                        $relUrl = 'uploads/products/' . $newFileName;
+                        $imgStmt = $db->prepare("INSERT INTO product_images (product_id, image_url, is_primary, image_order) VALUES (?, ?, 0, ?)");
+                        $imgStmt->execute([$productId, $relUrl, $currentImageCount + count($uploadedImages)]);
+                        $uploadedImages[] = $relUrl;
+                    }
+                }
+            }
+        }
+    }
+
+    // 4. Garantir que o produto continue tendo pelo menos 1 imagem válida
+    $finalImgStmt = $db->prepare("SELECT id, is_primary FROM product_images WHERE product_id = ? ORDER BY is_primary DESC, id ASC");
+    $finalImgStmt->execute([$productId]);
+    $finalImages = $finalImgStmt->fetchAll();
+
+    if (empty($finalImages)) {
+        echo json_encode(['success' => false, 'error' => 'O produto precisa ter pelo menos 1 foto. Não é possível remover todas as fotos.']);
+        exit;
+    }
+
+    // Garantir que pelo menos uma imagem esteja marcada como is_primary = 1
+    $hasPrimary = false;
+    foreach ($finalImages as $fImg) {
+        if ((int)$fImg['is_primary'] === 1) {
+            $hasPrimary = true;
+            break;
+        }
+    }
+    if (!$hasPrimary) {
+        $firstId = $finalImages[0]['id'];
+        $db->prepare("UPDATE product_images SET is_primary = 1 WHERE id = ?")->execute([$firstId]);
+    }
+
+    echo json_encode([
+        'success' => true,
+        'message' => 'Produto atualizado com sucesso!',
+        'product_id' => $productId
+    ]);
+    exit;
+}
+
+// ----------------------------------------------------
+// 6. DELETAR / INATIVAR PRODUTO
 // ----------------------------------------------------
 if ($method === 'POST' && $action === 'delete') {
     if (!isset($_SESSION['user_id'])) {

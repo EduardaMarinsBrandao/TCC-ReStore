@@ -180,8 +180,8 @@ function initializeDatabase() {
         if (file_exists($sqlPath)) {
             $sqlContent = file_get_contents($sqlPath);
             $db->exec($sqlContent);
-        }*/
-    }
+        }
+    }*/
 
     // Inserção de dados iniciais de demonstração se a tabela users estiver vazia
     $stmt = $db->query("SELECT COUNT(*) as cnt FROM users");

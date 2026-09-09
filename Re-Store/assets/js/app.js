@@ -38,6 +38,11 @@ const App = {
   updateHeaderUI() {
     const user = AuthManager.currentUser;
     const userNav = document.getElementById('user-nav-actions');
+    const notifBadge = document.getElementById('notif-badge');
+
+    if (notifBadge) {
+      notifBadge.style.display = user ? 'flex' : 'none';
+    }
 
     if (!userNav) return;
 
@@ -69,7 +74,21 @@ const App = {
     }
   },
 
+  redirectAfterLogin: null,
+  selectedProductImages: [],
+  editExistingImages: [],
+  editRemovedImageIds: [],
+  editNewImages: [],
+
   navigateTo(screen, params = {}) {
+    const protectedScreens = ['checkout', 'orders', 'notifications', 'profile', 'my-reviews', 'points', 'seller', 'add-product', 'edit-product', 'chat', 'favorites'];
+    if (protectedScreens.includes(screen) && !AuthManager.currentUser) {
+      this.redirectAfterLogin = { screen, params };
+      ToastManager.show('Faça login para acessar esta funcionalidade.', 'info');
+      this.showLoginModal();
+      return;
+    }
+
     this.currentScreen = screen;
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
@@ -88,6 +107,15 @@ const App = {
   async renderCurrentScreen() {
     const main = document.getElementById('main-content');
     if (!main) return;
+
+    const protectedScreens = ['checkout', 'orders', 'notifications', 'profile', 'my-reviews', 'points', 'seller', 'add-product', 'edit-product', 'chat', 'favorites'];
+    if (protectedScreens.includes(this.currentScreen) && !AuthManager.currentUser) {
+      this.redirectAfterLogin = { screen: this.currentScreen, params: {} };
+      this.currentScreen = 'home';
+      this.showLoginModal();
+      await this.renderHomeScreen(main);
+      return;
+    }
 
     switch (this.currentScreen) {
       case 'home':
@@ -128,6 +156,9 @@ const App = {
         break;
       case 'add-product':
         this.renderAddProductScreen(main);
+        break;
+      case 'edit-product':
+        await this.renderEditProductScreen(main);
         break;
       case 'chat':
         await this.renderChatScreen(main);
@@ -289,7 +320,7 @@ const App = {
 
     return `
       <div class="card-restore flex flex-col h-full group animate-fade-in">
-        <div class="relative overflow-hidden aspect-square bg-gray-100 dark:bg-gray-800">
+        <div onclick="App.navigateTo('product-detail', { productId: ${p.id} })" class="relative overflow-hidden aspect-square bg-gray-100 dark:bg-gray-800 cursor-pointer">
           <img src="${p.primary_image}" alt="${p.name}" class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy">
           <div class="absolute top-2 left-2 flex flex-col gap-1 items-start">
             ${conditionBadge}
@@ -440,6 +471,15 @@ const App = {
                     💬 Chat
                   </button>
                 </div>
+
+                ${user && parseInt(user.id) === parseInt(p.seller_id) ? `
+                  <div class="mb-4 p-3 bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 rounded-xl flex items-center justify-between">
+                    <span class="text-xs font-bold text-teal-800 dark:text-teal-300">Você é o anunciante deste produto</span>
+                    <button type="button" onclick="App.navigateTo('edit-product', { productId: ${p.id} })" class="btn-primary text-xs py-1.5 px-3 cursor-pointer flex items-center gap-1">
+                      <span>✏️</span> Editar Anúncio
+                    </button>
+                  </div>
+                ` : ''}
               </div>
 
               <!-- BOTOES DE COMPRA -->
@@ -521,9 +561,9 @@ const App = {
             ${cart.map(item => `
               <div class="flex items-center justify-between p-4 rounded-2xl border dark:border-gray-800 bg-white dark:bg-gray-800">
                 <div class="flex items-center gap-4">
-                  <img src="${item.image}" class="w-16 h-16 rounded-xl object-cover border dark:border-gray-700">
+                  <img src="${item.image}" onclick="App.navigateTo('product-detail', { productId: ${item.product_id} })" class="w-16 h-16 rounded-xl object-cover border dark:border-gray-700 cursor-pointer hover:opacity-80 transition" title="Ver Detalhes">
                   <div>
-                    <h3 class="font-bold text-gray-900 dark:text-white text-sm line-clamp-1">${item.name}</h3>
+                    <h3 onclick="App.navigateTo('product-detail', { productId: ${item.product_id} })" class="font-bold text-gray-900 dark:text-white text-sm line-clamp-1 hover:text-teal-600 cursor-pointer" title="Ver Detalhes">${item.name}</h3>
                     <div class="text-xs text-gray-500">Vendedor: ${item.seller_name}</div>
                     <div class="text-sm font-extrabold text-teal-600 mt-1">R$ ${item.price.toFixed(2).replace('.', ',')}</div>
                   </div>
@@ -1015,6 +1055,12 @@ const App = {
   // TELA 13: CENTRAL DE NOTIFICAÇÕES
   // ----------------------------------------------------
   renderNotificationsScreen(container) {
+    const user = AuthManager.currentUser;
+    if (!user) {
+      this.showLoginModal();
+      return;
+    }
+
     container.innerHTML = `
       <div class="max-w-3xl mx-auto space-y-6 animate-fade-in">
         <h1 class="text-2xl font-extrabold mb-4">Central de Notificações 🔔</h1>
@@ -1386,16 +1432,21 @@ const App = {
             <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               ${products.map(p => `
                 <div class="p-4 rounded-2xl border dark:border-gray-800 bg-white dark:bg-gray-800 flex items-center justify-between">
-                  <div class="flex items-center gap-3">
-                    <img src="${p.primary_image}" class="w-12 h-12 rounded-xl object-cover">
+                  <div class="flex items-center gap-3 cursor-pointer" onclick="App.navigateTo('product-detail', { productId: ${p.id} })" title="Ver Detalhes do Produto">
+                    <img src="${p.primary_image}" class="w-12 h-12 rounded-xl object-cover hover:opacity-80 transition">
                     <div>
-                      <div class="font-bold text-sm text-gray-900 dark:text-white line-clamp-1">${p.name}</div>
+                      <div class="font-bold text-sm text-gray-900 dark:text-white line-clamp-1 hover:text-teal-600 transition">${p.name}</div>
                       <div class="text-xs text-gray-500">Estoque: ${p.stock} • R$ ${parseFloat(p.price).toFixed(2).replace('.', ',')}</div>
                     </div>
                   </div>
-                  <button type="button" onclick="App.deleteProductSeller(${p.id})" title="Excluir Anúncio" class="text-red-500 hover:text-red-700 p-2 text-sm cursor-pointer">
-                    🗑️
-                  </button>
+                  <div class="flex items-center gap-1">
+                    <button type="button" onclick="App.navigateTo('edit-product', { productId: ${p.id} })" title="Editar Anúncio" class="text-teal-600 hover:text-teal-800 hover:bg-teal-50 dark:hover:bg-teal-950/50 p-2 rounded-lg text-sm cursor-pointer transition">
+                      ✏️
+                    </button>
+                    <button type="button" onclick="App.deleteProductSeller(${p.id})" title="Excluir Anúncio" class="text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/50 p-2 rounded-lg text-sm cursor-pointer transition">
+                      🗑️
+                    </button>
+                  </div>
                 </div>
               `).join('')}
             </div>
@@ -1412,6 +1463,14 @@ const App = {
   // TELA 21: ADICIONAR PRODUTO
   // ----------------------------------------------------
   renderAddProductScreen(container) {
+    const user = AuthManager.currentUser;
+    if (!user) {
+      this.showLoginModal();
+      return;
+    }
+
+    this.selectedProductImages = [];
+
     container.innerHTML = `
       <div class="max-w-2xl mx-auto animate-fade-in">
         <button type="button" onclick="App.navigateTo('seller')" class="text-sm text-teal-600 font-semibold hover:underline mb-4 block cursor-pointer">← Voltar para Área do Vendedor</button>
@@ -1419,17 +1478,17 @@ const App = {
 
         <form onsubmit="App.submitAddProduct(event)" class="space-y-4 p-6 rounded-3xl border dark:border-gray-800 bg-white dark:bg-gray-800 shadow-sm">
           <div>
-            <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Nome do Produto</label>
+            <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Nome do Produto *</label>
             <input type="text" id="prod-name" required placeholder="Ex: Garrafa Térmica Inox" class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 text-sm">
           </div>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Preço (R$)</label>
+              <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Preço (R$) *</label>
               <input type="number" step="0.01" id="prod-price" required placeholder="79.90" class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 text-sm">
             </div>
             <div>
-              <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Categoria</label>
+              <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Categoria *</label>
               <select id="prod-category" required class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 text-sm">
                 <option value="Utilidades">Utilidades</option>
                 <option value="Moda & Acessórios">Moda & Acessórios</option>
@@ -1441,7 +1500,7 @@ const App = {
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Condição do Produto</label>
+              <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Condição do Produto *</label>
               <select id="prod-condition" required class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 text-sm">
                 <option value="used">Usado (Reutilizável)</option>
                 <option value="restored">Restaurado / Upcycled</option>
@@ -1449,7 +1508,7 @@ const App = {
               </select>
             </div>
             <div>
-              <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Estoque Disponível</label>
+              <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Estoque Disponível *</label>
               <input type="number" id="prod-stock" value="1" required class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 text-sm">
             </div>
           </div>
@@ -1460,14 +1519,14 @@ const App = {
           </div>
 
           <div>
-            <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Descrição Detalhada & Impacto Ecológico</label>
+            <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Descrição Detalhada & Impacto Ecológico *</label>
             <textarea id="prod-desc" rows="4" required placeholder="Descreva o produto e seu impacto socioambiental positivo..." class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 text-sm"></textarea>
           </div>
 
           <div>
             <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Fotos do Produto (1 foto obrigatória, até 5 fotos) *</label>
-            <input type="file" id="prod-images" multiple accept="image/png,image/jpeg,image/jpg,image/webp" onchange="App.previewProductImages(event)" class="w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100 cursor-pointer">
-            <p class="text-[11px] text-gray-400 mt-1">Selecione de 1 a 5 fotos reais do produto. A primeira foto será a capa principal.</p>
+            <input type="file" id="prod-images" multiple accept="image/png,image/jpeg,image/jpg,image/webp" onchange="App.handleProductImageSelect(event)" class="w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100 cursor-pointer">
+            <p class="text-[11px] text-gray-400 mt-1">Selecione de 1 a 5 fotos. Você pode selecionar uma a uma ou várias juntas. A primeira foto será a capa principal.</p>
             <div id="prod-images-preview" class="hidden mt-3 p-3 bg-gray-50 dark:bg-gray-700/40 rounded-2xl border dark:border-gray-700"></div>
           </div>
 
@@ -1477,19 +1536,35 @@ const App = {
     `;
   },
 
-  previewProductImages(e) {
-    const files = e.target.files;
+  handleProductImageSelect(e) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+
+    for (const file of files) {
+      if (this.selectedProductImages.length >= 5) {
+        ToastManager.show('Você pode anexar no máximo 5 fotos por produto!', 'warning');
+        break;
+      }
+      if (!file.type.match(/^image\/(jpeg|jpg|png|webp)$/i)) {
+        ToastManager.show(`Formato não suportado: ${file.name}. Use JPG, PNG ou WEBP.`, 'error');
+        continue;
+      }
+      this.selectedProductImages.push(file);
+    }
+
+    // Limpar o input de arquivo para permitir selecionar a mesma ou outra foto individualmente
+    e.target.value = '';
+    this.renderProductImagesPreview();
+  },
+
+  renderProductImagesPreview() {
     const previewContainer = document.getElementById('prod-images-preview');
     if (!previewContainer) return;
 
     previewContainer.innerHTML = '';
-    if (!files || files.length === 0) {
+    if (!this.selectedProductImages || this.selectedProductImages.length === 0) {
       previewContainer.classList.add('hidden');
       return;
-    }
-
-    if (files.length > 5) {
-      ToastManager.show('Atenção: Você pode anexar no máximo 5 fotos por produto! Apenas as primeiras 5 serão enviadas.', 'warning');
     }
 
     previewContainer.classList.remove('hidden');
@@ -1497,32 +1572,51 @@ const App = {
     const header = document.createElement('div');
     header.className = 'text-xs font-bold text-teal-700 dark:text-teal-300 mb-2 flex items-center justify-between';
     header.innerHTML = `
-      <span>📸 ${Math.min(files.length, 5)} foto(s) selecionada(s) (máximo 5)</span>
+      <span>📸 ${this.selectedProductImages.length}/5 foto(s) selecionada(s)</span>
       <span class="text-[10px] text-gray-400 font-normal">A foto #1 será a capa</span>
     `;
     previewContainer.appendChild(header);
 
     const grid = document.createElement('div');
-    grid.className = 'grid grid-cols-5 gap-2';
+    grid.className = 'grid grid-cols-2 sm:grid-cols-5 gap-3';
 
-    const maxCount = Math.min(files.length, 5);
-    for (let i = 0; i < maxCount; i++) {
-      const file = files[i];
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const thumb = document.createElement('div');
-        thumb.className = 'relative aspect-square rounded-xl overflow-hidden border-2 ' + (i === 0 ? 'border-teal-500 ring-2 ring-teal-300' : 'border-gray-200 dark:border-gray-600') + ' shadow-sm bg-gray-100 dark:bg-gray-800';
-        thumb.innerHTML = `
-          <img src="${event.target.result}" class="w-full h-full object-cover" alt="Preview ${i + 1}">
-          <span class="absolute bottom-0 inset-x-0 ${i === 0 ? 'bg-teal-600' : 'bg-black/60'} text-white text-[9px] font-bold text-center py-0.5">
-            ${i === 0 ? 'Principal' : `#${i + 1}`}
-          </span>
-        `;
-        grid.appendChild(thumb);
+    this.selectedProductImages.forEach((file, i) => {
+      const thumb = document.createElement('div');
+      thumb.className = 'relative aspect-square rounded-xl overflow-hidden border-2 ' + (i === 0 ? 'border-teal-500 ring-2 ring-teal-300' : 'border-gray-200 dark:border-gray-600') + ' shadow-sm bg-gray-100 dark:bg-gray-800';
+      
+      const img = document.createElement('img');
+      img.className = 'w-full h-full object-cover';
+      img.alt = `Foto ${i + 1}`;
+      img.src = URL.createObjectURL(file);
+
+      const badge = document.createElement('span');
+      badge.className = `absolute bottom-0 inset-x-0 ${i === 0 ? 'bg-teal-600' : 'bg-black/60'} text-white text-[9px] font-bold text-center py-0.5 pointer-events-none`;
+      badge.innerText = i === 0 ? 'Principal' : `#${i + 1}`;
+
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.title = 'Remover esta foto';
+      removeBtn.className = 'absolute top-1 right-1 bg-red-500 hover:bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-black shadow cursor-pointer transition';
+      removeBtn.innerHTML = '✕';
+      removeBtn.onclick = (evt) => {
+        evt.stopPropagation();
+        App.removeSelectedProductImage(i);
       };
-      reader.readAsDataURL(file);
-    }
+
+      thumb.appendChild(img);
+      thumb.appendChild(badge);
+      thumb.appendChild(removeBtn);
+      grid.appendChild(thumb);
+    });
+
     previewContainer.appendChild(grid);
+  },
+
+  removeSelectedProductImage(index) {
+    if (index >= 0 && index < this.selectedProductImages.length) {
+      this.selectedProductImages.splice(index, 1);
+      this.renderProductImagesPreview();
+    }
   },
 
   async submitAddProduct(e) {
@@ -1536,20 +1630,18 @@ const App = {
     const stock = parseInt(document.getElementById('prod-stock').value) || 1;
     const material = document.getElementById('prod-material').value.trim();
     const description = document.getElementById('prod-desc').value.trim();
-    const imagesInput = document.getElementById('prod-images');
-    const files = imagesInput ? imagesInput.files : null;
 
     if (!name || !description || isNaN(price) || price <= 0 || !category) {
       ToastManager.show('Por favor, preencha todos os campos obrigatórios do produto.', 'error');
       return;
     }
 
-    if (!files || files.length === 0) {
+    if (!this.selectedProductImages || this.selectedProductImages.length === 0) {
       ToastManager.show('É obrigatório incluir pelo menos 1 foto do produto.', 'error');
       return;
     }
 
-    if (files.length > 5) {
+    if (this.selectedProductImages.length > 5) {
       ToastManager.show('Você pode anexar no máximo 5 fotos por produto.', 'error');
       return;
     }
@@ -1568,13 +1660,14 @@ const App = {
     formData.append('material', material);
     formData.append('description', description);
 
-    for (let i = 0; i < files.length; i++) {
-      formData.append('images[]', files[i]);
+    for (let i = 0; i < this.selectedProductImages.length; i++) {
+      formData.append('images[]', this.selectedProductImages[i]);
     }
 
     try {
       const res = await SellerManager.addProduct(formData);
       if (res.success) {
+        this.selectedProductImages = [];
         ToastManager.show(res.message || 'Produto cadastrado com sucesso no marketplace!', 'success', 5000);
         this.productsCache = null;
         this.navigateTo('seller');
@@ -1591,6 +1684,301 @@ const App = {
         btn.innerHTML = 'Publicar Anúncio no Marketplace';
       }
       ToastManager.show('Erro de conexão ao enviar produto.', 'error');
+    }
+  },
+
+  // ----------------------------------------------------
+  // TELA 22: EDITAR PRODUTO (ÁREA DO VENDEDOR)
+  // ----------------------------------------------------
+  async renderEditProductScreen(container) {
+    const user = AuthManager.currentUser;
+    if (!user) {
+      this.showLoginModal();
+      return;
+    }
+
+    if (!this.selectedProductId) {
+      container.innerHTML = `
+        <div class="text-center py-12">
+          <p class="text-gray-500 mb-4">Nenhum produto selecionado para edição.</p>
+          <button type="button" onclick="App.navigateTo('seller')" class="btn-primary text-xs py-2 px-4 cursor-pointer">Voltar para Área do Vendedor</button>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = `<div class="max-w-2xl mx-auto py-12 text-center text-gray-500">Carregando dados do anúncio...</div>`;
+
+    try {
+      const res = await fetch(`api/products.php?action=detail&id=${this.selectedProductId}`);
+      const data = await res.json();
+
+      if (!data.success || !data.product) {
+        container.innerHTML = `<div class="text-center py-12 text-red-500">Erro ao carregar produto para edição.</div>`;
+        return;
+      }
+
+      const p = data.product;
+      if (parseInt(p.seller_id) !== parseInt(user.id)) {
+        ToastManager.show('Você não tem permissão para editar este anúncio.', 'error');
+        this.navigateTo('seller');
+        return;
+      }
+
+      this.editExistingImages = (data.images || []).map(img => ({ ...img }));
+      this.editRemovedImageIds = [];
+      this.editNewImages = [];
+
+      container.innerHTML = `
+        <div class="max-w-2xl mx-auto animate-fade-in">
+          <button type="button" onclick="App.navigateTo('seller')" class="text-sm text-teal-600 font-semibold hover:underline mb-4 block cursor-pointer">← Voltar para Área do Vendedor</button>
+          <div class="flex items-center justify-between mb-6">
+            <h1 class="text-2xl font-extrabold">Editar Produto Sustentável</h1>
+            <span class="text-xs bg-teal-50 dark:bg-teal-950 text-teal-700 dark:text-teal-300 font-mono px-2 py-1 rounded border border-teal-200 dark:border-teal-800">ID #${p.id}</span>
+          </div>
+
+          <form onsubmit="App.submitEditProduct(event, ${p.id})" class="space-y-4 p-6 rounded-3xl border dark:border-gray-800 bg-white dark:bg-gray-800 shadow-sm">
+            <div>
+              <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Nome do Produto *</label>
+              <input type="text" id="edit-prod-name" required value="${(p.name || '').replace(/"/g, '&quot;')}" class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 text-sm">
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Preço (R$) *</label>
+                <input type="number" step="0.01" id="edit-prod-price" required value="${parseFloat(p.price).toFixed(2)}" class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Categoria *</label>
+                <select id="edit-prod-category" required class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 text-sm">
+                  <option value="Utilidades" ${p.category === 'Utilidades' ? 'selected' : ''}>Utilidades</option>
+                  <option value="Moda & Acessórios" ${p.category === 'Moda & Acessórios' ? 'selected' : ''}>Moda & Acessórios</option>
+                  <option value="Móveis & Decoração" ${p.category === 'Móveis & Decoração' ? 'selected' : ''}>Móveis & Decoração</option>
+                  <option value="Eletrônicos Eco" ${p.category === 'Eletrônicos Eco' ? 'selected' : ''}>Eletrônicos Eco</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Condição do Produto *</label>
+                <select id="edit-prod-condition" required class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 text-sm">
+                  <option value="used" ${p.product_condition === 'used' ? 'selected' : ''}>Usado (Reutilizável)</option>
+                  <option value="restored" ${p.product_condition === 'restored' ? 'selected' : ''}>Restaurado / Upcycled</option>
+                  <option value="new" ${p.product_condition === 'new' ? 'selected' : ''}>Novo (Ecológico)</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Estoque Disponível *</label>
+                <input type="number" id="edit-prod-stock" value="${p.stock}" required class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 text-sm">
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Material Sustentável / Atributos Ecológicos</label>
+              <input type="text" id="edit-prod-material" value="${(p.material || '').replace(/"/g, '&quot;')}" placeholder="Ex: Aço Inox / Algodão Orgânico" class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 text-sm">
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Descrição Detalhada & Impacto Ecológico *</label>
+              <textarea id="edit-prod-desc" rows="4" required class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 text-sm">${p.description || ''}</textarea>
+            </div>
+
+            <!-- GESTÃO DE FOTOS -->
+            <div class="border-t dark:border-gray-700 pt-4 space-y-4">
+              <h3 class="font-bold text-sm">Fotos do Produto (1 a 5 fotos)</h3>
+              
+              <!-- FOTOS ATUAIS -->
+              <div>
+                <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2">Fotos Atuais no Anúncio</label>
+                <div id="edit-existing-images" class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                  <!-- renderEditImagesPreview() -->
+                </div>
+              </div>
+
+              <!-- ADICIONAR NOVAS FOTOS -->
+              <div>
+                <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Adicionar Mais Fotos</label>
+                <input type="file" id="edit-prod-images-input" multiple accept="image/png,image/jpeg,image/jpg,image/webp" onchange="App.handleEditNewImageSelect(event)" class="w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100 cursor-pointer">
+                <p class="text-[11px] text-gray-400 mt-1">Selecione fotos adicionais. O anúncio pode ter até 5 fotos no total.</p>
+                <div id="edit-new-images-preview" class="hidden mt-3 p-3 bg-gray-50 dark:bg-gray-700/40 rounded-2xl border dark:border-gray-700"></div>
+              </div>
+            </div>
+
+            <div class="flex gap-3 pt-4 border-t dark:border-gray-700">
+              <button type="button" onclick="App.navigateTo('seller')" class="btn-outline flex-1 py-2.5 text-sm cursor-pointer">Cancelar</button>
+              <button type="submit" id="btn-edit-prod-submit" class="btn-primary flex-1 py-2.5 text-sm cursor-pointer">Salvar Alterações</button>
+            </div>
+          </form>
+        </div>
+      `;
+
+      this.renderEditImagesPreview();
+
+    } catch (e) {
+      container.innerHTML = `<div class="text-center py-12 text-red-500">Erro de comunicação com o servidor.</div>`;
+    }
+  },
+
+  renderEditImagesPreview() {
+    const existingContainer = document.getElementById('edit-existing-images');
+    if (!existingContainer) return;
+
+    const visibleExisting = this.editExistingImages.filter(img => !this.editRemovedImageIds.includes(img.id));
+
+    if (visibleExisting.length === 0) {
+      existingContainer.innerHTML = `<div class="col-span-full text-xs text-amber-500 font-semibold p-2 bg-amber-50 dark:bg-amber-950/40 rounded-xl border border-amber-200">Todas as fotos antigas foram marcadas para remoção. Adicione pelo menos 1 nova foto abaixo.</div>`;
+    } else {
+      existingContainer.innerHTML = visibleExisting.map((img, idx) => `
+        <div class="relative aspect-square rounded-xl overflow-hidden border-2 ${idx === 0 && this.editNewImages.length === 0 ? 'border-teal-500 ring-2 ring-teal-300' : 'border-gray-200 dark:border-gray-700'} shadow-sm bg-gray-100 dark:bg-gray-800">
+          <img src="${img.image_url}" class="w-full h-full object-cover">
+          <span class="absolute bottom-0 inset-x-0 ${idx === 0 ? 'bg-teal-600' : 'bg-black/60'} text-white text-[9px] font-bold text-center py-0.5 pointer-events-none">
+            ${idx === 0 ? 'Principal' : `#${idx + 1}`}
+          </span>
+          <button type="button" onclick="App.removeEditExistingImage(${img.id})" title="Remover esta foto" class="absolute top-1 right-1 bg-red-500 hover:bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-black shadow cursor-pointer transition">
+            ✕
+          </button>
+        </div>
+      `).join('');
+    }
+
+    this.renderEditNewImagesPreview();
+  },
+
+  removeEditExistingImage(id) {
+    const totalRemaining = (this.editExistingImages.length - this.editRemovedImageIds.length - 1) + this.editNewImages.length;
+    if (totalRemaining < 1) {
+      ToastManager.show('O produto precisa ter pelo menos 1 foto. Adicione uma nova foto antes de remover esta.', 'warning');
+      return;
+    }
+    this.editRemovedImageIds.push(id);
+    this.renderEditImagesPreview();
+  },
+
+  handleEditNewImageSelect(e) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+
+    for (const file of files) {
+      const activeTotal = (this.editExistingImages.length - this.editRemovedImageIds.length) + this.editNewImages.length;
+      if (activeTotal >= 5) {
+        ToastManager.show('O limite total é de 5 fotos por produto!', 'warning');
+        break;
+      }
+      if (!file.type.match(/^image\/(jpeg|jpg|png|webp)$/i)) {
+        ToastManager.show(`Formato não suportado: ${file.name}. Use JPG, PNG ou WEBP.`, 'error');
+        continue;
+      }
+      this.editNewImages.push(file);
+    }
+
+    e.target.value = '';
+    this.renderEditNewImagesPreview();
+  },
+
+  renderEditNewImagesPreview() {
+    const newContainer = document.getElementById('edit-new-images-preview');
+    if (!newContainer) return;
+
+    if (this.editNewImages.length === 0) {
+      newContainer.classList.add('hidden');
+      newContainer.innerHTML = '';
+      return;
+    }
+
+    newContainer.classList.remove('hidden');
+    newContainer.innerHTML = `
+      <div class="text-xs font-bold text-teal-700 dark:text-teal-300 mb-2">
+        Novas fotos selecionadas (${this.editNewImages.length}):
+      </div>
+      <div class="grid grid-cols-2 sm:grid-cols-5 gap-3" id="edit-new-grid"></div>
+    `;
+
+    const grid = document.getElementById('edit-new-grid');
+    this.editNewImages.forEach((file, i) => {
+      const thumb = document.createElement('div');
+      thumb.className = 'relative aspect-square rounded-xl overflow-hidden border-2 border-emerald-400 shadow-sm bg-gray-100 dark:bg-gray-800';
+      thumb.innerHTML = `
+        <img src="${URL.createObjectURL(file)}" class="w-full h-full object-cover">
+        <span class="absolute bottom-0 inset-x-0 bg-emerald-600 text-white text-[9px] font-bold text-center py-0.5 pointer-events-none">Nova</span>
+        <button type="button" onclick="App.removeEditNewImage(${i})" title="Remover nova foto" class="absolute top-1 right-1 bg-red-500 hover:bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-black shadow cursor-pointer transition">
+          ✕
+        </button>
+      `;
+      grid.appendChild(thumb);
+    });
+  },
+
+  removeEditNewImage(idx) {
+    this.editNewImages.splice(idx, 1);
+    this.renderEditNewImagesPreview();
+  },
+
+  async submitEditProduct(e, productId) {
+    e.preventDefault();
+    const btn = document.getElementById('btn-edit-prod-submit');
+
+    const totalRemaining = (this.editExistingImages.length - this.editRemovedImageIds.length) + this.editNewImages.length;
+    if (totalRemaining < 1) {
+      ToastManager.show('É obrigatório que o produto possua pelo menos 1 foto.', 'error');
+      return;
+    }
+
+    const name = document.getElementById('edit-prod-name').value.trim();
+    const price = parseFloat(document.getElementById('edit-prod-price').value);
+    const category = document.getElementById('edit-prod-category').value;
+    const condition = document.getElementById('edit-prod-condition').value;
+    const stock = parseInt(document.getElementById('edit-prod-stock').value) || 0;
+    const material = document.getElementById('edit-prod-material').value.trim();
+    const description = document.getElementById('edit-prod-desc').value.trim();
+
+    if (!name || !description || isNaN(price) || price <= 0 || !category) {
+      ToastManager.show('Preencha todos os campos obrigatórios do produto.', 'error');
+      return;
+    }
+
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = 'Salvando alterações... ⏳';
+    }
+
+    const formData = new FormData();
+    formData.append('id', productId);
+    formData.append('name', name);
+    formData.append('price', price);
+    formData.append('category', category);
+    formData.append('product_condition', condition);
+    formData.append('stock', stock);
+    formData.append('material', material);
+    formData.append('description', description);
+
+    for (const remId of this.editRemovedImageIds) {
+      formData.append('removed_image_ids[]', remId);
+    }
+
+    for (const file of this.editNewImages) {
+      formData.append('images[]', file);
+    }
+
+    try {
+      const res = await SellerManager.updateProduct(formData);
+      if (res.success) {
+        ToastManager.show(res.message || 'Produto atualizado com sucesso!', 'success', 4000);
+        this.productsCache = null;
+        this.navigateTo('seller');
+      } else {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = 'Salvar Alterações';
+        }
+        ToastManager.show(res.error || 'Erro ao atualizar produto.', 'error');
+      }
+    } catch (err) {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = 'Salvar Alterações';
+      }
+      ToastManager.show('Erro de comunicação ao salvar produto.', 'error');
     }
   },
 
@@ -2025,7 +2413,13 @@ const App = {
       ToastManager.show('Login realizado com sucesso!', 'success');
       document.getElementById('auth-modal').remove();
       this.updateHeaderUI();
-      this.renderCurrentScreen();
+      if (this.redirectAfterLogin) {
+        const dest = this.redirectAfterLogin;
+        this.redirectAfterLogin = null;
+        this.navigateTo(dest.screen, dest.params);
+      } else {
+        this.renderCurrentScreen();
+      }
     } else {
       if (btn) btn.innerHTML = 'Entrar';
       ToastManager.show(res.error, 'error');
@@ -2037,7 +2431,13 @@ const App = {
     if (res.success) {
       document.getElementById('auth-modal').remove();
       this.updateHeaderUI();
-      this.renderCurrentScreen();
+      if (this.redirectAfterLogin) {
+        const dest = this.redirectAfterLogin;
+        this.redirectAfterLogin = null;
+        this.navigateTo(dest.screen, dest.params);
+      } else {
+        this.renderCurrentScreen();
+      }
     }
   },
 
@@ -2237,7 +2637,13 @@ const App = {
       ToastManager.show(res.message, 'success', 4000);
       document.getElementById('auth-modal').remove();
       this.updateHeaderUI();
-      this.renderCurrentScreen();
+      if (this.redirectAfterLogin) {
+        const dest = this.redirectAfterLogin;
+        this.redirectAfterLogin = null;
+        this.navigateTo(dest.screen, dest.params);
+      } else {
+        this.renderCurrentScreen();
+      }
     } else {
       if (btn) btn.innerHTML = 'Criar Conta e Ganhar +500 pts';
       ToastManager.show(res.error, 'error');
@@ -2660,7 +3066,13 @@ const App = {
 
   addToCartAndCheckout(productId) {
     this.addToCartDirect(productId);
-    this.navigateTo('cart');
+    if (!AuthManager.currentUser) {
+      this.redirectAfterLogin = { screen: 'checkout', params: {} };
+      ToastManager.show('Faça login para prosseguir para a finalização da compra.', 'info');
+      this.showLoginModal();
+      return;
+    }
+    this.navigateTo('checkout');
   },
 
   updateCartQty(id, qty) {
@@ -2675,6 +3087,12 @@ const App = {
   },
 
   async voteReviewHelpful(reviewId, btnElement) {
+    if (!AuthManager.currentUser) {
+      ToastManager.show('Faça login para avaliar feedbacks de produtos.', 'info');
+      this.showLoginModal();
+      return;
+    }
+
     const res = await fetch('api/reviews.php', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2685,6 +3103,8 @@ const App = {
       ToastManager.show('Obrigado pelo seu feedback!', 'success');
       btnElement.disabled = true;
       btnElement.classList.add('text-teal-600');
+    } else {
+      ToastManager.show(data.error || 'Erro ao votar no feedback.', 'error');
     }
   },
 
