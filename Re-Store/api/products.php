@@ -85,7 +85,7 @@ if ($method === 'GET' && $action === 'list') {
         $prod['primary_image'] = $primaryImg ? $primaryImg['image_url'] : 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=600';
     }
 
-    echo json_encode(['success' => false, 'products' => $products]);
+    echo json_encode(['success' => true, 'products' => $products]);
     exit;
 }
 
