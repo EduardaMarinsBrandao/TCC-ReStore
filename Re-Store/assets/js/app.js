@@ -48,21 +48,61 @@ const App = {
 
     if (user) {
       userNav.innerHTML = `
-        <button type="button" onclick="App.navigateTo('orders')" title="Meus Pedidos" class="text-xs font-semibold text-gray-700 dark:text-gray-200 hover:text-teal-600 cursor-pointer pointer-events-auto flex items-center gap-1">
-          <span class="pointer-events-none">📦</span> <span class="pointer-events-none">Pedidos</span>
-        </button>
-        <button type="button" onclick="App.navigateTo('points')" title="Saldo e Nível" class="badge-points px-3 py-1.5 rounded-full text-xs font-bold transition hover:opacity-90 cursor-pointer pointer-events-auto">
-          <span class="pointer-events-none">🌱</span> <span class="pointer-events-none">${user.points} pts</span> <span class="bg-white/20 px-1.5 py-0.5 rounded text-[10px] pointer-events-none">Nível ${user.level}</span>
-        </button>
-        <button type="button" onclick="App.navigateTo('seller')" class="text-sm font-semibold text-teal-600 hover:text-teal-700 dark:text-teal-400 cursor-pointer pointer-events-auto">
-          Área Vendedor
-        </button>
-        <button type="button" onclick="App.navigateTo('profile')" title="Meu Perfil" class="flex items-center gap-2 text-sm font-semibold hover:opacity-80 cursor-pointer pointer-events-auto border border-teal-500/50 rounded-full px-2 py-1 bg-white/10">
-          <img src="${user.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}" class="w-7 h-7 rounded-full object-cover border border-teal-500 pointer-events-none" alt="Avatar">
-          <span class="hidden md:inline pointer-events-none">${user.name.split(' ')[0]}</span>
-        </button>
-      `;
-    } else {
+    <button 
+      type="button" 
+      onclick="App.navigateTo('orders')" 
+      title="Meus Pedidos" 
+      class="text-xs font-semibold text-gray-700 dark:text-gray-200 hover:text-teal-600 cursor-pointer pointer-events-auto flex items-center gap-1"
+    >
+      <i data-lucide="package" class="w-4 h-4 pointer-events-none"></i>
+      <span class="pointer-events-none">Pedidos</span>
+    </button>
+
+    <button 
+      type="button" 
+      onclick="App.navigateTo('points')" 
+      title="Saldo e Nível" 
+      class="badge-points px-3 py-1.5 rounded-full text-xs font-bold transition hover:opacity-90 cursor-pointer pointer-events-auto"
+    >
+      <i data-lucide="sprout" class="w-4 h-4 pointer-events-none"></i>
+      <span class="pointer-events-none">${user.points} pts</span>
+
+      <span class="bg-white/20 px-1.5 py-0.5 rounded text-[10px] pointer-events-none">
+        Nível ${user.level}
+      </span>
+    </button>
+
+    <button 
+      type="button" 
+      onclick="App.navigateTo('seller')" 
+      class="text-sm font-semibold text-teal-600 hover:text-teal-700 dark:text-teal-400 cursor-pointer pointer-events-auto"
+    >
+      Área Vendedor
+    </button>
+
+    <button 
+      type="button" 
+      onclick="App.navigateTo('profile')" 
+      title="Meu Perfil" 
+      class="flex items-center gap-2 text-sm font-semibold hover:opacity-80 cursor-pointer pointer-events-auto border border-teal-500/50 rounded-full px-2 py-1 bg-white/10"
+    >
+      <img 
+        src="${user.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}" 
+        class="w-7 h-7 rounded-full object-cover border border-teal-500 pointer-events-none" 
+        alt="Avatar"
+      >
+      <span class="hidden md:inline pointer-events-none">
+        ${user.name.split(' ')[0]}
+      </span>
+    </button>
+  `;
+
+      // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+      if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+      }
+    }
+    else {
       userNav.innerHTML = `
         <button type="button" onclick="App.showLoginModal()" class="text-sm font-semibold text-gray-700 dark:text-gray-200 hover:text-teal-600 cursor-pointer pointer-events-auto px-2 py-1">
           Entrar
@@ -71,6 +111,11 @@ const App = {
           Criar Conta (+500 pts)
         </button>
       `;
+
+      // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+      if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+      }
     }
   },
 
@@ -192,55 +237,73 @@ const App = {
   // ----------------------------------------------------
   async renderHomeScreen(container) {
     container.innerHTML = `
-      <!-- BANNER HERO -->
+     <!-- BANNER HERO -->
       <section class="relative bg-gradient-to-r from-teal-600 to-emerald-600 rounded-3xl p-6 md:p-10 text-white mb-8 overflow-hidden shadow-lg animate-fade-in flex flex-col md:flex-row items-center justify-between gap-6">
         <div class="relative z-10 max-w-2xl">
-          <span class="inline-block bg-white/20 backdrop-blur-md text-white text-xs font-bold px-3 py-1 rounded-full mb-3">
-            ♻️ Marketplace Reutilizável & Sustentável
+          
+          <span class="inline-flex items-center gap-1.5 bg-white/20 backdrop-blur-md text-white text-xs font-bold px-3 py-1 rounded-full mb-3">
+            <i data-lucide="recycle" class="w-4 h-4"></i>
+            <span>Marketplace Reutilizável & Sustentável</span>
           </span>
+
           <h1 class="text-2xl md:text-4xl font-extrabold tracking-tight mb-3">
             Compre, Venda e Troque Produtos Sustentáveis com Recompensas
           </h1>
+
           <p class="text-teal-100 text-sm md:text-base mb-6 leading-relaxed">
             Acumule Pontos Verdes a cada compra sustentável e troque por cupons exclusivos no Re-Store.
           </p>
 
           <div class="flex flex-wrap gap-3">
-            <button type="button" onclick="App.navigateTo('search')" class="bg-white text-teal-700 font-bold px-5 py-2.5 rounded-full shadow hover:bg-teal-50 transition cursor-pointer">
+            
+            <button 
+              type="button" 
+              onclick="App.navigateTo('search')" 
+              class="bg-white text-teal-700 font-bold px-5 py-2.5 rounded-full shadow hover:bg-teal-50 transition cursor-pointer flex items-center gap-2"
+            >
+              <i data-lucide="shopping-bag" class="w-4 h-4"></i>
               Explorar Produtos
             </button>
-            <button type="button" onclick="App.showTutorialModal()" class="bg-teal-700/60 border border-white/30 backdrop-blur-md text-white font-semibold px-5 py-2.5 rounded-full hover:bg-teal-700 transition cursor-pointer">
-              Como Funciona 🎓
+
+            <button 
+              type="button" 
+              onclick="App.showTutorialModal()" 
+              class="bg-teal-700/60 border border-white/30 backdrop-blur-md text-white font-semibold px-5 py-2.5 rounded-full hover:bg-teal-700 transition cursor-pointer flex items-center gap-2"
+            >
+              <i data-lucide="graduation-cap" class="w-4 h-4"></i>
+              Como Funciona
             </button>
+
           </div>
         </div>
       </section>
 
+
       <!-- ATALHOS RÁPIDOS DE ACESSO -->
       <section class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
         <button type="button" onclick="App.navigateTo('favorites')" class="p-4 rounded-2xl bg-white dark:bg-gray-800 border dark:border-gray-800 flex items-center gap-3 hover:border-teal-500 transition shadow-sm cursor-pointer">
-          <span class="text-2xl pointer-events-none">❤️</span>
+          <i data-lucide="heart" class="w-6 h-6 pointer-events-none"></i>
           <div class="text-left pointer-events-none">
             <div class="font-bold text-xs text-gray-900 dark:text-white">Meus Favoritos</div>
             <div class="text-[11px] text-gray-500">Itens salvos</div>
           </div>
         </button>
         <button type="button" onclick="App.navigateTo('orders')" class="p-4 rounded-2xl bg-white dark:bg-gray-800 border dark:border-gray-800 flex items-center gap-3 hover:border-teal-500 transition shadow-sm cursor-pointer">
-          <span class="text-2xl pointer-events-none">📦</span>
+          <i data-lucide="shopping-bag" class="w-6 h-6 pointer-events-none"></i>
           <div class="text-left pointer-events-none">
             <div class="font-bold text-xs text-gray-900 dark:text-white">Meus Pedidos</div>
             <div class="text-[11px] text-gray-500">Acompanhar status</div>
           </div>
         </button>
         <button type="button" onclick="App.navigateTo('points')" class="p-4 rounded-2xl bg-white dark:bg-gray-800 border dark:border-gray-800 flex items-center gap-3 hover:border-teal-500 transition shadow-sm cursor-pointer">
-          <span class="text-2xl pointer-events-none">🌱</span>
+          <i data-lucide="sprout" class="w-6 h-6 pointer-events-none"></i>
           <div class="text-left pointer-events-none">
             <div class="font-bold text-xs text-gray-900 dark:text-white">Extrato de Pontos</div>
             <div class="text-[11px] text-gray-500">Saldo e cupons</div>
           </div>
         </button>
         <button type="button" onclick="App.navigateTo('chat')" class="p-4 rounded-2xl bg-white dark:bg-gray-800 border dark:border-gray-800 flex items-center gap-3 hover:border-teal-500 transition shadow-sm cursor-pointer">
-          <span class="text-2xl pointer-events-none">💬</span>
+          <i data-lucide="message-circle" class="w-6 h-6 pointer-events-none"></i>
           <div class="text-left pointer-events-none">
             <div class="font-bold text-xs text-gray-900 dark:text-white">Chat Direto</div>
             <div class="text-[11px] text-gray-500">Conversar com vendedores</div>
@@ -255,24 +318,28 @@ const App = {
           <button type="button" onclick="App.navigateTo('search')" class="text-xs text-teal-600 hover:underline cursor-pointer">Ver todas</button>
         </h2>
         <div class="flex gap-3 overflow-x-auto no-scrollbar pb-2">
-          ${[
-            { name: 'Todas', icon: '🍃', cat: '' },
-            { name: 'Utilidades', icon: '🥛', cat: 'Utilidades' },
-            { name: 'Moda & Acessórios', icon: '👕', cat: 'Moda & Acessórios' },
-            { name: 'Móveis & Decoração', icon: '🪑', cat: 'Móveis & Decoração' },
-            { name: 'Eletrônicos Eco', icon: '🔌', cat: 'Eletrônicos Eco' }
-          ].map(c => `
-            <button type="button" onclick="App.navigateTo('search', { category: '${c.cat}' })" 
-              class="flex items-center gap-2 px-4 py-2 rounded-full border text-sm font-medium whitespace-nowrap transition cursor-pointer ${
-                this.selectedCategory === c.cat 
-                  ? 'bg-teal-600 text-white border-teal-600 shadow-sm' 
-                  : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-700 hover:border-teal-500'
-              }">
-              <span>${c.icon}</span> <span>${c.name}</span>
-            </button>
-          `).join('')}
+         ${[
+        { name: 'Todas', icon: 'leaf', cat: '' },
+        { name: 'Utilidades', icon: 'milk', cat: 'Utilidades' },
+        { name: 'Moda & Acessórios', icon: 'shirt', cat: 'Moda & Acessórios' },
+        { name: 'Móveis & Decoração', icon: 'armchair', cat: 'Móveis & Decoração' },
+        { name: 'Eletrônicos Eco', icon: 'plug', cat: 'Eletrônicos Eco' }
+      ].map(c => `
+          <button 
+            type="button" 
+            onclick="App.navigateTo('search', { category: '${c.cat}' })" 
+            class="flex items-center gap-2 px-4 py-2 rounded-full border text-sm font-medium whitespace-nowrap transition cursor-pointer ${this.selectedCategory === c.cat
+          ? 'bg-teal-600 text-white border-teal-600 shadow-sm'
+          : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-700 hover:border-teal-500'
+        }"
+          >
+            <i data-lucide="${c.icon}" class="w-5 h-5 pointer-events-none"></i>
+            <span>${c.name}</span>
+          </button>
+        `).join('')}
         </div>
-      </section>
+        </section>
+
 
       <!-- GRID DE PRODUTOS -->
       <section class="mb-10">
@@ -285,6 +352,11 @@ const App = {
         </div>
       </section>
     `;
+
+    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
 
     if (this.productsCache) {
       document.getElementById('home-products-grid').innerHTML = this.productsCache.map(p => this.renderProductCardHTML(p)).join('');
@@ -312,7 +384,7 @@ const App = {
     const isFav = this.favoriteIds.includes(p.id);
     const heartIcon = isFav ? '❤️' : '🤍';
 
-    const conditionBadge = p.product_condition === 'new' 
+    const conditionBadge = p.product_condition === 'new'
       ? '<span class="badge-condition-new px-2 py-0.5 rounded text-[11px] font-semibold">Novo</span>'
       : (p.product_condition === 'restored'
         ? '<span class="badge-condition-restored px-2 py-0.5 rounded text-[11px] font-semibold">Restaurado</span>'
@@ -362,6 +434,7 @@ const App = {
     `;
   },
 
+
   // ----------------------------------------------------
   // TELA 7: DETALHES DO PRODUTO
   // ----------------------------------------------------
@@ -387,6 +460,11 @@ const App = {
         </div>
       </div>
     `;
+
+    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
 
     try {
       const res = await fetch(`api/products.php?action=detail&id=${this.selectedProductId}`);
@@ -439,7 +517,9 @@ const App = {
                   <div class="text-2xl font-black text-teal-600 dark:text-teal-400">
                     R$ ${parseFloat(p.price).toFixed(2).replace('.', ',')}
                   </div>
-                  <span class="badge-points text-xs">🌱 Recompensa +${p.points} Pontos</span>
+                  <span class="badge-points text-xs inline-flex items-center gap-1">
+                  <i data-lucide="sprout" class="w-4 h-4 pointer-events-none"></i> Recompensa +${p.points} Pontos</span>
+
                 </div>
 
                 <div class="p-3 bg-emerald-50 dark:bg-emerald-950/40 rounded-xl mb-4 border border-emerald-200 dark:border-emerald-900 flex items-center gap-3">
@@ -468,17 +548,29 @@ const App = {
                       <div class="text-xs text-gray-500">Reputação: ★ 4.9 (Vendedor Confiável)</div>
                     </div>
                   </div>
-                  <button type="button" onclick="App.openChatWithUser(${p.seller_id}, ${p.id})" class="btn-outline text-xs py-1.5 px-3 cursor-pointer">
-                    💬 Chat
+                  <button 
+                    type="button" 
+                    onclick="App.openChatWithUser(${p.seller_id}, ${p.id})" 
+                    class="btn-outline text-xs py-1.5 px-3 cursor-pointer inline-flex items-center gap-1.5"
+                  >
+                    <i data-lucide="message-circle" class="w-4 h-4 pointer-events-none"></i>
+                    <span>Chat</span>
                   </button>
+
                 </div>
 
                 ${user && parseInt(user.id) === parseInt(p.seller_id) ? `
                   <div class="mb-4 p-3 bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 rounded-xl flex items-center justify-between">
                     <span class="text-xs font-bold text-teal-800 dark:text-teal-300">Você é o anunciante deste produto</span>
-                    <button type="button" onclick="App.navigateTo('edit-product', { productId: ${p.id} })" class="btn-primary text-xs py-1.5 px-3 cursor-pointer flex items-center gap-1">
-                      <span>✏️</span> Editar Anúncio
+                    <button 
+                      type="button" 
+                      onclick="App.navigateTo('edit-product', { productId: ${p.id} })" 
+                      class="btn-primary text-xs py-1.5 px-3 cursor-pointer flex items-center gap-1"
+                    >
+                      <i data-lucide="pencil" class="w-4 h-4 pointer-events-none"></i>
+                      Editar Anúncio
                     </button>
+
                   </div>
                 ` : ''}
               </div>
@@ -488,9 +580,16 @@ const App = {
                 <button type="button" onclick="App.addToCartAndCheckout(${p.id})" class="btn-secondary flex-1 py-3 text-base cursor-pointer">
                   ⚡ Comprar Agora
                 </button>
-                <button type="button" onclick="App.addToCartDirect(${p.id}, this)" class="btn-primary flex-1 py-3 text-base cursor-pointer">
-                  🛒 Adicionar ao Carrinho
+                <button 
+                  type="button" 
+                  onclick="App.addToCartDirect(${p.id}, this)" 
+                  class="btn-primary flex-1 py-3 text-base cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <i data-lucide="shopping-cart" class="w-8 h-8 pointer-events-none"></i>
+                  <span>Adicionar ao Carrinho</span>
                 </button>
+
+
               </div>
             </div>
           </div>
@@ -519,9 +618,15 @@ const App = {
                   </div>
                   <div class="flex items-center justify-between pt-2 border-t dark:border-gray-700">
                     <span class="text-[11px] text-gray-400">${r.created_at || 'Recente'}</span>
-                    <button type="button" onclick="App.voteReviewHelpful(${r.id}, this)" class="text-xs text-gray-500 hover:text-teal-600 flex items-center gap-1 font-semibold cursor-pointer">
-                      👍 Útil (${r.helpful_count || 0})
+                    <button 
+                      type="button" 
+                      onclick="App.voteReviewHelpful(${r.id}, this)" 
+                      class="text-xs text-gray-500 hover:text-teal-600 flex items-center gap-1 font-semibold cursor-pointer"
+                    >
+                      <i data-lucide="thumbs-up" class="w-4 h-4 pointer-events-none"></i>
+                      <span>Útil (${r.helpful_count || 0})</span>
                     </button>
+
                   </div>
                 </div>
               `).join('') : '<div class="text-gray-500 text-sm">Seja o primeiro a avaliar este produto após a compra!</div>'}
@@ -529,6 +634,11 @@ const App = {
           </section>
         </div>
       `;
+
+      // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+      if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+      }
 
     } catch (e) {
       console.error('Erro ao renderizar produto:', e);
@@ -552,6 +662,11 @@ const App = {
           <button type="button" onclick="App.navigateTo('search')" class="btn-primary w-full py-3 cursor-pointer">Explorar Produtos</button>
         </div>
       `;
+
+      // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+      if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+      }
       return;
     }
 
@@ -576,7 +691,16 @@ const App = {
                     <span class="px-3 py-1 text-sm font-semibold">${item.quantity}</span>
                     <button type="button" onclick="App.updateCartQty(${item.product_id}, ${item.quantity + 1})" class="px-2.5 py-1 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">+</button>
                   </div>
-                  <button type="button" onclick="App.removeCartItem(${item.product_id})" title="Remover" class="text-red-500 hover:text-red-700 p-1 cursor-pointer">🗑️</button>
+                  <button 
+                    type="button" 
+                    onclick="App.removeCartItem(${item.product_id})" 
+                    title="Remover" 
+                    aria-label="Remover produto"
+                    class="text-red-500 hover:text-red-700 p-1 cursor-pointer"
+                  >
+                    <i data-lucide="trash-2" class="w-5 h-5 pointer-events-none"></i>
+                  </button>
+
                 </div>
               </div>
             `).join('')}
@@ -609,6 +733,11 @@ const App = {
         </div>
       </div>
     `;
+
+    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
   },
 
   // ----------------------------------------------------
@@ -631,7 +760,7 @@ const App = {
       const cRes = await fetch('api/points.php?action=discounts');
       const cData = await cRes.json();
       availableCoupons = (cData.discounts || []).filter(d => parseInt(d.is_used) === 0);
-    } catch (e) {}
+    } catch (e) { }
 
     let discountPercentage = 0;
     let appliedCoupon = null;
@@ -656,7 +785,7 @@ const App = {
 
     container.innerHTML = `
       <div class="animate-fade-in max-w-4xl mx-auto">
-        <h1 class="text-2xl font-extrabold mb-6">Finalizar Compra 💳</h1>
+        <h1 class="text-2xl font-extrabold mb-6">Finalizar Compra </h1>
         <form id="checkout-form" onsubmit="App.submitCheckout(event)" class="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div class="lg:col-span-2 space-y-6">
             <div class="p-6 rounded-2xl border dark:border-gray-800 bg-white dark:bg-gray-800">
@@ -683,7 +812,7 @@ const App = {
 
             <!-- CAMPO DE CUPOM DE DESCONTO -->
             <div class="p-6 rounded-2xl border dark:border-gray-800 bg-white dark:bg-gray-800">
-              <h2 class="font-bold text-base mb-2">2. Cupom de Desconto de Uso Único 🏷️</h2>
+              <h2 class="font-bold text-base mb-2">2. Cupom de Desconto de Uso Único </h2>
               <p class="text-xs text-gray-500 mb-4">Digite seu código de cupom ou selecione um dos cupons resgatados com seus Pontos Verdes.</p>
               
               ${this.appliedCouponCode && appliedCoupon ? `
@@ -717,13 +846,15 @@ const App = {
                   <span class="text-[11px] font-bold text-gray-500">Seus Cupons Disponíveis:</span>
                   <div class="flex flex-wrap gap-2 mt-1.5">
                     ${availableCoupons.map(c => {
-                      const isSelected = this.appliedCouponCode.toUpperCase() === c.code.toUpperCase();
-                      return `
+      const isSelected = this.appliedCouponCode.toUpperCase() === c.code.toUpperCase();
+      return `
                         <button type="button" onclick="App.applyCouponDirect('${c.code}')" class="text-xs font-mono ${isSelected ? 'bg-teal-600 text-white font-bold shadow' : 'bg-teal-50 dark:bg-teal-950 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 hover:bg-teal-100'} px-3 py-1 rounded-full cursor-pointer transition">
                           🏷️ ${c.code} (${c.discount_type}) ${isSelected ? '✓' : ''}
                         </button>
                       `;
-                    }).join('')}
+
+
+    }).join('')}
                   </div>
                 </div>
               ` : '<div class="text-xs text-gray-400 mt-2">Você não tem cupons ativos. Troque seus pontos na aba "Extrato de Pontos" para obter cupons!</div>'}
@@ -852,6 +983,11 @@ const App = {
         </form>
       </div>
     `;
+
+    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
   },
 
   removeCouponCheckout() {
@@ -985,12 +1121,12 @@ const App = {
           </div>
 
           ${orders.length > 0 ? orders.map(o => {
-            const isCancelled = o.status === 'cancelled';
-            const statusBadge = isCancelled 
-              ? `<span class="bg-red-100 text-red-800 text-xs px-2.5 py-0.5 rounded-full font-bold">Cancelado ${o.coupon_code ? '(Cupom Reativado ✓)' : ''}</span>`
-              : '<span class="bg-emerald-100 text-emerald-800 text-xs px-2.5 py-0.5 rounded-full font-bold">✓ Confirmado / Em Separação</span>';
+        const isCancelled = o.status === 'cancelled';
+        const statusBadge = isCancelled
+          ? `<span class="bg-red-100 text-red-800 text-xs px-2.5 py-0.5 rounded-full font-bold">Cancelado ${o.coupon_code ? '(Cupom Reativado ✓)' : ''}</span>`
+          : '<span class="bg-emerald-100 text-emerald-800 text-xs px-2.5 py-0.5 rounded-full font-bold">✓ Confirmado / Em Separação</span>';
 
-            return `
+        return `
               <div class="p-6 rounded-2xl border dark:border-gray-800 bg-white dark:bg-gray-800 space-y-4 shadow-sm">
                 <div class="flex flex-wrap items-center justify-between gap-2 border-b dark:border-gray-700 pb-3">
                   <div>
@@ -1037,7 +1173,7 @@ const App = {
                 </div>
               </div>
             `;
-          }).join('') : `
+      }).join('') : `
             <div class="text-center py-16 bg-white dark:bg-gray-800 rounded-3xl border dark:border-gray-800">
               <div class="text-5xl mb-3">📦</div>
               <h2 class="text-lg font-bold mb-1">Você ainda não fez nenhum pedido</h2>
@@ -1047,6 +1183,11 @@ const App = {
           `}
         </div>
       `;
+
+      // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+      if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+      }
 
     } catch (e) {
       container.innerHTML = `<div class="text-center py-12 text-red-500">Erro ao carregar pedidos.</div>`;
@@ -1106,6 +1247,11 @@ const App = {
         </div>
       </div>
     `;
+
+    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
   },
 
   // ----------------------------------------------------
@@ -1151,11 +1297,11 @@ const App = {
             <h2 class="text-xl font-bold mb-4">Resgatar Cupons de Desconto</h2>
             <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
               ${[
-                { type: '5%', name: 'Desconto de 5%', cost: 150 },
-                { type: '10%', name: 'Desconto de 10%', cost: 300 },
-                { type: '15%', name: 'Desconto de 15%', cost: 500 },
-                { type: 'free_shipping', name: 'Frete Grátis Ecológico', cost: 250 }
-              ].map(c => `
+          { type: '5%', name: 'Desconto de 5%', cost: 150 },
+          { type: '10%', name: 'Desconto de 10%', cost: 300 },
+          { type: '15%', name: 'Desconto de 15%', cost: 500 },
+          { type: 'free_shipping', name: 'Frete Grátis Ecológico', cost: 250 }
+        ].map(c => `
                 <div class="p-4 rounded-2xl border dark:border-gray-800 bg-white dark:bg-gray-800 flex flex-col justify-between shadow-sm">
                   <div>
                     <div class="text-2xl font-black text-teal-600 mb-1">${c.type === 'free_shipping' ? '🚚' : c.type}</div>
@@ -1181,8 +1327,8 @@ const App = {
             ${discounts.length > 0 ? `
               <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                 ${discounts.map(d => {
-                  const isUsed = parseInt(d.is_used) === 1;
-                  return `
+          const isUsed = parseInt(d.is_used) === 1;
+          return `
                     <div class="p-4 rounded-2xl border ${isUsed ? 'border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40 opacity-60' : 'border-teal-200 dark:border-teal-900 bg-teal-50/50 dark:bg-teal-950/30'} flex flex-col justify-between">
                       <div>
                         <div class="flex items-center justify-between mb-2">
@@ -1211,7 +1357,7 @@ const App = {
                       `}
                     </div>
                   `;
-                }).join('')}
+        }).join('')}
               </div>
             ` : `
               <div class="text-center py-8 text-gray-400 text-xs">
@@ -1221,6 +1367,11 @@ const App = {
           </div>
         </div>
       `;
+
+      // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+      if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+      }
 
     } catch (e) {
       container.innerHTML = `<div class="text-center py-12 text-red-500">Erro ao carregar sistema de pontos.</div>`;
@@ -1344,6 +1495,11 @@ const App = {
         </div>
       </div>
     `;
+
+    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
   },
 
   // ----------------------------------------------------
@@ -1377,6 +1533,11 @@ const App = {
           `).join('') : '<div class="text-center text-gray-500 text-sm py-8">Você ainda não avaliou nenhum produto.</div>'}
         </div>
       `;
+
+      // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+      if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+      }
     } catch (e) {
       container.innerHTML = `<div class="text-center py-12 text-red-500">Erro ao carregar avaliações.</div>`;
     }
@@ -1455,6 +1616,11 @@ const App = {
           </div>
         </div>
       `;
+
+      // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+      if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+      }
 
     } catch (e) {
       container.innerHTML = `<div class="text-center py-12 text-red-500">Erro ao carregar área do vendedor.</div>`;
@@ -1536,6 +1702,11 @@ const App = {
         </form>
       </div>
     `;
+
+    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
   },
 
   handleProductImageSelect(e) {
@@ -1577,6 +1748,11 @@ const App = {
       <span>📸 ${this.selectedProductImages.length}/5 foto(s) selecionada(s)</span>
       <span class="text-[10px] text-gray-400 font-normal">A foto #1 será a capa</span>
     `;
+
+    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
     previewContainer.appendChild(header);
 
     const grid = document.createElement('div');
@@ -1585,7 +1761,7 @@ const App = {
     this.selectedProductImages.forEach((file, i) => {
       const thumb = document.createElement('div');
       thumb.className = 'relative aspect-square rounded-xl overflow-hidden border-2 ' + (i === 0 ? 'border-teal-500 ring-2 ring-teal-300' : 'border-gray-200 dark:border-gray-600') + ' shadow-sm bg-gray-100 dark:bg-gray-800';
-      
+
       const img = document.createElement('img');
       img.className = 'w-full h-full object-cover';
       img.alt = `Foto ${i + 1}`;
@@ -1815,6 +1991,11 @@ const App = {
         </div>
       `;
 
+      // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+      if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+      }
+
       this.renderEditImagesPreview();
 
     } catch (e) {
@@ -1842,6 +2023,11 @@ const App = {
           </button>
         </div>
       `).join('');
+
+      // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+      if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+      }
     }
 
     this.renderEditNewImagesPreview();
@@ -1907,6 +2093,10 @@ const App = {
           ✕
         </button>
       `;
+      // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+      if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+      }
       grid.appendChild(thumb);
     });
   },
@@ -2014,6 +2204,11 @@ const App = {
       </div>
     `;
 
+    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
+
     const convsRes = await ChatManager.getConversations();
     const convsList = document.getElementById('chat-convs-list');
 
@@ -2024,6 +2219,10 @@ const App = {
           <div class="text-[11px] text-gray-500 line-clamp-1 mt-0.5">${c.last_message ? c.last_message.message : ''}</div>
         </div>
       `).join('');
+      // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+      if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+      }
     } else {
       convsList.innerHTML = `<div class="text-xs text-gray-400">Nenhuma conversa encontrada.</div>`;
     }
@@ -2049,8 +2248,8 @@ const App = {
 
       <div id="chat-msgs-body" class="flex-1 overflow-y-auto space-y-3 pr-2 mb-3">
         ${msgs.map(m => {
-          const isMe = m.sender_id === AuthManager.currentUser.id;
-          return `
+      const isMe = m.sender_id === AuthManager.currentUser.id;
+      return `
             <div class="flex ${isMe ? 'justify-end' : 'justify-start'} group">
               <div class="relative max-w-xs px-4 py-2 rounded-2xl text-sm ${isMe ? 'bg-teal-600 text-white rounded-br-none' : 'bg-white dark:bg-gray-800 border dark:border-gray-700 text-gray-800 dark:text-gray-200 rounded-bl-none'}">
                 ${m.message}
@@ -2062,15 +2261,15 @@ const App = {
               </div>
             </div>
           `;
-        }).join('')}
+    }).join('')}
       </div>
 
       <div class="flex gap-2 overflow-x-auto no-scrollbar mb-2 pb-1">
         ${[
-          'O produto ainda está disponível?',
-          'Qual o valor do frete?',
-          'Aceita proposta de valor?'
-        ].map(q => `
+        'O produto ainda está disponível?',
+        'Qual o valor do frete?',
+        'Aceita proposta de valor?'
+      ].map(q => `
           <button type="button" onclick="document.getElementById('chat-input-text').value='${q}'" class="text-[11px] font-medium bg-white dark:bg-gray-800 border dark:border-gray-700 px-3 py-1 rounded-full whitespace-nowrap hover:border-teal-500 transition text-gray-600 dark:text-gray-300 cursor-pointer">
             ${q}
           </button>
@@ -2082,6 +2281,11 @@ const App = {
         <button type="submit" class="btn-primary text-xs py-2 px-4 cursor-pointer">Enviar</button>
       </form>
     `;
+
+    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
 
     const body = document.getElementById('chat-msgs-body');
     if (body) body.scrollTop = body.scrollHeight;
@@ -2275,6 +2479,11 @@ const App = {
         </div>
       </div>
     `;
+
+    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
   },
 
   // ----------------------------------------------------
@@ -2340,6 +2549,11 @@ const App = {
         </div>
       </div>
     `;
+
+    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
   },
 
   showLoginModal() {
@@ -2400,45 +2614,75 @@ const App = {
         </div>
       </div>
     `;
+
+    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
   },
 
   async submitLogin(e) {
     e.preventDefault();
+
     const btn = document.getElementById('btn-login-submit');
     if (btn) btn.innerHTML = 'Entrando...';
 
     const email = document.getElementById('login-email').value;
     const pass = document.getElementById('login-password').value;
+
     const res = await AuthManager.login(email, pass);
 
     if (res.success) {
       ToastManager.show('Login realizado com sucesso!', 'success');
+
       document.getElementById('auth-modal').remove();
+
       this.updateHeaderUI();
+
       if (this.redirectAfterLogin) {
         const dest = this.redirectAfterLogin;
         this.redirectAfterLogin = null;
+
         this.navigateTo(dest.screen, dest.params);
       } else {
         this.renderCurrentScreen();
       }
+
+      // IMPORTANTE: carregar os ícones depois de atualizar a interface
+      if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+      }
+
     } else {
       if (btn) btn.innerHTML = 'Entrar';
+
       ToastManager.show(res.error, 'error');
     }
   },
 
   async submitGoogleLoginSimulated() {
-    const res = await AuthManager.login('lucas@ecostore.com', '123456');
+    const res = await AuthManager.login(
+      'lucas@ecostore.com',
+      '123456'
+    );
+
     if (res.success) {
       document.getElementById('auth-modal').remove();
+
       this.updateHeaderUI();
+
       if (this.redirectAfterLogin) {
         const dest = this.redirectAfterLogin;
         this.redirectAfterLogin = null;
+
         this.navigateTo(dest.screen, dest.params);
       } else {
         this.renderCurrentScreen();
+      }
+
+      // IMPORTANTE: carregar os ícones depois de atualizar a interface
+      if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
       }
     }
   },
@@ -2513,6 +2757,11 @@ const App = {
         </form>
       </div>
     `;
+
+    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
   },
 
   setRole(role) {
@@ -2731,6 +2980,11 @@ const App = {
         </form>
       </div>
     `;
+
+    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
   },
 
   async submitForgotStep1(e) {
@@ -2773,6 +3027,11 @@ const App = {
         </form>
       </div>
     `;
+
+    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
   },
 
   async submitForgotStep2(e) {
@@ -2821,6 +3080,11 @@ const App = {
         </form>
       </div>
     `;
+
+    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
   },
 
   async submitForgotStep3(e) {
@@ -2869,6 +3133,11 @@ const App = {
       </div>
     `;
 
+    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
+
     try {
       const res = await fetch('api/favorites.php?action=list');
       const data = await res.json();
@@ -2886,6 +3155,11 @@ const App = {
             <button type="button" onclick="App.navigateTo('search')" class="btn-primary text-xs py-2 px-6 cursor-pointer">Ver Vitrine de Produtos</button>
           </div>
         `;
+
+        // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+        if (typeof lucide !== 'undefined') {
+          lucide.createIcons();
+        }
       }
     } catch (e) {
       console.error(e);
@@ -2987,6 +3261,11 @@ const App = {
         </div>
       </div>
     `;
+
+    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
 
     this.applySearchFilter();
   },
@@ -3156,17 +3435,17 @@ const App = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'delete_account' })
       })
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) {
-          ToastManager.show(data.message, 'info');
-          AuthManager.currentUser = null;
-          this.updateHeaderUI();
-          this.navigateTo('home');
-        } else {
-          ToastManager.show(data.error, 'error');
-        }
-      });
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            ToastManager.show(data.message, 'info');
+            AuthManager.currentUser = null;
+            this.updateHeaderUI();
+            this.navigateTo('home');
+          } else {
+            ToastManager.show(data.error, 'error');
+          }
+        });
     }
   },
 
