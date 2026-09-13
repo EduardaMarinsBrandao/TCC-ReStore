@@ -1,5 +1,8 @@
 # ♻️ RE-STORE — _Marketplace_ Sustentável
 
+![CI](https://github.com/EduardaMarinsBrandao/TCC-ReStore/actions/workflows/ci.yml/badge.svg)
+![CD](https://github.com/EduardaMarinsBrandao/TCC-ReStore/actions/workflows/cd.yml/badge.svg)
+
 ## 📌 Sobre o Projeto
 
 O **RE-STORE** é uma plataforma de _marketplace_ sustentável desenvolvida com o objetivo de incentivar o **consumo consciente** e a **economia circular**, permitindo que usuários possam comprar e vender produtos usados de forma segura, prática e organizada.
@@ -92,6 +95,32 @@ O protótipo da interface do projeto está disponível no Figma:
 A documentação completa do projeto pode ser encontrada na Wiki:
 
 🔗 https://github.com/EduardaMarinsBrandao/TCC-ReStore/wiki
+
+---
+
+# ⚙️ CI/CD (Integração e Implantação Contínua)
+
+O projeto conta com automação completa via **GitHub Actions**:
+
+- **CI (`.github/workflows/ci.yml`)**:
+  - Validação de sintaxe PHP (`php -l`) em matriz de versões (PHP 8.1, 8.2 e 8.3).
+  - Execução automática da suíte de testes (`tests/test_suite.php`) verificando integridade do banco de dados (SQLite/MySQL) e respostas das APIs (`products`, `auth`, `points`).
+  - Verificação de integridade dos arquivos e diretórios essenciais.
+  - Disparado em todos os `push` e `pull request` para a branch `main`.
+
+- **CD (`.github/workflows/cd.yml`)**:
+  - Deploy automático via **FTPS/FTP** para a hospedagem de produção (InfinityFree / cPanel).
+  - Disparado após alterações na branch `main` ou manualmente via `workflow_dispatch`.
+
+### 🔐 Configuração das Secrets para Deploy Automático
+Para ativar o envio automático para o servidor, configure as seguintes credenciais em:
+**Configurações do Repositório (`Settings`) > `Secrets and variables` > `Actions` > `New repository secret`**:
+
+| Nome do Segredo | Descrição | Exemplo |
+|-----------------|-----------|---------|
+| `FTP_SERVER` | Servidor FTP da hospedagem | `ftpupload.net` |
+| `FTP_USERNAME` | Usuário da conta FTP | `if0_42831392` |
+| `FTP_PASSWORD` | Senha da conta FTP | `SuaSenhaSegura` |
 
 ---
 

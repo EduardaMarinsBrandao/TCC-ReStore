@@ -1,0 +1,97 @@
+name: CI - Continuous Integration
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - dev
+      - develop
+    paths:
+      - 'Re-Store/**'
+      - 'tests/**'
+      - '.github/workflows/ci.yml'
+  pull_request:
+    branches:
+      - main
+      - master
+    paths:
+      - 'Re-Store/**'
+      - 'tests/**'
+      - '.github/workflows/ci.yml'
+  workflow_dispatch:
+
+jobs:
+  # =========================================================================
+  # 1. Validação de Sintaxe PHP (Linting) em Múltiplas Versões
+  # =========================================================================
+  lint:
+    name: "PHP Lint (v${{ matrix.php-version }})"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php-version: ['8.1', '8.2', '8.3']
+
+    steps:
+      - name: 📥 Checkout do Repositório
+        uses: actions/checkout@v4
+
+      - name: 🐘 Configurar Ambiente PHP ${{ matrix.php-version }}
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-version }}
+          extensions: pdo, pdo_sqlite, pdo_mysql, json, mbstring
+          coverage: none
+
+      - name: 🔍 Validar Sintaxe de Todos os Arquivos PHP
+        run: |
+          echo "Verificando sintaxe PHP em Re-Store e tests..."
+          find Re-Store tests -type f -name "*.php" -print0 | xargs -0 -n 1 php -l
+
+  # =========================================================================
+  # 2. Execução da Suíte de Testes Automatizados
+  # =========================================================================
+  test:
+    name: "Automated Tests (PHP ${{ matrix.php-version }})"
+    runs-on: ubuntu-latest
+    needs: [lint]
+    strategy:
+      fail-fast: false
+      matrix:
+        php-version: ['8.2', '8.3']
+
+    steps:
+      - name: 📥 Checkout do Repositório
+        uses: actions/checkout@v4
+
+      - name: 🐘 Configurar Ambiente PHP ${{ matrix.php-version }}
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-version }}
+          extensions: pdo, pdo_sqlite, pdo_mysql, json, mbstring
+          coverage: none
+
+      - name: 🚀 Executar Suíte de Testes (tests/test_suite.php)
+        run: |
+          php tests/test_suite.php
+
+  # =========================================================================
+  # 3. Verificação de Integridade dos Arquivos e Assets
+  # =========================================================================
+  assets-check:
+    name: "Assets & Integrity Check"
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout do Repositório
+        uses: actions/checkout@v4
+
+      - name: 📦 Checar Integridade de Estrutura e Permissões
+        run: |
+          echo "Validando existência de arquivos essenciais..."
+          test -f "Re-Store/index.php" || { echo "index.php não encontrado"; exit 1; }
+          test -f "Re-Store/database.sql" || { echo "database.sql não encontrado"; exit 1; }
+          test -d "Re-Store/api" || { echo "Diretório api/ não encontrado"; exit 1; }
+          test -d "Re-Store/assets" || { echo "Diretório assets/ não encontrado"; exit 1; }
+          test -d "Re-Store/config" || { echo "Diretório config/ não encontrado"; exit 1; }
+          echo "Todos os assets e estruturas essenciais estão íntegros!"

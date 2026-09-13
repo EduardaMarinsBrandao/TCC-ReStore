@@ -18,8 +18,19 @@ function initializeDatabase() {
         try { $db->exec("ALTER TABLE orders ADD COLUMN discount_amount DECIMAL(10,2) DEFAULT 0.00"); } catch (Exception $e) {}
     }
 
+    // Verifica se as tabelas principais já existem no banco conectado
+    $tableExists = false;
+    try {
+        $check = $db->query("SELECT 1 FROM users LIMIT 1");
+        if ($check !== false) {
+            $tableExists = true;
+        }
+    } catch (Exception $e) {
+        $tableExists = false;
+    }
+
     $flagFile = __DIR__ . '/.db_initialized';
-    if (file_exists($flagFile)) {
+    if ($tableExists && file_exists($flagFile)) {
         $alreadyRan = true;
         return;
     }
