@@ -381,7 +381,7 @@ $assetVersion = file_exists(__DIR__ . '/assets/js/app.js') ? filemtime(__DIR__ .
   <script src="assets/js/accessibility.js?v=<?= $assetVersion ?>"></script>
   <script src="assets/js/auth.js?v=<?= $assetVersion ?>"></script>
   <script src="assets/js/cart.js?v=<?= $assetVersion ?>"></script>
-  <script src="assets/js/chat.js?v=<?= $assetVersion ?>"></script>
+  <script src="assets/js/messenger.js?v=<?= $assetVersion ?>"></script>
   <script src="assets/js/seller.js?v=<?= $assetVersion ?>"></script>
   <script src="assets/js/app.js?v=<?= $assetVersion ?>"></script>
 

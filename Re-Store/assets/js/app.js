@@ -2308,7 +2308,7 @@ const App = {
 
   async deleteChatMessage(msgId, partnerId) {
     if (confirm('Deseja apagar esta mensagem enviada?')) {
-      const res = await fetch('api/chat.php', {
+      const res = await fetch('api/messenger.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'delete_message', message_id: msgId })

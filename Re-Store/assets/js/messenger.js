@@ -1,13 +1,13 @@
-/* assets/js/chat.js - Sistema de Chat em Tempo Real via Ajax */
+/* assets/js/messenger.js - Sistema de Mensagens em Tempo Real via Ajax */
 
-const ChatManager = {
+const MessengerManager = {
   activePartnerId: null,
   activeProductId: null,
   pollTimer: null,
 
   async getConversations() {
     try {
-      const res = await fetch('api/chat.php?action=conversations');
+      const res = await fetch('api/messenger.php?action=conversations');
       return await res.json();
     } catch (e) {
       console.error('Erro ao carregar conversas:', e);
@@ -19,7 +19,7 @@ const ChatManager = {
     this.activePartnerId = withUserId;
     this.activeProductId = productId;
 
-    let url = `api/chat.php?action=messages&with_user_id=${withUserId}`;
+    let url = `api/messenger.php?action=messages&with_user_id=${withUserId}`;
     if (productId) url += `&product_id=${productId}`;
 
     try {
@@ -33,7 +33,7 @@ const ChatManager = {
 
   async sendMessage(receiverId, messageText, productId = null) {
     try {
-      const res = await fetch('api/chat.php', {
+      const res = await fetch('api/messenger.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -73,3 +73,7 @@ const ChatManager = {
     this.activeProductId = null;
   }
 };
+
+const ChatManager = MessengerManager;
+window.ChatManager = MessengerManager;
+window.MessengerManager = MessengerManager;
