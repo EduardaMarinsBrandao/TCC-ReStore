@@ -11,8 +11,8 @@ define('DB_DRIVER', getenv('DB_DRIVER') ?: 'auto');
 if (file_exists(__DIR__ . '/credentials.local.php')) {
     require_once __DIR__ . '/credentials.local.php';
 }
-if (!defined('GOOGLE_CLIENT_ID')) {
-    define('GOOGLE_CLIENT_ID', getenv('GOOGLE_CLIENT_ID') ?: '');
+if (!defined('GOOGLE_CLIENT_ID') || empty(GOOGLE_CLIENT_ID)) {
+    define('GOOGLE_CLIENT_ID', getenv('GOOGLE_CLIENT_ID') ?: '147889418852-7as919egt4ten74alk2mod9oecgbslqv.apps.googleusercontent.com');
 }
 if (!defined('GOOGLE_CLIENT_SECRET')) {
     define('GOOGLE_CLIENT_SECRET', getenv('GOOGLE_CLIENT_SECRET') ?: '');

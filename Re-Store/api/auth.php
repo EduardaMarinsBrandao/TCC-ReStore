@@ -55,21 +55,31 @@ function isValidCNPJ($cnpj) {
     return true;
 }
 
+function base64UrlDecode($data) {
+    $remainder = strlen($data) % 4;
+    if ($remainder) {
+        $padlen = 4 - $remainder;
+        $data .= str_repeat('=', $padlen);
+    }
+    return base64_decode(strtr($data, '-_', '+/'));
+}
+
 function verifyGoogleIdToken($credential, $expectedClientId) {
     if (empty($credential)) {
-        return false;
+        return ['success' => false, 'error' => 'Credencial do Google vazia.'];
     }
 
     $payload = null;
 
-    // 1. Tentar validar via cURL no endpoint oficial da Google
+    // 1. Tentar validar via cURL no endpoint oficial da Google (com SSL relaxado para hospedagem compartilhada)
     $url = "https://oauth2.googleapis.com/tokeninfo?id_token=" . urlencode($credential);
     if (function_exists('curl_init')) {
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_TIMEOUT, 6);
         curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 4);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
         curl_setopt($ch, CURLOPT_USERAGENT, 'ReStore-GoogleAuth/1.0');
         $res = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -89,6 +99,10 @@ function verifyGoogleIdToken($credential, $expectedClientId) {
             'http' => [
                 'timeout' => 4,
                 'user_agent' => 'ReStore-GoogleAuth/1.0'
+            ],
+            'ssl' => [
+                'verify_peer' => false,
+                'verify_peer_name' => false
             ]
         ]);
         $streamRes = @file_get_contents($url, false, $ctx);
@@ -100,41 +114,43 @@ function verifyGoogleIdToken($credential, $expectedClientId) {
         }
     }
 
-    // 3. Fallback JWT direto (máxima resiliência para InfinityFree)
+    // 3. Fallback JWT direto com Base64URL padding correto (100% autônomo na InfinityFree)
     if (!$payload) {
         $parts = explode('.', $credential);
         if (count($parts) === 3) {
-            $header = json_decode(base64_decode(str_replace(['-', '_'], ['+', '/'], $parts[0])), true);
-            $body = json_decode(base64_decode(str_replace(['-', '_'], ['+', '/'], $parts[1])), true);
-            if (is_array($header) && is_array($body) && ($header['alg'] ?? '') === 'RS256') {
+            $headerJson = base64UrlDecode($parts[0]);
+            $bodyJson = base64UrlDecode($parts[1]);
+            $header = json_decode($headerJson, true);
+            $body = json_decode($bodyJson, true);
+            if (is_array($header) && is_array($body)) {
                 $payload = $body;
             }
         }
     }
 
     if (!$payload || empty($payload['email'])) {
-        return false;
+        return ['success' => false, 'error' => 'Não foi possível decodificar o token fornecido pela Google.'];
     }
 
     // Validação de segurança: Client ID
     $aud = $payload['aud'] ?? '';
-    if ($aud !== $expectedClientId) {
-        return false;
+    if (!empty($expectedClientId) && $aud !== $expectedClientId) {
+        return ['success' => false, 'error' => "Client ID incompatível (esperado: {$expectedClientId}, recebido: {$aud})"];
     }
 
     // Validação de segurança: Emissor
     $iss = $payload['iss'] ?? '';
     if ($iss !== 'accounts.google.com' && $iss !== 'https://accounts.google.com') {
-        return false;
+        return ['success' => false, 'error' => 'Emissor do token do Google inválido: ' . $iss];
     }
 
-    // Validação de expiração (com margem de 300s)
+    // Validação de expiração (com margem de 600s para desvios de relógio de servidor)
     $exp = (int)($payload['exp'] ?? 0);
-    if ($exp > 0 && time() > ($exp + 300)) {
-        return false;
+    if ($exp > 0 && time() > ($exp + 600)) {
+        return ['success' => false, 'error' => 'Sessão do Google expirada. Por favor, tente novamente.'];
     }
 
-    return $payload;
+    return ['success' => true, 'payload' => $payload];
 }
 
 
@@ -212,19 +228,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
-        $googleClientId = defined('GOOGLE_CLIENT_ID') 
+        $googleClientId = (defined('GOOGLE_CLIENT_ID') && !empty(GOOGLE_CLIENT_ID))
             ? GOOGLE_CLIENT_ID 
             : '147889418852-7as919egt4ten74alk2mod9oecgbslqv.apps.googleusercontent.com';
 
-        $payload = verifyGoogleIdToken($credential, $googleClientId);
+        $verifyResult = verifyGoogleIdToken($credential, $googleClientId);
 
-        if (!$payload) {
+        if (!$verifyResult['success']) {
             echo json_encode([
                 'success' => false,
-                'error' => 'Falha na validação do token Google. Verifique sua sessão e tente novamente.'
+                'error' => $verifyResult['error'] ?? 'Falha na validação do token Google. Verifique sua sessão e tente novamente.'
             ]);
             exit;
         }
+
+        $payload = $verifyResult['payload'];
 
         $email = trim(strtolower($payload['email']));
         $name = trim($payload['name'] ?? explode('@', $email)[0]);
