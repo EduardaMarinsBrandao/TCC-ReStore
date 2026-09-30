@@ -6,6 +6,9 @@ require_once __DIR__ . '/config/db_init.php';
 
 // Inicializar banco de dados se necessário
 initializeDatabase();
+
+// Cache-busting automático baseado na data de alteração do arquivo para atualização imediata no navegador
+$assetVersion = file_exists(__DIR__ . '/assets/js/app.js') ? filemtime(__DIR__ . '/assets/js/app.js') : time();
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR" class="font-md">
@@ -46,7 +49,7 @@ initializeDatabase();
   </script>
   
   <!-- Custom CSS & Accessibility -->
-  <link rel="stylesheet" href="assets/css/style.css">
+  <link rel="stylesheet" href="assets/css/style.css?v=<?= $assetVersion ?>">
   <link rel="icon" type="image/png" href="assets/images/favicon.png">
 </head>
 
@@ -374,13 +377,13 @@ initializeDatabase();
   </footer>
 
   <!-- SCRIPTS JS DA APLICAÇÃO -->
-  <script src="assets/js/toast.js"></script>
-  <script src="assets/js/accessibility.js"></script>
-  <script src="assets/js/auth.js"></script>
-  <script src="assets/js/cart.js"></script>
-  <script src="assets/js/chat.js"></script>
-  <script src="assets/js/seller.js"></script>
-  <script src="assets/js/app.js"></script>
+  <script src="assets/js/toast.js?v=<?= $assetVersion ?>"></script>
+  <script src="assets/js/accessibility.js?v=<?= $assetVersion ?>"></script>
+  <script src="assets/js/auth.js?v=<?= $assetVersion ?>"></script>
+  <script src="assets/js/cart.js?v=<?= $assetVersion ?>"></script>
+  <script src="assets/js/chat.js?v=<?= $assetVersion ?>"></script>
+  <script src="assets/js/seller.js?v=<?= $assetVersion ?>"></script>
+  <script src="assets/js/app.js?v=<?= $assetVersion ?>"></script>
 
   <!-- INICIALIZAÇÃO DOS ÍCONES LUCIDE -->
   <script>

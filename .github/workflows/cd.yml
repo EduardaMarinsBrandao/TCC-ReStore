@@ -21,48 +21,45 @@ jobs:
       - name: 📥 Checkout do Repositório
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
 
       - name: 🔍 Validar Configuração de Segredos (GitHub Secrets)
         id: check_secrets
         env:
-          FTP_SERVER: ${{ secrets.FTP_SERVER }}
-          FTP_USER: ${{ secrets.FTP_USERNAME }}
-          FTP_PASS: ${{ secrets.FTP_PASSWORD }}
+          FTP_SERVER: ${{ secrets.FTP_SERVER || secrets.FTP_HOST }}
+          FTP_USER: ${{ secrets.FTP_USERNAME || secrets.FTP_USER }}
+          FTP_PASS: ${{ secrets.FTP_PASSWORD || secrets.FTP_PASS }}
         run: |
-          if [ -z "$FTP_SERVER" ] || [ -z "$FTP_USER" ] || [ -z "$FTP_PASS" ]; then
-            echo "configured=false" >> $GITHUB_OUTPUT
-            echo "::warning title=Segredos de Deploy Ausentes::As credenciais FTP_SERVER, FTP_USERNAME ou FTP_PASSWORD ainda não foram configuradas nas Secrets do repositório. O deploy foi ignorado com segurança."
+          MISSING=""
+          [ -z "$FTP_SERVER" ] && MISSING="$MISSING FTP_SERVER"
+          [ -z "$FTP_USER" ] && MISSING="$MISSING FTP_USERNAME"
+          [ -z "$FTP_PASS" ] && MISSING="$MISSING FTP_PASSWORD"
+
+          if [ -n "$MISSING" ]; then
+            echo "::error title=Segredos de Deploy Ausentes::As seguintes Secrets estão ausentes ou vazias no repositório:$MISSING. Verifique em Settings > Secrets and variables > Actions."
+            exit 1
           else
             echo "configured=true" >> $GITHUB_OUTPUT
+            echo "✅ Todas as credenciais FTP necessárias foram localizadas nas Secrets."
           fi
 
       - name: 📁 Deploy Contínuo via FTPS/FTP
-        if: steps.check_secrets.outputs.configured == 'true'
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          server-dir: htdocs/
+          server: ${{ secrets.FTP_SERVER || secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USERNAME || secrets.FTP_USER }}
+          password: ${{ secrets.FTP_PASSWORD || secrets.FTP_PASS }}
+          port: ${{ secrets.FTP_PORT || 21 }}
+          protocol: ${{ secrets.FTP_PROTOCOL || 'ftps' }}
+          security: loose
+          server-dir: ${{ secrets.FTP_SERVER_DIR || '/htdocs/' }}
           local-dir: Re-Store/
           dangerous-clean-slate: false
+          log-level: verbose
           exclude: |
             **/.git*
             **/.git*/**
             **/tests/**
             **/*.sqlite*
             **/*.log
-
-      - name: ℹ️ Orientações de Configuração
-        if: steps.check_secrets.outputs.configured != 'true'
-        run: |
-          echo "========================================================================="
-          echo "Para ativar o Deploy Contínuo automático para sua hospedagem:"
-          echo "1. Acesse o repositório no GitHub: Settings > Secrets and variables > Actions"
-          echo "2. Clique em 'New repository secret' e adicione:"
-          echo "   - FTP_SERVER   (ex: ftpupload.net para InfinityFree)"
-          echo "   - FTP_USERNAME (ex: if0_42831392)"
-          echo "   - FTP_PASSWORD (a senha do painel da hospedagem)"
-          echo "3. Pronto! Ao fazer push na branch main, o deploy será feito automaticamente."
-          echo "========================================================================="
+            **/credentials.local.php
