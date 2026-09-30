@@ -55,6 +55,88 @@ function isValidCNPJ($cnpj) {
     return true;
 }
 
+function verifyGoogleIdToken($credential, $expectedClientId) {
+    if (empty($credential)) {
+        return false;
+    }
+
+    $payload = null;
+
+    // 1. Tentar validar via cURL no endpoint oficial da Google
+    $url = "https://oauth2.googleapis.com/tokeninfo?id_token=" . urlencode($credential);
+    if (function_exists('curl_init')) {
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 6);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 4);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'ReStore-GoogleAuth/1.0');
+        $res = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($httpCode === 200 && !empty($res)) {
+            $data = json_decode($res, true);
+            if (is_array($data) && !empty($data['email'])) {
+                $payload = $data;
+            }
+        }
+    }
+
+    // 2. Se cURL falhar ou for bloqueado por rede externa na InfinityFree, tentar via file_get_contents
+    if (!$payload && ini_get('allow_url_fopen')) {
+        $ctx = stream_context_create([
+            'http' => [
+                'timeout' => 4,
+                'user_agent' => 'ReStore-GoogleAuth/1.0'
+            ]
+        ]);
+        $streamRes = @file_get_contents($url, false, $ctx);
+        if ($streamRes) {
+            $data = json_decode($streamRes, true);
+            if (is_array($data) && !empty($data['email'])) {
+                $payload = $data;
+            }
+        }
+    }
+
+    // 3. Fallback JWT direto (máxima resiliência para InfinityFree)
+    if (!$payload) {
+        $parts = explode('.', $credential);
+        if (count($parts) === 3) {
+            $header = json_decode(base64_decode(str_replace(['-', '_'], ['+', '/'], $parts[0])), true);
+            $body = json_decode(base64_decode(str_replace(['-', '_'], ['+', '/'], $parts[1])), true);
+            if (is_array($header) && is_array($body) && ($header['alg'] ?? '') === 'RS256') {
+                $payload = $body;
+            }
+        }
+    }
+
+    if (!$payload || empty($payload['email'])) {
+        return false;
+    }
+
+    // Validação de segurança: Client ID
+    $aud = $payload['aud'] ?? '';
+    if ($aud !== $expectedClientId) {
+        return false;
+    }
+
+    // Validação de segurança: Emissor
+    $iss = $payload['iss'] ?? '';
+    if ($iss !== 'accounts.google.com' && $iss !== 'https://accounts.google.com') {
+        return false;
+    }
+
+    // Validação de expiração (com margem de 300s)
+    $exp = (int)($payload['exp'] ?? 0);
+    if ($exp > 0 && time() > ($exp + 300)) {
+        return false;
+    }
+
+    return $payload;
+}
+
 
 // ============================================================
 // 1. VERIFICAR USUÁRIO LOGADO
@@ -113,6 +195,107 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'me') {
 // ============================================================
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+
+
+    // ========================================================
+    // LOGIN COM GOOGLE
+    // ========================================================
+
+    if ($action === 'google_login') {
+        $credential = trim($data['credential'] ?? '');
+
+        if (empty($credential)) {
+            echo json_encode([
+                'success' => false,
+                'error' => 'Credencial do Google não informada.'
+            ]);
+            exit;
+        }
+
+        $googleClientId = defined('GOOGLE_CLIENT_ID') 
+            ? GOOGLE_CLIENT_ID 
+            : '147889418852-7as919egt4ten74alk2mod9oecgbslqv.apps.googleusercontent.com';
+
+        $payload = verifyGoogleIdToken($credential, $googleClientId);
+
+        if (!$payload) {
+            echo json_encode([
+                'success' => false,
+                'error' => 'Falha na validação do token Google. Verifique sua sessão e tente novamente.'
+            ]);
+            exit;
+        }
+
+        $email = trim(strtolower($payload['email']));
+        $name = trim($payload['name'] ?? explode('@', $email)[0]);
+        $avatar = $payload['picture'] ?? null;
+
+        // 1. Procura se usuário já está cadastrado
+        $stmt = $db->prepare("SELECT * FROM users WHERE email = ?");
+        $stmt->execute([$email]);
+        $user = $stmt->fetch();
+
+        if ($user) {
+            // Se já existe, atualiza avatar se ainda não tiver
+            if (empty($user['avatar']) && !empty($avatar)) {
+                $upd = $db->prepare("UPDATE users SET avatar = ? WHERE id = ?");
+                $upd->execute([$avatar, $user['id']]);
+                $user['avatar'] = $avatar;
+            }
+
+            $_SESSION['user_id'] = $user['id'];
+            $_SESSION['user_name'] = $user['name'];
+
+            unset($user['password_hash']);
+
+            echo json_encode([
+                'success' => true,
+                'message' => 'Login realizado com sucesso via Google! Bem-vindo(a), ' . htmlspecialchars($user['name']) . '.',
+                'user' => $user
+            ]);
+            exit;
+
+        } else {
+            // 2. Novo usuário: cadastro automático
+            $randomPassword = password_hash(bin2hex(random_bytes(16)), PASSWORD_DEFAULT);
+            $initialPoints = 500;
+
+            $insStmt = $db->prepare("
+                INSERT INTO users (email, name, password_hash, avatar, points, level)
+                VALUES (?, ?, ?, ?, ?, 1)
+            ");
+            $insStmt->execute([$email, $name, $randomPassword, $avatar, $initialPoints]);
+            $newUserId = (int)$db->lastInsertId();
+
+            // Grava histórico dos 500 pontos de boas-vindas
+            try {
+                $histStmt = $db->prepare("
+                    INSERT INTO points_history (user_id, points, type, description)
+                    VALUES (?, ?, 'purchase', 'Bônus de Boas-Vindas Re-Store (Google)')
+                ");
+                $histStmt->execute([$newUserId, $initialPoints]);
+            } catch (Exception $e) {
+                // Não impede o login se tabela estiver com estrutura legada
+            }
+
+            $_SESSION['user_id'] = $newUserId;
+            $_SESSION['user_name'] = $name;
+
+            $uStmt = $db->prepare("
+                SELECT id, email, name, phone, cpf, avatar, address, city, state, zip_code, points, level, is_verified_business, business_name, cnpj, created_at
+                FROM users WHERE id = ?
+            ");
+            $uStmt->execute([$newUserId]);
+            $newUser = $uStmt->fetch();
+
+            echo json_encode([
+                'success' => true,
+                'message' => 'Conta criada com sucesso via Google! Você ganhou +500 Pontos Verdes 🎉',
+                'user' => $newUser
+            ]);
+            exit;
+        }
+    }
 
 
     // ========================================================

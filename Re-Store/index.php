@@ -18,6 +18,9 @@ initializeDatabase();
   <!-- Tailwind CSS via CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
 
+  <!-- Google Identity Services (Login com Google) -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
 

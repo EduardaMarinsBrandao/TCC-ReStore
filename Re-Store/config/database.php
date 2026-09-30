@@ -7,6 +7,17 @@ define('DB_USER', getenv('DB_USER') ?: 'if0_42831392');
 define('DB_PASS', getenv('DB_PASS') !== false ? getenv('DB_PASS') : 'CaEdEyFeLaLe');
 define('DB_DRIVER', getenv('DB_DRIVER') ?: 'auto');
 
+// Carrega credenciais locais (se existirem) ou de variáveis de ambiente
+if (file_exists(__DIR__ . '/credentials.local.php')) {
+    require_once __DIR__ . '/credentials.local.php';
+}
+if (!defined('GOOGLE_CLIENT_ID')) {
+    define('GOOGLE_CLIENT_ID', getenv('GOOGLE_CLIENT_ID') ?: '');
+}
+if (!defined('GOOGLE_CLIENT_SECRET')) {
+    define('GOOGLE_CLIENT_SECRET', getenv('GOOGLE_CLIENT_SECRET') ?: '');
+}
+
 function getDbConnection() {
     static $pdo = null;
     if ($pdo !== null) {

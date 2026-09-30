@@ -33,6 +33,19 @@ const AuthManager = {
     return data;
   },
 
+  async loginWithGoogle(credential) {
+    const res = await fetch('api/auth.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'google_login', credential })
+    });
+    const data = await res.json();
+    if (data.success) {
+      this.currentUser = data.user;
+    }
+    return data;
+  },
+
   async register(name, email, password, phone = '') {
     const res = await fetch('api/auth.php', {
       method: 'POST',
