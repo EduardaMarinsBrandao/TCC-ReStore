@@ -9,6 +9,8 @@ const App = {
   productsCache: null,
   favoriteIds: [], // IDs dos produtos favoritados pelo usuário
   selectedRole: 'buyer', // 'buyer' ou 'seller'
+  currentChatPartnerId: null,
+  currentChatView: 'sidebar', // 'sidebar' ou 'chat'
 
   async init() {
     await AuthManager.checkAuth();
@@ -2295,10 +2297,13 @@ const App = {
     const targetPartnerId = this.chatParams?.withUserId ? parseInt(this.chatParams.withUserId, 10) : null;
     const targetProductId = this.chatParams?.productId ? parseInt(this.chatParams.productId, 10) : null;
 
+    this.currentChatPartnerId = targetPartnerId;
+    this.currentChatView = targetPartnerId ? 'chat' : 'sidebar';
+
     container.innerHTML = `
       <div class="h-[78vh] min-h-[520px] rounded-3xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800 flex overflow-hidden shadow-xl animate-fade-in relative">
         <!-- BARRA LATERAL: LISTA DE CONVERSAS -->
-        <div id="chat-sidebar" class="w-full md:w-80 lg:w-96 md:shrink-0 border-r border-gray-200 dark:border-gray-800 flex flex-col bg-gray-50/50 dark:bg-gray-900/30 overflow-hidden">
+        <div id="chat-sidebar" class="w-full md:w-80 lg:w-96 md:shrink-0 border-r border-gray-200 dark:border-gray-800 flex md:flex flex-col bg-gray-50/50 dark:bg-gray-900/30 overflow-hidden">
           <div class="p-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
             <div class="flex items-center gap-2">
               <h2 class="font-extrabold text-base text-gray-900 dark:text-white">Mensagens</h2>
@@ -2365,6 +2370,9 @@ const App = {
       lucide.createIcons();
     }
 
+    // Configura layout garantindo que a barra lateral permaneça sempre visível no desktop
+    this.updateChatLayout(this.currentChatView);
+
     // Carrega lista lateral de conversas
     await this.refreshConversationsList(targetPartnerId);
 
@@ -2374,19 +2382,45 @@ const App = {
     }
   },
 
-  async selectChatPartner(partnerId, productId = null) {
-    partnerId = parseInt(partnerId, 10);
-    ChatManager.stopPolling();
-
-    // Em mobile, oculta lista lateral e exibe a janela de mensagens sem conflito de classes
+  updateChatLayout(view = 'chat') {
     const sidebar = document.getElementById('chat-sidebar');
     const win = document.getElementById('chat-window');
-    if (sidebar && win) {
-      sidebar.classList.remove('flex');
-      sidebar.classList.add('hidden');
+    if (!sidebar || !win) return;
+
+    const isMobile = window.innerWidth < 768;
+
+    if (isMobile) {
+      if (view === 'sidebar') {
+        sidebar.classList.remove('hidden');
+        sidebar.classList.add('flex');
+        win.classList.remove('flex');
+        win.classList.add('hidden');
+      } else {
+        sidebar.classList.remove('flex');
+        sidebar.classList.add('hidden');
+        win.classList.remove('hidden');
+        win.classList.add('flex');
+      }
+    } else {
+      // No desktop (>= 768px): AMBOS SEMPRE VISÍVEIS lado a lado para navegação imediata
+      sidebar.classList.remove('hidden');
+      sidebar.classList.add('flex');
       win.classList.remove('hidden');
       win.classList.add('flex');
     }
+  },
+
+  async selectChatPartner(partnerId, productId = null) {
+    partnerId = parseInt(partnerId, 10);
+    this.currentChatPartnerId = partnerId;
+    this.currentChatView = 'chat';
+    ChatManager.stopPolling();
+
+    // Mantém a barra lateral e o chat no layout correto (mobile foca na conversa; desktop mantém ambos lado a lado)
+    this.updateChatLayout('chat');
+
+    // Atualiza imediatamente a seleção visual na lista lateral
+    this.refreshConversationsList(partnerId);
 
     win.innerHTML = `
       <div class="text-center my-auto p-8 text-gray-400 space-y-2">
@@ -2678,6 +2712,9 @@ const App = {
   },
 
   async refreshConversationsList(activePartnerId = null) {
+    if (!activePartnerId && this.currentChatPartnerId) {
+      activePartnerId = this.currentChatPartnerId;
+    }
     const convsList = document.getElementById('chat-convs-list');
     if (!convsList) return;
 
@@ -2757,22 +2794,14 @@ const App = {
   },
 
   toggleMobileChatList(showList) {
-    const sidebar = document.getElementById('chat-sidebar');
-    const win = document.getElementById('chat-window');
-    if (!sidebar || !win) return;
-
     if (showList) {
       ChatManager.stopPolling();
-      sidebar.classList.remove('hidden');
-      sidebar.classList.add('flex');
-      win.classList.remove('flex');
-      win.classList.add('hidden');
-      this.refreshConversationsList();
+      this.currentChatView = 'sidebar';
+      this.updateChatLayout('sidebar');
+      this.refreshConversationsList(this.currentChatPartnerId || null);
     } else {
-      sidebar.classList.remove('flex');
-      sidebar.classList.add('hidden');
-      win.classList.remove('hidden');
-      win.classList.add('flex');
+      this.currentChatView = 'chat';
+      this.updateChatLayout('chat');
     }
   },
 
@@ -4350,6 +4379,11 @@ const App = {
   setupEventListeners() {
     window.addEventListener('popstate', () => {
       this.renderCurrentScreen();
+    });
+    window.addEventListener('resize', () => {
+      if (this.currentScreen === 'chat') {
+        this.updateChatLayout(this.currentChatView || 'chat');
+      }
     });
   }
 };
