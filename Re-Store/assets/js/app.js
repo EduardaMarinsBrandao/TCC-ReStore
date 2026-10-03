@@ -157,7 +157,7 @@ submitReviewEdit: function(reviewId, formElement) {
     }
   })
   .catch(err => console.error('Erro ao atualizar:', err));
-}
+},
 
   async init() {
     await AuthManager.checkAuth();
