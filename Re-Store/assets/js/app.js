@@ -56,7 +56,7 @@ const App = {
   },
 
   // Botão de Voto Útil (+1)
-  voteReviewHelpful: function(reviewId, btnElement) {
+    voteReviewHelpful: function(reviewId, btnElement) {
     fetch('api/reviews.php?action=vote_helpful', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -67,9 +67,17 @@ const App = {
       if (data.success) {
         const countSpan = btnElement.querySelector('.helpful-count');
         if (countSpan) {
-          countSpan.innerText = parseInt(countSpan.innerText || 0) + 1;
+          countSpan.innerText = data.new_count;
         }
-        btnElement.classList.add('text-teal-600', 'font-bold');
+
+        // Alterna o estilo visual de acordo com o estado do like
+        if (data.voted) {
+          btnElement.classList.add('text-teal-600', 'font-bold');
+          btnElement.classList.remove('text-gray-500');
+        } else {
+          btnElement.classList.remove('text-teal-600', 'font-bold');
+          btnElement.classList.add('text-gray-500');
+        }
       } else {
         alert(data.error || 'Erro ao votar.');
       }
@@ -827,39 +835,38 @@ const App = {
         </div>
 
         <div class="flex items-center justify-between pt-2 border-t dark:border-gray-700">
-          <span class="text-[11px] text-gray-400">${r.created_at || 'Recente'}</span>
-          
-          <div class="flex items-center gap-3">
-            <!-- Botão Útil (Joia) -->
-            <button 
-              type="button" 
-              onclick="App.voteReviewHelpful(${r.id}, this)" 
-              class="text-xs text-gray-500 hover:text-teal-600 flex items-center gap-1 font-semibold cursor-pointer"
-            >
-              <i data-lucide="thumbs-up" class="w-4 h-4 pointer-events-none"></i>
-              <span>Útil (<span class="helpful-count">${r.helpful_count || 0}</span>)</span>
-            </button>
+  <span class="text-[11px] text-gray-400">${r.created_at || 'Recente'}</span>
+  
+  <div class="flex items-center gap-3">
+    <!-- Botão Útil (Joia com classe dinâmica de cor) -->
+    <button 
+      type="button" 
+      onclick="App.voteReviewHelpful(${r.id}, this)" 
+      class="text-xs ${r.user_voted ? 'text-teal-600 font-bold' : 'text-gray-500'} hover:text-teal-600 flex items-center gap-1 font-semibold cursor-pointer"
+    >
+      <i data-lucide="thumbs-up" class="w-4 h-4 pointer-events-none"></i>
+      <span>Útil (<span class="helpful-count">${r.helpful_count || 0}</span>)</span>
+    </button>
 
-            <!-- Ações de Editar/Excluir (apenas para o autor) -->
-            ${isMyReview ? `
-              <button 
-                type="button" 
-                onclick="App.toggleEditReview(${r.id})" 
-                class="text-xs text-teal-600 hover:underline cursor-pointer font-medium"
-              >
-                Editar
-              </button>
-              <button 
-                type="button" 
-                onclick="App.deleteReview(${r.id})" 
-                class="text-xs text-red-500 hover:underline cursor-pointer font-medium"
-              >
-                Excluir
-              </button>
-            ` : ''}
-          </div>
-        </div>
-      </div>
+    <!-- Ações de Editar/Excluir (apenas para o autor) -->
+    ${isMyReview ? `
+      <button 
+        type="button" 
+        onclick="App.toggleEditReview(${r.id})" 
+        class="text-xs text-teal-600 hover:underline cursor-pointer font-medium"
+      >
+        Editar
+      </button>
+      <button 
+        type="button" 
+        onclick="App.deleteReview(${r.id})" 
+        class="text-xs text-red-500 hover:underline cursor-pointer font-medium"
+      >
+        Excluir
+      </button>
+    ` : ''}
+  </div>
+</div>
 
       <!-- MODO DE EDIÇÃO (OCULTO POR PADRÃO) -->
       ${isMyReview ? `

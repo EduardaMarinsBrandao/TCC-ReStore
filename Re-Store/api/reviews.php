@@ -23,15 +23,18 @@ if ($method === 'GET' && $action === 'list') {
     $userId = isset($_GET['user_id']) ? (int)$_GET['user_id'] : 0;
 
     if ($productId > 0) {
-        $stmt = $db->prepare("SELECT r.*, u.name as user_name, u.avatar as user_avatar 
-                              FROM reviews r 
-                              JOIN users u ON r.user_id = u.id 
-                              WHERE r.product_id = ? 
-                              ORDER BY r.id DESC");
-        $stmt->execute([$productId]);
-        $reviews = $stmt->fetchAll();
-        echo json_encode(['success' => true, 'reviews' => $reviews]);
-        exit;
+        $currentUserId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 0;
+
+    $stmt = $db->prepare("SELECT r.*, u.name as user_name, u.avatar as user_avatar,
+                          EXISTS(SELECT 1 FROM review_votes rv WHERE rv.review_id = r.id AND rv.user_id = ?) as user_voted 
+                          FROM reviews r 
+                          JOIN users u ON r.user_id = u.id 
+                          WHERE r.product_id = ? 
+                          ORDER BY r.id DESC");
+    $stmt->execute([$currentUserId, $productId]);
+    $reviews = $stmt->fetchAll();
+    echo json_encode(['success' => true, 'reviews' => $reviews]);
+    exit;
     }
 
     if ($userId > 0) {
@@ -209,14 +212,54 @@ if ($method === 'POST' && $action === 'create') {
 
 if ($method === 'POST' && $action === 'vote_helpful') {
     if (!isset($_SESSION['user_id'])) {
-        echo json_encode(['success' => false, 'error' => 'É necessário estar logado para avaliar feedback.']);
+        echo json_encode(['success' => false, 'error' => 'É necessário estar logado para interagir.']);
         exit;
     }
 
+    $userId = (int)$_SESSION['user_id'];
     $reviewId = (int)($data['review_id'] ?? 0);
-    if ($reviewId > 0) {
-        $db->prepare("UPDATE reviews SET helpful_count = helpful_count + 1 WHERE id = ?")->execute([$reviewId]);
-        echo json_encode(['success' => true, 'message' => 'Obrigado pelo seu feedback!']);
+
+    if ($reviewId <= 0) {
+        echo json_encode(['success' => false, 'error' => 'Avaliação inválida.']);
+        exit;
+    }
+
+    $db->beginTransaction();
+    try {
+        // Verifica se o usuário já votou nesta avaliação
+        $stmt = $db->prepare("SELECT id FROM review_votes WHERE review_id = ? AND user_id = ?");
+        $stmt->execute([$reviewId, $userId]);
+        $existingVote = $stmt->fetch();
+
+        if ($existingVote) {
+            // Se já votou, remove o voto (Descurtir)
+            $db->prepare("DELETE FROM review_votes WHERE id = ?")->execute([$existingVote['id']]);
+            $db->prepare("UPDATE reviews SET helpful_count = GREATEST(0, helpful_count - 1) WHERE id = ?")->execute([$reviewId]);
+            $voted = false;
+        } else {
+            // Se não votou, insere o voto (Curtir)
+            $db->prepare("INSERT INTO review_votes (review_id, user_id) VALUES (?, ?)")->execute([$reviewId, $userId]);
+            $db->prepare("UPDATE reviews SET helpful_count = helpful_count + 1 WHERE id = ?")->execute([$reviewId]);
+            $voted = true;
+        }
+
+        // Obtém o número atualizado de votos
+        $countStmt = $db->prepare("SELECT helpful_count FROM reviews WHERE id = ?");
+        $countStmt->execute([$reviewId]);
+        $newCount = (int)($countStmt->fetch()['helpful_count'] ?? 0);
+
+        $db->commit();
+
+        echo json_encode([
+            'success' => true, 
+            'voted' => $voted, 
+            'new_count' => $newCount
+        ]);
+        exit;
+
+    } catch (Exception $e) {
+        $db->rollBack();
+        echo json_encode(['success' => false, 'error' => 'Erro ao processar voto: ' . $e->getMessage()]);
         exit;
     }
 }
