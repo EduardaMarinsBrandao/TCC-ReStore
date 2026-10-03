@@ -56,7 +56,7 @@ const App = {
   },
 
   // Botão de Voto Útil (+1)
-  voteHelpful: function(reviewId, btnElement) {
+  voteReviewHelpful: function(reviewId, btnElement) {
     fetch('api/reviews.php?action=vote_helpful', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -833,7 +833,7 @@ const App = {
             <!-- Botão Útil (Joia) -->
             <button 
               type="button" 
-              onclick="App.voteHelpful(${r.id}, this)" 
+              onclick="App.voteReviewHelpful(${r.id}, this)" 
               class="text-xs text-gray-500 hover:text-teal-600 flex items-center gap-1 font-semibold cursor-pointer"
             >
               <i data-lucide="thumbs-up" class="w-4 h-4 pointer-events-none"></i>
