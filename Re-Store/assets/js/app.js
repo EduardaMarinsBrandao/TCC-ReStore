@@ -117,13 +117,14 @@ toggleEditReview: function(reviewId) {
 
   if (displayBox && editForm) {
     displayBox.classList.toggle('hidden');
-    editForm.classList.toggle('hidden');
     
-    // Garante que o formulário use flexbox quando estiver visível
-    if (!editForm.classList.contains('hidden')) {
-      editForm.classList.add('flex');
+    // Alterna a exibição do formulário garantindo o layout flex e largura total
+    if (editForm.classList.contains('hidden')) {
+      editForm.classList.remove('hidden');
+      editForm.classList.add('flex', 'flex-col', 'w-full');
     } else {
-      editForm.classList.remove('flex');
+      editForm.classList.add('hidden');
+      editForm.classList.remove('flex', 'flex-col', 'w-full');
     }
   }
 },
@@ -890,29 +891,42 @@ submitReviewEdit: function(reviewId, formElement) {
 </div>
 
       <!-- MODO DE EDIÇÃO (OCULTO POR PADRÃO) -->
-      ${isMyReview ? `
-        <form class="review-edit-form hidden flex-col gap-2" onsubmit="event.preventDefault(); App.submitReviewEdit(${r.id}, this);">
-          <div class="flex items-center justify-between">
-            <span class="text-xs font-semibold text-gray-500 dark:text-gray-400">Editar Avaliação</span>
-            <select name="rating" class="p-1 rounded text-xs border border-gray-300 dark:border-gray-700 dark:bg-gray-900 text-amber-500 font-bold focus:outline-none">
-              <option value="5" ${r.rating == 5 ? 'selected' : ''}>★★★★★ (5)</option>
-              <option value="4" ${r.rating == 4 ? 'selected' : ''}>★★★★☆ (4)</option>
-              <option value="3" ${r.rating == 3 ? 'selected' : ''}>★★★☆☆ (3)</option>
-              <option value="2" ${r.rating == 2 ? 'selected' : ''}>★★☆☆☆ (2)</option>
-              <option value="1" ${r.rating == 1 ? 'selected' : ''}>★☆☆☆☆ (1)</option>
-            </select>
-          </div>
-          <textarea name="comment" rows="2" class="w-full p-2 text-xs rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:outline-none focus:border-teal-500">${r.comment || ''}</textarea>
-          <div class="flex justify-end gap-2 mt-1">
-            <button type="button" onclick="App.toggleEditReview(${r.id})" class="px-3 py-1 text-xs border rounded-lg text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700">
-              Cancelar
-            </button>
-            <button type="submit" class="px-3 py-1 text-xs bg-teal-600 hover:bg-teal-700 text-white font-medium rounded-lg">
-              Salvar
-            </button>
-          </div>
-        </form>
-      ` : ''}
+${isMyReview ? `
+  <form class="review-edit-form hidden flex-col gap-3 w-full p-1" onsubmit="event.preventDefault(); App.submitReviewEdit(${r.id}, this);">
+    <div class="flex items-center justify-between">
+      <span class="text-xs font-semibold text-gray-700 dark:text-gray-200">Editar Avaliação</span>
+      <select name="rating" class="p-1 text-xs border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-amber-500 font-bold rounded">
+        <option value="5" ${r.rating == 5 ? 'selected' : ''}>★★★★★ (5)</option>
+        <option value="4" ${r.rating == 4 ? 'selected' : ''}>★★★★☆ (4)</option>
+        <option value="3" ${r.rating == 3 ? 'selected' : ''}>★★★☆☆ (3)</option>
+        <option value="2" ${r.rating == 2 ? 'selected' : ''}>★★☆☆☆ (2)</option>
+        <option value="1" ${r.rating == 1 ? 'selected' : ''}>★☆☆☆☆ (1)</option>
+      </select>
+    </div>
+    
+    <textarea 
+      name="comment" 
+      rows="3" 
+      class="w-full p-2 text-xs rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-teal-500"
+    >${r.comment || ''}</textarea>
+    
+    <div class="flex justify-end gap-2">
+      <button 
+        type="button" 
+        onclick="App.toggleEditReview(${r.id})" 
+        class="px-3 py-1.5 text-xs border rounded-lg text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
+      >
+        Cancelar
+      </button>
+      <button 
+        type="submit" 
+        class="px-3 py-1.5 text-xs bg-teal-600 hover:bg-teal-700 text-white font-medium rounded-lg cursor-pointer"
+      >
+        Salvar
+      </button>
+    </div>
+  </form>
+` : ''}
 
     </div>
   `;
