@@ -19,38 +19,20 @@ $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? $_POST['action'] ?? $data['action'] ?? 'list';
 
 if ($method === 'GET' && $action === 'list') {
-    $productId = isset($_GET['product_id']) ? (int)$_GET['product_id'] : 0;
-    $userId = isset($_GET['user_id']) ? (int)$_GET['user_id'] : 0;
+    $productId = (int)($_GET['product_id'] ?? 0);
+    $currentUserId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 0;
 
     if ($productId > 0) {
-        $currentUserId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 0;
-
-    $stmt = $db->prepare("SELECT r.*, u.name as user_name, u.avatar as user_avatar,
-                          EXISTS(SELECT 1 FROM review_votes rv WHERE rv.review_id = r.id AND rv.user_id = ?) as user_voted 
-                          FROM reviews r 
-                          JOIN users u ON r.user_id = u.id 
-                          WHERE r.product_id = ? 
-                          ORDER BY r.id DESC");
-    $stmt->execute([$currentUserId, $productId]);
-    $reviews = $stmt->fetchAll();
-    echo json_encode(['success' => true, 'reviews' => $reviews]);
-    exit;
-    }
-
-    if ($userId > 0) {
-        if (!isset($_SESSION['user_id'])) {
-            echo json_encode(['success' => false, 'error' => 'Não autenticado.']);
-            exit;
-        }
-        $userId = (int)$_SESSION['user_id'];
-        $stmt = $db->prepare("SELECT r.*, p.name as product_name, 
-                              (SELECT image_url FROM product_images WHERE product_id = p.id ORDER BY is_primary DESC LIMIT 1) as product_image 
+        // O EXISTS verifica se existe uma linha na tabela review_votes para o usuário logado
+        $stmt = $db->prepare("SELECT r.*, u.name as user_name, u.avatar as user_avatar,
+                              EXISTS(SELECT 1 FROM review_votes rv WHERE rv.review_id = r.id AND rv.user_id = ?) as user_voted 
                               FROM reviews r 
-                              JOIN products p ON r.product_id = p.id 
-                              WHERE r.user_id = ? 
+                              JOIN users u ON r.user_id = u.id 
+                              WHERE r.product_id = ? 
                               ORDER BY r.id DESC");
-        $stmt->execute([$userId]);
+        $stmt->execute([$currentUserId, $productId]);
         $reviews = $stmt->fetchAll();
+
         echo json_encode(['success' => true, 'reviews' => $reviews]);
         exit;
     }
