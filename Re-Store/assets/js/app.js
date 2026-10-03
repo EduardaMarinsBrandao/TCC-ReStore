@@ -12,6 +12,50 @@ const App = {
   currentChatPartnerId: null,
   currentChatView: 'sidebar', // 'sidebar' ou 'chat'
 
+  submitReview: function(serviceId, formElement) {
+  // 1. Captura os dados digitados no formulário
+  const formData = new FormData(formElement);
+  const comment = formData.get('comment'); // Certifique-se de que o <textarea> tem name="comment"
+  const rating = formData.get('rating');   // Certifique-se de que os inputs da nota têm name="rating"
+
+  // Validação simples do lado do cliente
+  if (!comment) {
+    alert("Por favor, escreva um comentário antes de enviar.");
+    return;
+  }
+
+  // 2. Envio dos dados para a API/Backend
+  fetch('/api/reviews', {
+    method: 'POST',
+    headers: { 
+      'Content-Type': 'application/json' 
+    },
+    body: JSON.stringify({
+      serviceId: serviceId,
+      rating: rating,
+      comment: comment
+    })
+  })
+  .then(response => {
+    if (!response.ok) {
+      throw new Error('Erro ao salvar a avaliação.');
+    }
+    return response.json();
+  })
+  .then(data => {
+    // Limpa o formulário após enviar com sucesso
+    formElement.reset();
+    
+    // Recarrega a lista de avaliações ou atualiza a tela se necessário
+    if (typeof App.loadReviews === 'function') {
+      App.loadReviews(serviceId);
+    }
+  })
+  .catch(error => {
+    console.error("Erro no envio:", error);
+  });
+}
+
   async init() {
     await AuthManager.checkAuth();
     await this.loadFavoriteIds();
