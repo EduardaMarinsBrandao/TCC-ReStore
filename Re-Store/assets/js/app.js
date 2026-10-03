@@ -2781,7 +2781,17 @@ const App = {
     this.triggerGoogleLoginPrompt();
   },
 
-  showRegisterModal() {
+  escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  },
+
+  showRegisterModal(preserveData = null) {
     let modal = document.getElementById('auth-modal');
     if (!modal) {
       modal = document.createElement('div');
@@ -2789,20 +2799,31 @@ const App = {
       modal.className = 'fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in';
       document.body.appendChild(modal);
     }
+
+    const saved = preserveData || this.pendingRegistration || {};
+    const nameVal = saved.name || '';
+    const emailVal = saved.email || '';
+    const phoneVal = saved.phone || '';
+    const passVal = saved.pass || '';
+    const roleVal = saved.selectedRole || this.selectedRole || 'buyer';
+    const bizNameVal = saved.businessName || '';
+    const cnpjVal = saved.cnpj || '';
+
     modal.innerHTML = `
       <div class="bg-white dark:bg-gray-800 rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl relative max-h-[90vh] overflow-y-auto">
         <button type="button" onclick="document.getElementById('auth-modal').remove()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold cursor-pointer">✕</button>
 
         <span class="inline-block bg-emerald-100 text-emerald-800 text-[11px] font-bold px-2.5 py-0.5 rounded-full mb-2">🎁 Bônus de 500 Pontos Verdes</span>
-        <h2 class="text-2xl font-bold mb-3 text-gray-900 dark:text-white">Criar Nova Conta</h2>
+        <h2 class="text-2xl font-bold mb-1 text-gray-900 dark:text-white">Criar Nova Conta</h2>
+        <p class="text-xs text-gray-500 mb-3">Preencha seus dados para validar seu e-mail e receber seus pontos.</p>
 
         <div class="grid grid-cols-2 gap-3 mb-4">
-          <button type="button" onclick="App.setRole('buyer')" id="role-btn-buyer" class="p-3 border-2 border-teal-500 bg-teal-50 dark:bg-teal-950/40 rounded-2xl text-center cursor-pointer">
+          <button type="button" onclick="App.setRole('buyer')" id="role-btn-buyer" class="${roleVal === 'buyer' ? 'p-3 border-2 border-teal-500 bg-teal-50 dark:bg-teal-950/40 rounded-2xl text-center cursor-pointer' : 'p-3 border-2 border-gray-200 dark:border-gray-700 rounded-2xl text-center cursor-pointer'}">
             <span class="text-2xl block pointer-events-none">🛍️</span>
             <div class="font-bold text-xs mt-1 pointer-events-none">Comprador</div>
             <div class="text-[10px] text-gray-500 pointer-events-none">Compre e ganhe pontos</div>
           </button>
-          <button type="button" onclick="App.setRole('seller')" id="role-btn-seller" class="p-3 border-2 border-gray-200 dark:border-gray-700 rounded-2xl text-center cursor-pointer">
+          <button type="button" onclick="App.setRole('seller')" id="role-btn-seller" class="${roleVal === 'seller' ? 'p-3 border-2 border-teal-500 bg-teal-50 dark:bg-teal-950/40 rounded-2xl text-center cursor-pointer' : 'p-3 border-2 border-gray-200 dark:border-gray-700 rounded-2xl text-center cursor-pointer'}">
             <span class="text-2xl block pointer-events-none">🏪</span>
             <div class="font-bold text-xs mt-1 pointer-events-none">Vendedor</div>
             <div class="text-[10px] text-gray-500 pointer-events-none">Anuncie produtos eco</div>
@@ -2812,34 +2833,37 @@ const App = {
         <form onsubmit="App.submitRegister(event)" class="space-y-3">
           <div>
             <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Nome Completo *</label>
-            <input type="text" id="reg-name" required placeholder="Seu Nome Completo" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 dark:border-gray-600 text-sm">
+            <input type="text" id="reg-name" required value="${this.escapeHtml(nameVal)}" placeholder="Seu Nome Completo" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 dark:border-gray-600 text-sm">
           </div>
           <div>
             <div class="flex justify-between items-center mb-1">
               <label class="block text-xs font-bold text-gray-700 dark:text-gray-300">E-mail *</label>
-              <span id="reg-email-check" class="text-xs text-emerald-500 font-bold hidden">✓ Formato Correto</span>
+              <span id="reg-email-check" class="text-xs text-emerald-500 font-bold ${emailVal ? '' : 'hidden'}">✓ Formato Correto</span>
             </div>
-            <input type="email" id="reg-email" oninput="App.validateEmailInput(this)" required placeholder="seu@email.com" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 dark:border-gray-600 text-sm">
+            <input type="email" id="reg-email" oninput="App.validateEmailInput(this)" required value="${this.escapeHtml(emailVal)}" placeholder="seu@email.com" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 dark:border-gray-600 text-sm">
+            <div class="text-[10px] text-teal-700 dark:text-teal-400 mt-1 flex items-center gap-1 font-medium">
+              <span>📧</span> <span>Enviaremos um código de 6 dígitos para validar este e-mail.</span>
+            </div>
           </div>
           <div>
             <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Telefone / WhatsApp *</label>
-            <input type="text" id="reg-phone" required placeholder="(11) 99999-9999" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 dark:border-gray-600 text-sm">
+            <input type="text" id="reg-phone" required value="${this.escapeHtml(phoneVal)}" placeholder="(11) 99999-9999" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 dark:border-gray-600 text-sm">
           </div>
 
-          <div id="seller-extra-fields" class="hidden space-y-3 p-3 bg-teal-50 dark:bg-teal-950/40 rounded-xl border border-teal-200 dark:border-teal-900">
+          <div id="seller-extra-fields" class="${roleVal === 'seller' ? '' : 'hidden'} space-y-3 p-3 bg-teal-50 dark:bg-teal-950/40 rounded-xl border border-teal-200 dark:border-teal-900">
             <div>
               <label class="block text-xs font-bold text-teal-800 dark:text-teal-300 mb-1">Nome da Loja *</label>
-              <input type="text" id="reg-business-name" placeholder="Ex: EcoStore Brasil" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 text-sm">
+              <input type="text" id="reg-business-name" value="${this.escapeHtml(bizNameVal)}" placeholder="Ex: EcoStore Brasil" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 text-sm">
             </div>
             <div>
               <label class="block text-xs font-bold text-teal-800 dark:text-teal-300 mb-1">CNPJ da Empresa *</label>
-              <input type="text" id="reg-cnpj" placeholder="00.000.000/0001-00" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 text-sm font-mono">
+              <input type="text" id="reg-cnpj" value="${this.escapeHtml(cnpjVal)}" placeholder="00.000.000/0001-00" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 text-sm font-mono">
             </div>
           </div>
 
           <div>
             <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Senha (mínimo 6 caracteres) *</label>
-            <input type="password" id="reg-password" oninput="App.checkPasswordStrength(this.value)" required minlength="6" placeholder="••••••••" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 dark:border-gray-600 text-sm">
+            <input type="password" id="reg-password" oninput="App.checkPasswordStrength(this.value)" required minlength="6" value="${this.escapeHtml(passVal)}" placeholder="••••••••" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 dark:border-gray-600 text-sm">
             <div class="mt-1 flex items-center gap-2">
               <div class="flex-1 bg-gray-200 dark:bg-gray-700 h-1.5 rounded-full overflow-hidden">
                 <div id="pass-strength-bar" class="h-full w-0 transition-all duration-300 bg-red-500"></div>
@@ -2847,7 +2871,9 @@ const App = {
               <span id="pass-strength-text" class="text-[10px] font-semibold text-gray-400">---</span>
             </div>
           </div>
-          <button type="submit" id="btn-reg-submit" class="btn-primary w-full py-2.5 text-sm mt-2 cursor-pointer">Criar Conta e Ganhar +500 pts</button>
+          <button type="submit" id="btn-reg-submit" class="btn-primary w-full py-2.5 text-sm mt-2 cursor-pointer flex items-center justify-center gap-2">
+            <span>Continuar e Validar E-mail →</span>
+          </button>
         </form>
 
         <div class="mt-4 pt-3 border-t dark:border-gray-700">
@@ -2858,12 +2884,20 @@ const App = {
           </div>
           <div id="google-register-btn-container" class="w-full flex justify-center mt-1 min-h-[44px]"></div>
         </div>
+
+        <div class="mt-3 text-center text-xs text-gray-500">
+          Já tem conta? <button type="button" onclick="App.showLoginModal()" class="text-teal-600 font-bold hover:underline cursor-pointer">Fazer Login</button>
+        </div>
       </div>
     `;
 
+    this.selectedRole = roleVal;
+    if (passVal) {
+      this.checkPasswordStrength(passVal);
+    }
+
     this.renderGoogleSignInButton('google-register-btn-container');
 
-    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
     if (typeof lucide !== 'undefined') {
       lucide.createIcons();
     }
@@ -2968,41 +3002,283 @@ const App = {
     e.preventDefault();
     const btn = document.getElementById('btn-reg-submit');
 
-    const name = document.getElementById('reg-name').value;
-    const email = document.getElementById('reg-email').value;
-    const phone = document.getElementById('reg-phone').value;
+    const name = document.getElementById('reg-name').value.trim();
+    const email = document.getElementById('reg-email').value.trim();
+    const phone = document.getElementById('reg-phone').value.trim();
     const pass = document.getElementById('reg-password').value;
     const isVerifiedBusiness = this.selectedRole === 'seller' ? 1 : 0;
-    const businessName = document.getElementById('reg-business-name') ? document.getElementById('reg-business-name').value : '';
-    const cnpj = document.getElementById('reg-cnpj') ? document.getElementById('reg-cnpj').value : '';
+    const businessName = document.getElementById('reg-business-name') ? document.getElementById('reg-business-name').value.trim() : '';
+    const cnpj = document.getElementById('reg-cnpj') ? document.getElementById('reg-cnpj').value.trim() : '';
+
+    if (!name || !email || !pass) {
+      ToastManager.show('Preencha todos os campos obrigatórios.', 'error');
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      ToastManager.show('Por favor, informe um endereço de e-mail válido.', 'error');
+      return;
+    }
+
+    if (pass.length < 6) {
+      ToastManager.show('A senha deve conter no mínimo 6 caracteres.', 'error');
+      return;
+    }
 
     if (!this.isValidPhone(phone)) {
       ToastManager.show('Por favor, informe um número de telefone válido (DDD + 8 ou 9 dígitos). Ex: (11) 99999-9999', 'error');
       return;
     }
 
-    if ((isVerifiedBusiness || cnpj.trim() !== '') && !this.isValidCNPJ(cnpj)) {
+    if ((isVerifiedBusiness || cnpj !== '') && !this.isValidCNPJ(cnpj)) {
       ToastManager.show('Por favor, informe um CNPJ válido com 14 dígitos. Ex: 00.000.000/0001-00', 'error');
       return;
     }
 
-    if (btn) btn.innerHTML = 'Criando conta...';
+    // Armazena dados temporariamente para concluir após confirmação do e-mail
+    this.pendingRegistration = {
+      name,
+      email,
+      phone,
+      pass,
+      selectedRole: this.selectedRole,
+      isVerifiedBusiness,
+      businessName,
+      cnpj
+    };
 
-    const res = await AuthManager.register(name, email, pass, phone);
-    if (res.success) {
-      ToastManager.show(res.message, 'success', 4000);
-      document.getElementById('auth-modal').remove();
-      this.updateHeaderUI();
-      if (this.redirectAfterLogin) {
-        const dest = this.redirectAfterLogin;
-        this.redirectAfterLogin = null;
-        this.navigateTo(dest.screen, dest.params);
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = `
+        <span class="inline-block animate-spin mr-2">⏳</span>
+        <span>Enviando código de verificação...</span>
+      `;
+    }
+
+    try {
+      const res = await AuthManager.sendRegisterCode(name, email);
+      if (res.success) {
+        ToastManager.show(res.message, 'success', 5000);
+        this.renderRegisterVerifyStep(document.getElementById('auth-modal'), email);
       } else {
-        this.renderCurrentScreen();
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = 'Continuar e Validar E-mail →';
+        }
+        ToastManager.show(res.error || 'Erro ao enviar código de verificação.', 'error');
       }
-    } else {
-      if (btn) btn.innerHTML = 'Criar Conta e Ganhar +500 pts';
-      ToastManager.show(res.error, 'error');
+    } catch (err) {
+      console.error('Erro ao solicitar código de cadastro:', err);
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = 'Continuar e Validar E-mail →';
+      }
+      ToastManager.show('Erro de conexão ao enviar código. Tente novamente.', 'error');
+    }
+  },
+
+  renderRegisterVerifyStep(modal, email) {
+    if (!modal) return;
+
+    modal.innerHTML = `
+      <div class="bg-white dark:bg-gray-800 rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl relative animate-fade-in">
+        <button type="button" onclick="document.getElementById('auth-modal').remove()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold cursor-pointer">✕</button>
+
+        <!-- Barra de Progresso do Cadastro -->
+        <div class="flex items-center gap-2 mb-6">
+          <div class="flex-1 h-2 bg-teal-600 rounded-full"></div>
+          <div class="flex-1 h-2 bg-teal-600 rounded-full"></div>
+        </div>
+
+        <div class="text-center mb-5">
+          <div class="w-14 h-14 bg-teal-100 dark:bg-teal-900/50 text-teal-600 dark:text-teal-400 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-inner">
+            <i data-lucide="mail-check" class="w-7 h-7"></i>
+          </div>
+          <span class="inline-block bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300 text-[11px] font-bold px-2.5 py-0.5 rounded-full mb-1">
+            🔒 Validação Obrigatória
+          </span>
+          <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Confirme seu E-mail</h2>
+          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 max-w-xs mx-auto">
+            Para ativar sua conta e liberar <strong>+500 Pontos Verdes</strong>, digite o código de 6 dígitos enviado para:
+          </p>
+          <div class="mt-2 inline-block px-3 py-1 bg-gray-100 dark:bg-gray-700/60 rounded-full font-mono text-xs font-semibold text-teal-700 dark:text-teal-300">
+            ${this.escapeHtml(email)}
+          </div>
+        </div>
+
+        <form onsubmit="App.submitRegisterVerification(event)" class="space-y-4">
+          <div>
+            <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1 text-center">
+              Código de Verificação de 6 dígitos
+            </label>
+            <input 
+              type="text" 
+              id="reg-verify-code" 
+              required 
+              maxlength="6" 
+              placeholder="000000" 
+              autocomplete="one-time-code"
+              class="w-full text-center font-mono tracking-[0.4em] text-2xl py-3 border-2 border-teal-200 dark:border-teal-800 rounded-2xl dark:bg-gray-700 dark:text-white focus:outline-none focus:border-teal-500 focus:ring-4 focus:ring-teal-500/20 transition"
+            >
+          </div>
+
+          <button 
+            type="submit" 
+            id="btn-reg-verify-submit" 
+            class="btn-primary w-full py-3 text-sm cursor-pointer shadow-lg shadow-teal-600/20"
+          >
+            Confirmar e Criar Conta 🎉
+          </button>
+
+          <div class="space-y-2 pt-2 text-center text-xs">
+            <div>
+              <button 
+                type="button" 
+                id="btn-reg-resend" 
+                onclick="App.resendRegisterCode()" 
+                class="text-teal-600 dark:text-teal-400 font-semibold hover:underline cursor-pointer"
+              >
+                Não recebeu o código? Reenviar
+              </button>
+            </div>
+            <div>
+              <button 
+                type="button" 
+                onclick="App.showRegisterModal()" 
+                class="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:underline cursor-pointer"
+              >
+                ← Corrigir dados ou alterar e-mail
+              </button>
+            </div>
+          </div>
+        </form>
+
+        <div class="mt-4 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-xl text-[11px] text-amber-800 dark:text-amber-300 flex items-start gap-2">
+          <span>💡</span>
+          <span>Dica: Caso não encontre em sua caixa de entrada, verifique também as pastas de <strong>Spam</strong> ou <strong>Lixo Eletrônico</strong>.</span>
+        </div>
+      </div>
+    `;
+
+    setTimeout(() => {
+      const codeInput = document.getElementById('reg-verify-code');
+      if (codeInput) codeInput.focus();
+    }, 150);
+
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
+  },
+
+  async submitRegisterVerification(e) {
+    e.preventDefault();
+    if (!this.pendingRegistration) {
+      ToastManager.show('Sessão de cadastro expirada. Preencha seus dados novamente.', 'error');
+      this.showRegisterModal();
+      return;
+    }
+
+    const codeInput = document.getElementById('reg-verify-code');
+    const code = codeInput ? codeInput.value.trim() : '';
+
+    if (!code || code.length < 6) {
+      ToastManager.show('Digite o código completo de 6 dígitos.', 'error');
+      if (codeInput) codeInput.focus();
+      return;
+    }
+
+    const btn = document.getElementById('btn-reg-verify-submit');
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = `
+        <span class="inline-block animate-spin mr-2">⏳</span>
+        <span>Validando e criando conta...</span>
+      `;
+    }
+
+    const { name, email, pass, phone, isVerifiedBusiness, businessName, cnpj } = this.pendingRegistration;
+
+    try {
+      const res = await AuthManager.register(name, email, pass, phone, code, {
+        is_verified_business: isVerifiedBusiness,
+        business_name: businessName,
+        cnpj: cnpj
+      });
+
+      if (res.success) {
+        this.pendingRegistration = null;
+        ToastManager.show(res.message, 'success', 5000);
+
+        const modal = document.getElementById('auth-modal');
+        if (modal) modal.remove();
+
+        this.updateHeaderUI();
+
+        if (this.redirectAfterLogin) {
+          const dest = this.redirectAfterLogin;
+          this.redirectAfterLogin = null;
+          this.navigateTo(dest.screen, dest.params);
+        } else {
+          this.renderCurrentScreen();
+        }
+
+        if (typeof lucide !== 'undefined') {
+          lucide.createIcons();
+        }
+      } else {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = 'Confirmar e Criar Conta 🎉';
+        }
+        ToastManager.show(res.error || 'Código incorreto ou expirado.', 'error');
+        if (codeInput) {
+          codeInput.select();
+          codeInput.focus();
+        }
+      }
+    } catch (err) {
+      console.error('Erro na criação de conta:', err);
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = 'Confirmar e Criar Conta 🎉';
+      }
+      ToastManager.show('Erro de conexão ao validar código. Tente novamente.', 'error');
+    }
+  },
+
+  async resendRegisterCode() {
+    if (!this.pendingRegistration || !this.pendingRegistration.email) {
+      ToastManager.show('Dados não encontrados. Preencha o cadastro novamente.', 'error');
+      this.showRegisterModal();
+      return;
+    }
+
+    const btn = document.getElementById('btn-reg-resend');
+    if (btn) {
+      btn.disabled = true;
+      btn.innerText = 'Reenviando código...';
+    }
+
+    try {
+      const res = await AuthManager.sendRegisterCode(
+        this.pendingRegistration.name,
+        this.pendingRegistration.email
+      );
+
+      if (res.success) {
+        ToastManager.show('Novo código enviado! Verifique seu e-mail.', 'success');
+      } else {
+        ToastManager.show(res.error || 'Erro ao reenviar código.', 'error');
+      }
+    } catch (e) {
+      ToastManager.show('Erro ao reenviar código de verificação.', 'error');
+    } finally {
+      if (btn) {
+        setTimeout(() => {
+          btn.disabled = false;
+          btn.innerText = 'Não recebeu o código? Reenviar';
+        }, 5000);
+      }
     }
   },
 

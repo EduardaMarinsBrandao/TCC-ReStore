@@ -366,7 +366,108 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
     // ========================================================
-    // CADASTRO
+    // ENVIAR CÓDIGO DE VERIFICAÇÃO PARA CADASTRO
+    // ========================================================
+
+    if ($action === 'send_register_code') {
+        $email = trim($data['email'] ?? '');
+        $name = trim($data['name'] ?? '');
+
+        if (empty($email)) {
+            echo json_encode([
+                'success' => false,
+                'error' => 'Informe o endereço de e-mail.'
+            ]);
+            exit;
+        }
+
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            echo json_encode([
+                'success' => false,
+                'error' => 'Endereço de e-mail em formato inválido.'
+            ]);
+            exit;
+        }
+
+        // Verifica se o e-mail já está cadastrado
+        $stmt = $db->prepare("SELECT id FROM users WHERE email = ?");
+        $stmt->execute([$email]);
+        if ($stmt->fetch()) {
+            echo json_encode([
+                'success' => false,
+                'error' => 'Este e-mail já está cadastrado no Re-Store. Acesse sua conta ou recupere sua senha.'
+            ]);
+            exit;
+        }
+
+        // Gera código de verificação dinâmico e seguro de 6 dígitos
+        $code = strval(random_int(100000, 999999));
+        $_SESSION['reg_code'] = $code;
+        $_SESSION['reg_email'] = $email;
+        $_SESSION['reg_expires'] = time() + 600; // Validade de 10 minutos
+        $_SESSION['reg_verified'] = false;
+
+        require_once __DIR__ . '/../config/mailer.php';
+        $mailRes = sendRegistrationVerificationEmail($email, $name, $code);
+
+        if ($mailRes['success']) {
+            echo json_encode([
+                'success' => true,
+                'message' => 'Código de verificação enviado para ' . htmlspecialchars($email) . '! Verifique sua caixa de entrada e a pasta de spam.'
+            ]);
+            exit;
+        } else {
+            // Em contingência se SMTP ainda não estiver configurado nas secrets
+            if (!empty($mailRes['unconfigured'])) {
+                echo json_encode([
+                    'success' => true,
+                    'message' => 'Código de verificação de cadastro gerado: ' . $code . ' (Configure SMTP_USER e SMTP_PASS nas Secrets do GitHub para envio real).'
+                ]);
+                exit;
+            }
+
+            echo json_encode([
+                'success' => false,
+                'error' => $mailRes['error'] ?? 'Falha ao enviar e-mail de verificação. Tente novamente mais tarde.'
+            ]);
+            exit;
+        }
+    }
+
+
+    // ========================================================
+    // VERIFICAR CÓDIGO DE CADASTRO
+    // ========================================================
+
+    if ($action === 'verify_register_code') {
+        $code = trim($data['code'] ?? '');
+        $email = trim($data['email'] ?? '');
+
+        if (
+            !empty($_SESSION['reg_code']) &&
+            $code === $_SESSION['reg_code'] &&
+            (!empty($email) ? $email === ($_SESSION['reg_email'] ?? '') : true) &&
+            time() <= ($_SESSION['reg_expires'] ?? 0)
+        ) {
+            $_SESSION['reg_verified'] = true;
+
+            echo json_encode([
+                'success' => true,
+                'message' => 'Código validado com sucesso!'
+            ]);
+            exit;
+        } else {
+            echo json_encode([
+                'success' => false,
+                'error' => 'Código de verificação incorreto ou expirado. Verifique os 6 dígitos recebidos no seu e-mail.'
+            ]);
+            exit;
+        }
+    }
+
+
+    // ========================================================
+    // CADASTRO (Criação de Conta após Validação Obrigatória)
     // ========================================================
 
     if ($action === 'register') {
@@ -377,32 +478,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $phone = trim($data['phone'] ?? '');
 
         if (empty($name) || empty($email) || empty($password)) {
-
             echo json_encode([
                 'success' => false,
                 'error' => 'Preencha todos os campos obrigatórios.'
             ]);
-
             exit;
         }
 
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-
             echo json_encode([
                 'success' => false,
                 'error' => 'E-mail em formato inválido.'
             ]);
-
             exit;
         }
 
         if (strlen($password) < 6) {
-
             echo json_encode([
                 'success' => false,
                 'error' => 'A senha deve conter pelo menos 6 caracteres.'
             ]);
-
             exit;
         }
 
@@ -415,6 +510,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $cnpj = trim($data['cnpj'] ?? '');
+        $businessName = trim($data['business_name'] ?? '');
         $isVerifiedBusiness = isset($data['is_verified_business']) ? (int)$data['is_verified_business'] : 0;
         if (($isVerifiedBusiness || !empty($cnpj)) && !isValidCNPJ($cnpj)) {
             echo json_encode([
@@ -424,74 +520,128 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
-
         // Verifica e-mail duplicado
         $stmt = $db->prepare("SELECT id FROM users WHERE email = ?");
         $stmt->execute([$email]);
-
         if ($stmt->fetch()) {
-
             echo json_encode([
                 'success' => false,
-                'error' => 'Este e-mail já está cadastrado.'
+                'error' => 'Este e-mail já está cadastrado no Re-Store.'
             ]);
-
             exit;
         }
 
+        // ====================================================
+        // VALIDAÇÃO OBRIGATÓRIA DO CÓDIGO DE E-MAIL
+        // A conta só é criada se o e-mail tiver sido validado!
+        // ====================================================
+        $code = trim($data['code'] ?? '');
+        $sessionCode = $_SESSION['reg_code'] ?? '';
+        $sessionEmail = $_SESSION['reg_email'] ?? '';
+        $sessionExpires = $_SESSION['reg_expires'] ?? 0;
+        $isAlreadyVerified = !empty($_SESSION['reg_verified']) && ($sessionEmail === $email);
+
+        if (!$isAlreadyVerified) {
+            if (empty($code)) {
+                echo json_encode([
+                    'success' => false,
+                    'error' => 'A validação de e-mail é obrigatória. Informe o código de 6 dígitos enviado para seu e-mail para concluir o cadastro.'
+                ]);
+                exit;
+            }
+
+            if (empty($sessionCode) || $code !== $sessionCode || $email !== $sessionEmail || time() > $sessionExpires) {
+                echo json_encode([
+                    'success' => false,
+                    'error' => 'Código de verificação incorreto ou expirado. Verifique os 6 dígitos recebidos no seu e-mail ou solicite um novo envio.'
+                ]);
+                exit;
+            }
+        }
+
+        // Limpa variáveis de validação de cadastro da sessão
+        unset($_SESSION['reg_code'], $_SESSION['reg_email'], $_SESSION['reg_expires'], $_SESSION['reg_verified']);
 
         $passHash = password_hash($password, PASSWORD_DEFAULT);
 
         // 500 Pontos de Boas-Vindas
         $initialPoints = 500;
 
+        try {
+            $insertStmt = $db->prepare("
+                INSERT INTO users
+                (
+                    email,
+                    name,
+                    password_hash,
+                    phone,
+                    points,
+                    level,
+                    is_verified_business,
+                    business_name,
+                    cnpj,
+                    email_verified
+                )
+                VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, 1)
+            ");
 
-        $insertStmt = $db->prepare("
-            INSERT INTO users
-            (
-                email,
-                name,
-                password_hash,
-                phone,
-                points,
-                level
-            )
-            VALUES (?, ?, ?, ?, ?, 1)
-        ");
+            $insertStmt->execute([
+                $email,
+                $name,
+                $passHash,
+                $phone,
+                $initialPoints,
+                $isVerifiedBusiness,
+                $businessName,
+                $cnpj
+            ]);
+        } catch (Exception $e) {
+            $insertStmt = $db->prepare("
+                INSERT INTO users
+                (
+                    email,
+                    name,
+                    password_hash,
+                    phone,
+                    points,
+                    level
+                )
+                VALUES (?, ?, ?, ?, ?, 1)
+            ");
 
-        $insertStmt->execute([
-            $email,
-            $name,
-            $passHash,
-            $phone,
-            $initialPoints
-        ]);
+            $insertStmt->execute([
+                $email,
+                $name,
+                $passHash,
+                $phone,
+                $initialPoints
+            ]);
+        }
 
         $userId = $db->lastInsertId();
 
+        // Histórico dos pontos de boas-vindas
+        try {
+            $historyStmt = $db->prepare("
+                INSERT INTO points_history
+                (
+                    user_id,
+                    points,
+                    type,
+                    description
+                )
+                VALUES (?, ?, 'purchase', ?)
+            ");
 
-        // Histórico dos pontos
-        $historyStmt = $db->prepare("
-            INSERT INTO points_history
-            (
-                user_id,
-                points,
-                type,
-                description
-            )
-            VALUES (?, ?, 'purchase', ?)
-        ");
-
-        $historyStmt->execute([
-            $userId,
-            $initialPoints,
-            'Bônus de Boas-Vindas Re-Store'
-        ]);
-
+            $historyStmt->execute([
+                $userId,
+                $initialPoints,
+                'Bônus de Boas-Vindas Re-Store (E-mail Validado)'
+            ]);
+        } catch (Exception $e) {}
 
         $_SESSION['user_id'] = $userId;
         $_SESSION['user_name'] = $name;
-
 
         // Retorna dados do usuário
         $userStmt = $db->prepare("
@@ -517,13 +667,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ");
 
         $userStmt->execute([$userId]);
-
         $newUser = $userStmt->fetch();
-
 
         echo json_encode([
             'success' => true,
-            'message' => 'Conta criada com sucesso! Você ganhou +500 Pontos Verdes de boas-vindas 🎉',
+            'message' => 'Conta criada e e-mail validado com sucesso! Você ganhou +500 Pontos Verdes 🎉',
             'user' => $newUser
         ]);
 

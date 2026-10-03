@@ -13,9 +13,11 @@ function initializeDatabase() {
     if ($driver === 'sqlite') {
         try { $db->exec("ALTER TABLE orders ADD COLUMN coupon_code TEXT NULL"); } catch (Exception $e) {}
         try { $db->exec("ALTER TABLE orders ADD COLUMN discount_amount REAL DEFAULT 0.0"); } catch (Exception $e) {}
+        try { $db->exec("ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 1"); } catch (Exception $e) {}
     } else {
         try { $db->exec("ALTER TABLE orders ADD COLUMN coupon_code VARCHAR(50) NULL"); } catch (Exception $e) {}
         try { $db->exec("ALTER TABLE orders ADD COLUMN discount_amount DECIMAL(10,2) DEFAULT 0.00"); } catch (Exception $e) {}
+        try { $db->exec("ALTER TABLE users ADD COLUMN email_verified TINYINT(1) DEFAULT 1"); } catch (Exception $e) {}
     }
 
     // Verifica se as tabelas principais já existem no banco conectado
@@ -57,6 +59,7 @@ function initializeDatabase() {
                 is_verified_business INTEGER DEFAULT 0,
                 business_name TEXT,
                 cnpj TEXT,
+                email_verified INTEGER DEFAULT 1,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )",

@@ -212,6 +212,60 @@ runTest('Integridade de histórico de pontos e relacionamentos com usuários', f
 });
 
 // --------------------------------------------------------------------------
+// 8. Teste de Regra de Negócio: Bloqueio de Cadastro Sem E-mail Validado
+// --------------------------------------------------------------------------
+runTest('API: Bloqueio de criação de conta sem validação de e-mail (código obrigatório)', function() {
+    $output = callApiIsolated('api/auth.php', [
+        'action' => 'register',
+        'name' => 'Novo Usuário Teste',
+        'email' => 'teste.sem.codigo@restore.com',
+        'password' => 'senha123456',
+        'phone' => '(11) 98888-7777'
+    ], 'POST');
+    $json = json_decode($output, true);
+
+    if (!is_array($json)) {
+        throw new Exception("Resposta não é JSON válido: " . substr($output, 0, 150));
+    }
+    if (!empty($json['success'])) {
+        throw new Exception("Conta não deveria ser criada sem código de validação de e-mail");
+    }
+    if (empty($json['error'])) {
+        throw new Exception("API não retornou mensagem de erro esperada");
+    }
+    return true;
+});
+
+// --------------------------------------------------------------------------
+// 9. Teste de Endpoint: Solicitação de Código de Verificação de Cadastro
+// --------------------------------------------------------------------------
+runTest('API: Geração de código de validação de e-mail para cadastro', function() {
+    // 1. Tentar solicitar código para e-mail já existente deve ser rejeitado
+    $outputExist = callApiIsolated('api/auth.php', [
+        'action' => 'send_register_code',
+        'email' => 'eco.vendedor@restore.com',
+        'name' => 'Vendedor Existente'
+    ], 'POST');
+    $jsonExist = json_decode($outputExist, true);
+    if (!empty($jsonExist['success'])) {
+        throw new Exception("API permitiu solicitar código de cadastro para e-mail já registrado");
+    }
+
+    // 2. Solicitar código para novo e-mail deve ser aceito
+    $outputNew = callApiIsolated('api/auth.php', [
+        'action' => 'send_register_code',
+        'email' => 'novo.usuario.' . uniqid() . '@restore.com',
+        'name' => 'Novo Usuário'
+    ], 'POST');
+    $jsonNew = json_decode($outputNew, true);
+    if (empty($jsonNew['success'])) {
+        throw new Exception("API falhou ao gerar código de cadastro: " . ($jsonNew['error'] ?? 'desconhecido'));
+    }
+    return true;
+});
+
+
+// --------------------------------------------------------------------------
 // Limpeza de arquivos temporários do teste
 // --------------------------------------------------------------------------
 if (file_exists($testDbFile)) {
