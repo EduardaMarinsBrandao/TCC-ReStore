@@ -3121,14 +3121,18 @@ const App = {
         </div>
 
         <h2 class="text-xl font-bold mb-1">Etapa 2: Digite o Código</h2>
-        <p class="text-xs text-gray-500 mb-4">Insira o código de 6 dígitos (Use <strong>123456</strong> para testes).</p>
+        <p class="text-xs text-gray-500 mb-4">Insira o código de 6 dígitos enviado para a sua caixa de entrada.</p>
 
         <form onsubmit="App.submitForgotStep2(event)" class="space-y-4">
           <div>
             <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Código de 6 dígitos</label>
-            <input type="text" id="forgot-code" required maxlength="6" value="123456" class="w-full text-center font-mono tracking-widest text-lg px-4 py-2.5 border rounded-xl dark:bg-gray-700 dark:border-gray-600">
+            <input type="text" id="forgot-code" required maxlength="6" placeholder="000000" class="w-full text-center font-mono tracking-widest text-lg px-4 py-2.5 border rounded-xl dark:bg-gray-700 dark:border-gray-600 focus:ring-2 focus:ring-teal-500">
           </div>
-          <button type="submit" class="btn-primary w-full py-3 text-sm cursor-pointer">Validar Código</button>
+          <button type="submit" id="btn-verify-code-submit" class="btn-primary w-full py-3 text-sm cursor-pointer">Validar Código</button>
+
+          <div class="text-center pt-1">
+            <button type="button" onclick="App.showForgotPasswordModal()" class="text-xs text-teal-600 font-semibold hover:underline cursor-pointer">Não recebeu? Tentar reenviar ou alterar e-mail</button>
+          </div>
         </form>
       </div>
     `;

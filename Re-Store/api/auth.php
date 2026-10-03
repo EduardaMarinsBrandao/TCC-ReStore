@@ -837,50 +837,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $email = trim($data['email'] ?? '');
 
         if (empty($email)) {
-
             echo json_encode([
                 'success' => false,
                 'error' => 'Informe seu e-mail cadastrado.'
             ]);
-
             exit;
         }
 
-
-        $stmt = $db->prepare(
-            "SELECT id FROM users WHERE email = ?"
-        );
-
+        $stmt = $db->prepare("SELECT id, name, email FROM users WHERE email = ?");
         $stmt->execute([$email]);
-
         $user = $stmt->fetch();
 
-
         if (!$user) {
-
             echo json_encode([
                 'success' => false,
                 'error' => 'E-mail não encontrado no sistema.'
             ]);
-
             exit;
         }
 
-
-        // Código simulado para testes
-        $_SESSION['reset_code'] = '123456';
+        // Gera código de verificação dinâmico e seguro de 6 dígitos
+        $code = strval(random_int(100000, 999999));
+        $_SESSION['reset_code'] = $code;
         $_SESSION['reset_email'] = $email;
-        $_SESSION['reset_expires'] = time() + 600;
+        $_SESSION['reset_expires'] = time() + 600; // Validade de 10 minutos
+        $_SESSION['reset_verified'] = false;
 
+        require_once __DIR__ . '/../config/mailer.php';
+        $mailRes = sendVerificationEmail($email, $user['name'] ?? '', $code);
 
-        echo json_encode([
-            'success' => true,
-            'message' => 'Código de verificação enviado para ' .
-                         $email .
-                         '! (Código simulado para testes: 123456)'
-        ]);
+        if ($mailRes['success']) {
+            echo json_encode([
+                'success' => true,
+                'message' => 'Código de verificação enviado para ' . htmlspecialchars($email) . '! Verifique sua caixa de entrada e a pasta de spam.'
+            ]);
+            exit;
+        } else {
+            // Se o SMTP ainda não foi configurado pelo usuário, informa o código de contingência para permitir testes
+            if (!empty($mailRes['unconfigured'])) {
+                echo json_encode([
+                    'success' => true,
+                    'message' => 'Código de verificação gerado: ' . $code . ' (Configure SMTP_USER e SMTP_PASS nas Secrets do repositório para envio de e-mail real).'
+                ]);
+                exit;
+            }
 
-        exit;
+            echo json_encode([
+                'success' => false,
+                'error' => $mailRes['error'] ?? 'Não foi possível enviar o e-mail no momento. Tente novamente mais tarde.'
+            ]);
+            exit;
+        }
     }
 
 
@@ -893,26 +900,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $code = trim($data['code'] ?? '');
 
         if (
-            $code === ($_SESSION['reset_code'] ?? '123456') &&
-            time() <= ($_SESSION['reset_expires'] ?? (time() + 600))
+            !empty($_SESSION['reset_code']) &&
+            $code === $_SESSION['reset_code'] &&
+            time() <= ($_SESSION['reset_expires'] ?? 0)
         ) {
-
             $_SESSION['reset_verified'] = true;
 
             echo json_encode([
                 'success' => true,
                 'message' => 'Código verificado com sucesso!'
             ]);
-
             exit;
 
         } else {
-
             echo json_encode([
                 'success' => false,
-                'error' => 'Código inválido ou expirado. Tente 123456.'
+                'error' => 'Código incorreto ou expirado. Verifique os 6 dígitos recebidos ou solicite um novo envio.'
             ]);
-
             exit;
         }
     }

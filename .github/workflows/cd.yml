@@ -43,6 +43,27 @@ jobs:
             echo "✅ Todas as credenciais FTP necessárias foram localizadas nas Secrets."
           fi
 
+      - name: ⚙️ Preparar Credenciais de Produção
+        run: |
+          cat << 'EOF' > Re-Store/config/credentials.local.php
+          <?php
+          // Arquivo de credenciais locais gerado automaticamente pelo GitHub Actions durante o Deploy
+          define('DB_HOST', 'sql204.infinityfree.com');
+          define('DB_NAME', 'if0_42831392_restore');
+          define('DB_USER', 'if0_42831392');
+          define('DB_PASS', 'CaEdEyFeLaLe');
+          define('DB_DRIVER', 'auto');
+
+          define('GOOGLE_CLIENT_ID', '147889418852-7as919egt4ten74alk2mod9oecgbslqv.apps.googleusercontent.com');
+
+          define('SMTP_HOST', '${{ secrets.SMTP_HOST || 'smtp.gmail.com' }}');
+          define('SMTP_PORT', ${{ secrets.SMTP_PORT || 587 }});
+          define('SMTP_USER', '${{ secrets.SMTP_USER || '' }}');
+          define('SMTP_PASS', '${{ secrets.SMTP_PASSWORD_EMAIL || secrets.SMTP_PASS || '' }}');
+          define('SMTP_FROM_EMAIL', '${{ secrets.SMTP_FROM_EMAIL || secrets.SMTP_USER || '' }}');
+          define('SMTP_FROM_NAME', 'Re-Store Marketplace');
+          EOF
+
       - name: 📁 Deploy Contínuo via FTPS/FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
@@ -62,4 +83,3 @@ jobs:
             **/tests/**
             **/*.sqlite*
             **/*.log
-            **/credentials.local.php
