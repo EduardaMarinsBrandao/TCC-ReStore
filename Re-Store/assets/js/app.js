@@ -636,6 +636,51 @@ const App = {
               <span class="text-sm font-normal text-gray-500">(${reviews.length})</span>
             </h2>
 
+            <!-- FORMULÁRIO DE NOVA AVALIAÇÃO -->
+            ${user ? `
+              <div class="mb-8 p-4 bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 shadow-sm">
+                <h3 class="text-sm font-bold text-gray-900 dark:text-white mb-3">Deixar uma Avaliação</h3>
+                <form onsubmit="event.preventDefault(); App.submitReview(${p.id}, this);">
+                  
+                  <!-- Seleção de Estrelas -->
+                  <div class="flex items-center gap-2 mb-3">
+                    <label class="text-xs text-gray-500 font-semibold">Sua Nota:</label>
+                    <select name="rating" class="p-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-xs font-bold text-amber-500 focus:ring-2 focus:ring-teal-500 outline-none">
+                      <option value="5">★★★★★ (5/5)</option>
+                      <option value="4">★★★★☆ (4/5)</option>
+                      <option value="3">★★★☆☆ (3/5)</option>
+                      <option value="2">★★☆☆☆ (2/5)</option>
+                      <option value="1">★☆☆☆☆ (1/5)</option>
+                    </select>
+                  </div>
+
+                  <!-- Campo de Comentário -->
+                  <div class="mb-3">
+                    <textarea 
+                      name="comment" 
+                      rows="3" 
+                      placeholder="O que achou deste produto?" 
+                      class="w-full p-3 text-xs rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                      required
+                    ></textarea>
+                  </div>
+
+                  <button 
+                    type="submit" 
+                    class="btn-primary text-xs py-2 px-4 cursor-pointer inline-flex items-center gap-1.5 font-bold"
+                  >
+                    <i data-lucide="send" class="w-3.5 h-3.5 pointer-events-none"></i>
+                    <span>Enviar Avaliação</span>
+                  </button>
+                </form>
+              </div>
+            ` : `
+              <div class="mb-6 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl border dark:border-gray-800 text-xs text-gray-500">
+                Faça <button type="button" onclick="App.navigateTo('login')" class="text-teal-600 font-bold hover:underline">login</button> para poder avaliar este produto.
+              </div>
+            `}
+
+            <!-- LISTA DE AVALIAÇÕES -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
               ${reviews.length > 0 ? reviews.map(r => `
                 <div class="p-4 rounded-xl border dark:border-gray-800 bg-white dark:bg-gray-800 flex flex-col justify-between">
@@ -661,14 +706,13 @@ const App = {
                       <i data-lucide="thumbs-up" class="w-4 h-4 pointer-events-none"></i>
                       <span>Útil (${r.helpful_count || 0})</span>
                     </button>
-
                   </div>
                 </div>
-              `).join('') : '<div class="text-gray-500 text-sm">Seja o primeiro a avaliar este produto após a compra!</div>'}
+              `).join('') : '<div class="text-gray-500 text-sm col-span-2">Ainda não há avaliações para este produto. Seja o primeiro a avaliar acima!</div>'}
             </div>
           </section>
         </div>
-      `;
+      `;            
 
       // IMPORTANTE: renderizar os ícones adicionados dinamicamente
       if (typeof lucide !== 'undefined') {

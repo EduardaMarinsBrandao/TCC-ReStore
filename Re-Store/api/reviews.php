@@ -64,7 +64,7 @@ if ($method === 'POST' && $action === 'create') {
 
     $userId = $_SESSION['user_id'];
     $productId = (int)($data['product_id'] ?? 0);
-    $orderId = (int)($data['order_id'] ?? 0);
+    $orderId = $orderIdInput > 0 ? $orderIdInput : null; // Define NULL caso não haja um pedido vinculado
     $rating = (int)($data['rating'] ?? 5);
     $comment = trim($data['comment'] ?? '');
 
