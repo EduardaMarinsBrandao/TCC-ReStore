@@ -44,6 +44,33 @@ const App = {
       notifBadge.style.display = user ? 'flex' : 'none';
     }
 
+    if (user && window.ChatManager) {
+      ChatManager.getUnreadCount().then(count => {
+        const headerBadge = document.getElementById('chat-header-badge');
+        const mobileBadge = document.getElementById('chat-mobile-badge');
+        if (headerBadge) {
+          if (count > 0) {
+            headerBadge.innerText = count > 99 ? '99+' : count;
+            headerBadge.classList.remove('hidden');
+            headerBadge.classList.add('flex');
+          } else {
+            headerBadge.classList.add('hidden');
+            headerBadge.classList.remove('flex');
+          }
+        }
+        if (mobileBadge) {
+          if (count > 0) {
+            mobileBadge.innerText = count > 99 ? '99+' : count;
+            mobileBadge.classList.remove('hidden');
+            mobileBadge.classList.add('flex');
+          } else {
+            mobileBadge.classList.add('hidden');
+            mobileBadge.classList.remove('flex');
+          }
+        }
+      }).catch(() => {});
+    }
+
     if (!userNav) return;
 
     if (user) {
@@ -138,8 +165,13 @@ const App = {
     this.currentScreen = screen;
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
-    if (screen !== 'chat') {
-      ChatManager.stopPolling();
+    if (screen === 'chat') {
+      this.chatParams = params || {};
+    } else {
+      this.chatParams = null;
+      if (window.ChatManager) {
+        ChatManager.stopPolling();
+      }
     }
 
     if (params.category !== undefined) this.selectedCategory = params.category;
@@ -549,14 +581,16 @@ const App = {
                       <div class="text-xs text-gray-500">Reputação: ★ 4.9 (Vendedor Confiável)</div>
                     </div>
                   </div>
-                  <button 
-                    type="button" 
-                    onclick="App.openChatWithUser(${p.seller_id}, ${p.id})" 
-                    class="btn-outline text-xs py-1.5 px-3 cursor-pointer inline-flex items-center gap-1.5"
-                  >
-                    <i data-lucide="message-circle" class="w-4 h-4 pointer-events-none"></i>
-                    <span>Chat</span>
-                  </button>
+                  ${user && parseInt(user.id, 10) === parseInt(p.seller_id, 10) ? '' : `
+                    <button 
+                      type="button" 
+                      onclick="App.openChatWithUser(${p.seller_id}, ${p.id})" 
+                      class="btn-outline text-xs py-1.5 px-3 cursor-pointer inline-flex items-center gap-1.5"
+                    >
+                      <i data-lucide="message-circle" class="w-4 h-4 pointer-events-none"></i>
+                      <span>Chat</span>
+                    </button>
+                  `}
 
                 </div>
 
@@ -1145,6 +1179,12 @@ const App = {
                         <div>
                           <div class="font-bold text-sm text-gray-900 dark:text-white">${i.product_name}</div>
                           <div class="text-xs text-gray-500">Qtd: ${i.quantity} • Vendedor: ${i.seller_name}</div>
+                          ${i.seller_id ? `
+                            <button type="button" onclick="App.openChatWithUser(${i.seller_id}, ${i.product_id})" class="text-[11px] text-teal-600 hover:text-teal-700 dark:text-teal-400 font-semibold hover:underline inline-flex items-center gap-1 mt-1 cursor-pointer">
+                              <i data-lucide="message-circle" class="w-3 h-3 pointer-events-none"></i>
+                              <span>Conversar com vendedor</span>
+                            </button>
+                          ` : ''}
                         </div>
                       </div>
                       <div class="font-bold text-sm">R$ ${parseFloat(i.price).toFixed(2).replace('.', ',')}</div>
@@ -1567,9 +1607,15 @@ const App = {
         <div class="space-y-8 animate-fade-in">
           <div class="flex items-center justify-between">
             <h1 class="text-2xl font-extrabold">Painel da Área do Vendedor</h1>
-            <button type="button" onclick="App.navigateTo('add-product')" class="btn-primary text-sm py-2 px-4 cursor-pointer">
-              + Cadastrar Novo Produto
-            </button>
+            <div class="flex items-center gap-2">
+              <button type="button" onclick="App.navigateTo('chat')" class="btn-outline text-sm py-2 px-4 cursor-pointer flex items-center gap-1.5">
+                <i data-lucide="message-circle" class="w-4 h-4"></i>
+                <span>Mensagens</span>
+              </button>
+              <button type="button" onclick="App.navigateTo('add-product')" class="btn-primary text-sm py-2 px-4 cursor-pointer">
+                + Cadastrar Novo Produto
+              </button>
+            </div>
           </div>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -2176,14 +2222,31 @@ const App = {
   },
 
   // ----------------------------------------------------
-  // TELA 12: CHAT DE ATENDIMENTO
+  // TELA 12: CHAT DE ATENDIMENTO E NEGOCIAÇÃO
   // ----------------------------------------------------
   async openChatWithUser(receiverId, productId = null) {
     if (!AuthManager.currentUser) {
+      ToastManager.show('Faça login para conversar pelo chat.', 'info');
       this.showLoginModal();
       return;
     }
+    receiverId = parseInt(receiverId, 10);
+    if (parseInt(AuthManager.currentUser.id, 10) === receiverId) {
+      ToastManager.show('Você não pode conversar consigo mesmo.', 'info');
+      return;
+    }
     this.navigateTo('chat', { withUserId: receiverId, productId: productId });
+  },
+
+  formatChatTime(dateStr) {
+    if (!dateStr) return '';
+    try {
+      const d = new Date(dateStr.replace(' ', 'T'));
+      if (isNaN(d.getTime())) return dateStr;
+      return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return '';
+    }
   },
 
   async renderChatScreen(container) {
@@ -2193,132 +2256,464 @@ const App = {
       return;
     }
 
+    const targetPartnerId = this.chatParams?.withUserId ? parseInt(this.chatParams.withUserId, 10) : null;
+    const targetProductId = this.chatParams?.productId ? parseInt(this.chatParams.productId, 10) : null;
+
     container.innerHTML = `
-      <div class="h-[70vh] rounded-3xl border dark:border-gray-800 bg-white dark:bg-gray-800 flex overflow-hidden shadow-lg animate-fade-in">
-        <div id="chat-sidebar" class="w-1/3 border-r dark:border-gray-800 p-4 space-y-3 overflow-y-auto">
-          <h2 class="font-bold text-base mb-3">Mensagens</h2>
-          <div id="chat-convs-list" class="space-y-2">Carregando conversas...</div>
+      <div class="h-[78vh] min-h-[520px] rounded-3xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800 flex overflow-hidden shadow-xl animate-fade-in relative">
+        <!-- BARRA LATERAL: LISTA DE CONVERSAS -->
+        <div id="chat-sidebar" class="w-full md:w-1/3 md:max-w-sm border-r border-gray-200 dark:border-gray-800 flex flex-col bg-gray-50/50 dark:bg-gray-900/30">
+          <div class="p-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <h2 class="font-extrabold text-base text-gray-900 dark:text-white">Mensagens</h2>
+              <span id="chat-sidebar-badge" class="hidden bg-teal-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">0</span>
+            </div>
+            <button type="button" onclick="App.refreshConversationsList()" title="Atualizar conversas" class="text-gray-400 hover:text-teal-600 transition p-1.5 rounded-lg cursor-pointer">
+              <i data-lucide="rotate-cw" class="w-4 h-4"></i>
+            </button>
+          </div>
+          <div id="chat-convs-list" class="flex-1 overflow-y-auto p-3 space-y-2">
+            <div class="text-center py-8 text-xs text-gray-400">Carregando conversas...</div>
+          </div>
         </div>
-        <div id="chat-window" class="w-2/3 flex flex-col justify-between p-4 bg-gray-50/50 dark:bg-gray-900/50">
-          <div class="text-center my-auto text-gray-400 text-sm">Selecione uma conversa para iniciar o bate-papo</div>
+
+        <!-- JANELA PRINCIPAL DO CHAT -->
+        <div id="chat-window" class="hidden md:flex flex-1 flex-col justify-between bg-white dark:bg-gray-900 relative">
+          <div class="text-center my-auto p-6 space-y-2 text-gray-400">
+            <i data-lucide="messages-square" class="w-12 h-12 mx-auto text-gray-300 dark:text-gray-600 mb-2"></i>
+            <div class="font-bold text-sm text-gray-600 dark:text-gray-300">Nenhuma conversa selecionada</div>
+            <div class="text-xs text-gray-400 max-w-xs mx-auto">Selecione uma conversa ao lado ou clique em "Chat" na página de qualquer anúncio para falar com o vendedor.</div>
+          </div>
         </div>
       </div>
     `;
 
-    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
     if (typeof lucide !== 'undefined') {
       lucide.createIcons();
     }
 
-    const convsRes = await ChatManager.getConversations();
-    const convsList = document.getElementById('chat-convs-list');
+    // Carrega lista lateral de conversas
+    await this.refreshConversationsList(targetPartnerId);
 
-    if (convsRes.success && convsRes.conversations.length > 0) {
-      convsList.innerHTML = convsRes.conversations.map(c => `
-        <div onclick="App.selectChatPartner(${c.user.id})" class="p-3 rounded-2xl border dark:border-gray-800 bg-white dark:bg-gray-800 cursor-pointer hover:border-teal-500 transition">
-          <div class="font-bold text-xs text-gray-900 dark:text-white line-clamp-1">${c.user.name}</div>
-          <div class="text-[11px] text-gray-500 line-clamp-1 mt-0.5">${c.last_message ? c.last_message.message : ''}</div>
-        </div>
-      `).join('');
-      // IMPORTANTE: renderizar os ícones adicionados dinamicamente
-      if (typeof lucide !== 'undefined') {
-        lucide.createIcons();
-      }
-    } else {
-      convsList.innerHTML = `<div class="text-xs text-gray-400">Nenhuma conversa encontrada.</div>`;
+    // Se o usuário entrou direcionado para conversar com um vendedor/usuário específico
+    if (targetPartnerId) {
+      await this.selectChatPartner(targetPartnerId, targetProductId);
     }
   },
 
-  async selectChatPartner(partnerId) {
+  async selectChatPartner(partnerId, productId = null) {
+    partnerId = parseInt(partnerId, 10);
+    ChatManager.stopPolling();
+
+    // Em mobile, oculta lista lateral e exibe a janela de mensagens
+    const sidebar = document.getElementById('chat-sidebar');
     const win = document.getElementById('chat-window');
-    win.innerHTML = `<div class="text-center my-auto text-gray-400">Carregando mensagens...</div>`;
-
-    const res = await ChatManager.getMessages(partnerId);
-    if (!res.success) return;
-
-    const partner = res.partner;
-    const msgs = res.messages;
+    if (sidebar && win) {
+      sidebar.classList.add('hidden');
+      sidebar.classList.add('md:flex');
+      win.classList.remove('hidden');
+      win.classList.add('flex');
+    }
 
     win.innerHTML = `
-      <div class="p-3 border-b dark:border-gray-800 flex items-center justify-between bg-white dark:bg-gray-800 rounded-xl mb-3">
-        <div class="flex items-center gap-2">
-          <div class="font-bold text-sm">${partner.name}</div>
-          <span class="text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 px-2 py-0.5 rounded-full font-bold">🟢 Disponível agora</span>
+      <div class="text-center my-auto p-8 text-gray-400 space-y-2">
+        <div class="animate-spin inline-block w-6 h-6 border-2 border-teal-500 border-t-transparent rounded-full"></div>
+        <div class="text-xs">Carregando mensagens...</div>
+      </div>
+    `;
+
+    const res = await ChatManager.getMessages(partnerId, productId);
+    if (!res.success) {
+      win.innerHTML = `
+        <div class="p-6 text-center my-auto space-y-3">
+          <div class="text-sm text-red-500">${res.error || 'Não foi possível carregar a conversa.'}</div>
+          <button type="button" onclick="App.toggleMobileChatList(true)" class="btn-outline text-xs py-1.5 px-3">Voltar às Conversas</button>
+        </div>
+      `;
+      return;
+    }
+
+    const partner = res.partner;
+    const msgs = res.messages || [];
+    const product = res.product;
+    const currentUserId = AuthManager.currentUser ? parseInt(AuthManager.currentUser.id, 10) : 0;
+    const partnerAvatar = partner.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(partner.name)}&background=0d9488&color=fff&size=80`;
+
+    win.innerHTML = `
+      <!-- CABEÇALHO DO CHAT -->
+      <div class="p-3.5 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between bg-white dark:bg-gray-800 z-10 shadow-xs">
+        <div class="flex items-center gap-3">
+          <button type="button" onclick="App.toggleMobileChatList(true)" class="md:hidden p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 cursor-pointer" title="Voltar para lista">
+            <i data-lucide="arrow-left" class="w-5 h-5"></i>
+          </button>
+          <img src="${partnerAvatar}" class="w-10 h-10 rounded-full object-cover border border-teal-500/30" alt="${this.escapeHtml(partner.name)}">
+          <div>
+            <div class="font-bold text-sm text-gray-900 dark:text-white flex items-center gap-1.5">
+              ${this.escapeHtml(partner.name)}
+              ${partner.is_verified_business ? '<span class="text-teal-500 text-xs font-bold" title="Vendedor Verificado">✓</span>' : ''}
+            </div>
+            <div class="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+              <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              ${partner.business_name ? this.escapeHtml(partner.business_name) : 'Disponível no Re-Store'}
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-1">
+          <button type="button" onclick="App.refreshActiveChat(${partnerId}, ${product ? product.id : (productId || 'null')})" title="Recarregar conversa" class="p-2 text-gray-400 hover:text-teal-600 transition rounded-lg cursor-pointer">
+            <i data-lucide="rotate-cw" class="w-4 h-4"></i>
+          </button>
         </div>
       </div>
 
-      <div id="chat-msgs-body" class="flex-1 overflow-y-auto space-y-3 pr-2 mb-3">
-        ${msgs.map(m => {
-      const isMe = m.sender_id === AuthManager.currentUser.id;
-      return `
-            <div class="flex ${isMe ? 'justify-end' : 'justify-start'} group">
-              <div class="relative max-w-xs px-4 py-2 rounded-2xl text-sm ${isMe ? 'bg-teal-600 text-white rounded-br-none' : 'bg-white dark:bg-gray-800 border dark:border-gray-700 text-gray-800 dark:text-gray-200 rounded-bl-none'}">
-                ${m.message}
-                ${isMe ? `
-                  <button type="button" onclick="App.deleteChatMessage(${m.id}, ${partnerId})" title="Apagar Mensagem" class="opacity-0 group-hover:opacity-100 absolute -left-6 top-2 text-gray-400 hover:text-red-500 text-xs cursor-pointer">
-                    🗑️
-                  </button>
-                ` : ''}
-              </div>
+      <!-- CARD DO PRODUTO EM NEGOCIAÇÃO (SE HOUVER) -->
+      ${product ? `
+        <div class="p-2.5 mx-4 mt-3 bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800/60 rounded-2xl flex items-center justify-between">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <img src="${product.image_url || 'https://images.unsplash.com/photo-1544816155-12df9643f363?w=100'}" class="w-9 h-9 rounded-xl object-cover shrink-0 border border-teal-200 dark:border-teal-700">
+            <div class="min-w-0">
+              <div class="text-[10px] text-teal-800 dark:text-teal-300 font-bold uppercase tracking-wider">Negociando Produto</div>
+              <div class="font-bold text-xs text-gray-900 dark:text-white truncate">${this.escapeHtml(product.name)}</div>
+              <div class="text-xs font-extrabold text-teal-600 dark:text-teal-400">R$ ${parseFloat(product.price).toFixed(2).replace('.', ',')}</div>
             </div>
-          `;
-    }).join('')}
+          </div>
+          <button type="button" onclick="App.navigateTo('product-detail', { productId: ${product.id} })" class="text-xs font-bold text-teal-700 dark:text-teal-300 hover:underline px-2 py-1 shrink-0 cursor-pointer">
+            Ver Anúncio →
+          </button>
+        </div>
+      ` : ''}
+
+      <!-- CORPO DE MENSAGENS -->
+      <div id="chat-msgs-body" class="flex-1 overflow-y-auto p-4 space-y-3">
+        ${msgs.length === 0 ? `
+          <div id="chat-empty-intro" class="text-center py-12 space-y-2 text-gray-400">
+            <div class="text-3xl">💬</div>
+            <div class="font-bold text-xs text-gray-700 dark:text-gray-300">Inicie uma conversa com ${this.escapeHtml(partner.name)}!</div>
+            <div class="text-[11px] text-gray-400 max-w-xs mx-auto">Tire dúvidas sobre o produto, combine formas de entrega ou faça sua proposta.</div>
+          </div>
+        ` : ''}
+
+        ${msgs.map(m => this.renderMessageBubbleHTML(m, currentUserId, partnerId)).join('')}
       </div>
 
-      <div class="flex gap-2 overflow-x-auto no-scrollbar mb-2 pb-1">
+      <!-- SUGESTÕES RÁPIDAS -->
+      <div class="px-4 py-1.5 border-t border-gray-100 dark:border-gray-800/80 bg-gray-50/50 dark:bg-gray-900/30 flex gap-2 overflow-x-auto no-scrollbar">
         ${[
-        'O produto ainda está disponível?',
-        'Qual o valor do frete?',
-        'Aceita proposta de valor?'
-      ].map(q => `
-          <button type="button" onclick="document.getElementById('chat-input-text').value='${q}'" class="text-[11px] font-medium bg-white dark:bg-gray-800 border dark:border-gray-700 px-3 py-1 rounded-full whitespace-nowrap hover:border-teal-500 transition text-gray-600 dark:text-gray-300 cursor-pointer">
-            ${q}
+          'Olá, o produto ainda está disponível?',
+          'Qual o valor do frete?',
+          'Aceita negociar o valor?',
+          'Pode me enviar mais fotos/detalhes?'
+        ].map(q => `
+          <button type="button" onclick="App.applyQuickQuestion('${this.escapeHtml(q)}')" class="text-[11px] font-medium bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-1 rounded-full whitespace-nowrap hover:border-teal-500 hover:text-teal-600 dark:hover:text-teal-400 transition text-gray-600 dark:text-gray-300 cursor-pointer shadow-2xs">
+            ${this.escapeHtml(q)}
           </button>
         `).join('')}
       </div>
 
-      <form onsubmit="App.sendChatMessage(event, ${partnerId})" class="flex gap-2">
-        <input type="text" id="chat-input-text" required placeholder="Digite sua mensagem..." class="flex-1 px-4 py-2.5 border rounded-xl dark:bg-gray-700 dark:border-gray-600 text-sm">
-        <button type="submit" class="btn-primary text-xs py-2 px-4 cursor-pointer">Enviar</button>
+      <!-- FORMULÁRIO DE ENVIO -->
+      <form onsubmit="App.sendChatMessage(event, ${partnerId}, ${product ? product.id : (productId || 'null')})" class="p-3 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800 flex items-center gap-2">
+        <input 
+          type="text" 
+          id="chat-input-text" 
+          autocomplete="off" 
+          required 
+          placeholder="Digite sua mensagem aqui..." 
+          class="flex-1 px-4 py-2.5 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-2xl focus:outline-none focus:ring-2 focus:ring-teal-500 transition text-gray-900 dark:text-white"
+        >
+        <button type="submit" id="chat-send-btn" class="btn-primary text-xs py-2.5 px-5 rounded-2xl flex items-center gap-1.5 font-bold cursor-pointer shrink-0">
+          <span>Enviar</span>
+          <i data-lucide="send" class="w-3.5 h-3.5"></i>
+        </button>
       </form>
     `;
 
-    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
     if (typeof lucide !== 'undefined') {
       lucide.createIcons();
     }
 
-    const body = document.getElementById('chat-msgs-body');
-    if (body) body.scrollTop = body.scrollHeight;
+    this.scrollChatToBottom();
+
+    // Ativa polling delta inteligente a cada 2.5 segundos
+    ChatManager.startPolling(newMessages => {
+      this.appendIncomingChatMessages(newMessages, partnerId);
+    });
+
+    // Atualiza contadores visuais do cabeçalho
+    this.updateHeaderUI();
   },
 
-  async sendChatMessage(e, partnerId) {
+  renderMessageBubbleHTML(m, currentUserId, partnerId) {
+    const isMe = parseInt(m.sender_id, 10) === currentUserId;
+    const timeFormatted = this.formatChatTime(m.created_at);
+    const bubbleId = `chat-msg-${m.id}`;
+
+    return `
+      <div id="${bubbleId}" class="flex ${isMe ? 'justify-end' : 'justify-start'} group animate-fade-in">
+        <div class="relative max-w-[80%] sm:max-w-md px-4 py-2.5 rounded-2xl text-sm shadow-2xs ${
+          isMe 
+            ? 'bg-teal-600 text-white rounded-br-xs' 
+            : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 rounded-bl-xs'
+        }">
+          <div class="break-words leading-relaxed">${this.escapeHtml(m.message)}</div>
+          <div class="flex items-center justify-end gap-1.5 mt-1 text-[10px] ${isMe ? 'text-teal-100/90' : 'text-gray-400'}">
+            <span>${timeFormatted}</span>
+            ${isMe ? `<span class="msg-status font-bold">${m.is_read ? '✓✓' : '✓'}</span>` : ''}
+            ${isMe ? `
+              <button 
+                type="button" 
+                onclick="App.deleteChatMessage(${m.id}, ${partnerId})" 
+                title="Apagar mensagem" 
+                class="msg-delete-btn opacity-0 group-hover:opacity-100 hover:text-red-300 ml-1 transition cursor-pointer text-xs"
+              >
+                🗑️
+              </button>
+            ` : ''}
+          </div>
+        </div>
+      </div>
+    `;
+  },
+
+  appendIncomingChatMessages(newMessages, partnerId) {
+    if (!Array.isArray(newMessages) || newMessages.length === 0) return;
+    const body = document.getElementById('chat-msgs-body');
+    if (!body) return;
+
+    const intro = document.getElementById('chat-empty-intro');
+    if (intro) intro.remove();
+
+    const currentUserId = AuthManager.currentUser ? parseInt(AuthManager.currentUser.id, 10) : 0;
+    let appendedCount = 0;
+
+    newMessages.forEach(m => {
+      if (document.getElementById(`chat-msg-${m.id}`)) return;
+
+      const tempHolder = document.createElement('div');
+      tempHolder.innerHTML = this.renderMessageBubbleHTML(m, currentUserId, partnerId);
+      if (tempHolder.firstElementChild) {
+        body.appendChild(tempHolder.firstElementChild);
+        appendedCount++;
+      }
+    });
+
+    if (appendedCount > 0) {
+      this.scrollChatToBottom();
+      this.refreshConversationsList(partnerId);
+    }
+  },
+
+  async sendChatMessage(e, partnerId, productId = null) {
     e.preventDefault();
     const input = document.getElementById('chat-input-text');
+    if (!input) return;
     const text = input.value.trim();
-    if (!text) {
-      ToastManager.show('Digite uma mensagem válida antes de enviar.', 'error');
-      return;
-    }
+    if (!text) return;
 
     input.value = '';
-    await ChatManager.sendMessage(partnerId, text);
-    this.selectChatPartner(partnerId);
+    input.focus();
+
+    const intro = document.getElementById('chat-empty-intro');
+    if (intro) intro.remove();
+
+    const body = document.getElementById('chat-msgs-body');
+    const tempId = 'temp_' + Date.now();
+    const nowTime = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+    // Inserção otimista instantânea na tela
+    if (body) {
+      const tempHolder = document.createElement('div');
+      tempHolder.innerHTML = `
+        <div id="chat-msg-${tempId}" class="flex justify-end group animate-fade-in">
+          <div class="relative max-w-[80%] sm:max-w-md px-4 py-2.5 rounded-2xl text-sm shadow-2xs bg-teal-600 text-white rounded-br-xs">
+            <div class="break-words leading-relaxed">${this.escapeHtml(text)}</div>
+            <div class="flex items-center justify-end gap-1.5 mt-1 text-[10px] text-teal-100/90">
+              <span>${nowTime}</span>
+              <span class="msg-status">Enviando...</span>
+            </div>
+          </div>
+        </div>
+      `;
+      if (tempHolder.firstElementChild) {
+        body.appendChild(tempHolder.firstElementChild);
+        this.scrollChatToBottom();
+      }
+    }
+
+    try {
+      const res = await ChatManager.sendMessage(partnerId, text, productId);
+      if (res.success && res.message) {
+        const sent = res.message;
+        if (parseInt(sent.id, 10) > ChatManager.lastMessageId) {
+          ChatManager.lastMessageId = parseInt(sent.id, 10);
+        }
+
+        const tempEl = document.getElementById(`chat-msg-${tempId}`);
+        if (tempEl) {
+          tempEl.id = `chat-msg-${sent.id}`;
+          const statusEl = tempEl.querySelector('.msg-status');
+          if (statusEl) statusEl.innerHTML = '✓';
+
+          const timeContainer = tempEl.querySelector('.text-\\[10px\\]');
+          if (timeContainer) {
+            const delBtn = document.createElement('button');
+            delBtn.type = 'button';
+            delBtn.setAttribute('onclick', `App.deleteChatMessage(${sent.id}, ${partnerId})`);
+            delBtn.title = 'Apagar mensagem';
+            delBtn.className = 'msg-delete-btn opacity-0 group-hover:opacity-100 hover:text-red-300 ml-1 transition cursor-pointer text-xs';
+            delBtn.innerText = '🗑️';
+            timeContainer.appendChild(delBtn);
+          }
+        }
+
+        this.refreshConversationsList(partnerId);
+      } else {
+        ToastManager.show(res.error || 'Não foi possível enviar a mensagem.', 'error');
+        const tempEl = document.getElementById(`chat-msg-${tempId}`);
+        if (tempEl) {
+          const statusEl = tempEl.querySelector('.msg-status');
+          if (statusEl) statusEl.innerHTML = '⚠️ Não enviada';
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      ToastManager.show('Erro de conexão ao enviar mensagem.', 'error');
+    }
   },
 
   async deleteChatMessage(msgId, partnerId) {
-    if (confirm('Deseja apagar esta mensagem enviada?')) {
-      const res = await fetch('api/messenger.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'delete_message', message_id: msgId })
-      });
-      const data = await res.json();
-      if (data.success) {
-        ToastManager.show('Mensagem apagada', 'info');
-        this.selectChatPartner(partnerId);
+    if (!confirm('Deseja apagar esta mensagem enviada?')) return;
+
+    const res = await ChatManager.deleteMessage(msgId);
+    if (res.success) {
+      const el = document.getElementById(`chat-msg-${msgId}`);
+      if (el) {
+        el.style.opacity = '0';
+        el.style.transform = 'scale(0.95)';
+        el.style.transition = 'all 0.2s ease';
+        setTimeout(() => el.remove(), 200);
+      }
+      ToastManager.show('Mensagem apagada com sucesso.', 'info');
+      this.refreshConversationsList(partnerId);
+    } else {
+      ToastManager.show(res.error || 'Erro ao apagar mensagem.', 'error');
+    }
+  },
+
+  async refreshConversationsList(activePartnerId = null) {
+    const convsList = document.getElementById('chat-convs-list');
+    if (!convsList) return;
+
+    const convsRes = await ChatManager.getConversations();
+    if (!convsRes.success) {
+      convsList.innerHTML = `<div class="text-xs text-red-400 p-2">Erro ao carregar conversas.</div>`;
+      return;
+    }
+
+    const convs = convsRes.conversations || [];
+    let totalUnread = 0;
+    convs.forEach(c => totalUnread += (c.unread_count || 0));
+
+    const sideBadge = document.getElementById('chat-sidebar-badge');
+    if (sideBadge) {
+      if (totalUnread > 0) {
+        sideBadge.innerText = totalUnread;
+        sideBadge.classList.remove('hidden');
+      } else {
+        sideBadge.classList.add('hidden');
       }
     }
+
+    if (convs.length === 0) {
+      convsList.innerHTML = `
+        <div class="text-center py-10 px-3 text-gray-400 space-y-2">
+          <i data-lucide="message-square-dashed" class="w-8 h-8 mx-auto text-gray-300 dark:text-gray-600"></i>
+          <div class="text-xs font-bold text-gray-600 dark:text-gray-300">Nenhuma conversa ainda</div>
+          <div class="text-[11px] text-gray-400">Clique em "Chat" na página de qualquer anúncio para conversar com o vendedor.</div>
+        </div>
+      `;
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+      return;
+    }
+
+    convsList.innerHTML = convs.map(c => {
+      const isActive = activePartnerId && parseInt(c.user.id, 10) === parseInt(activePartnerId, 10);
+      const avatar = c.user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(c.user.name)}&background=0d9488&color=fff&size=60`;
+      const lastMsgText = c.last_message ? this.escapeHtml(c.last_message.message) : 'Iniciou a conversa';
+      const time = c.last_message ? this.formatChatTime(c.last_message.created_at) : '';
+
+      return `
+        <div 
+          onclick="App.selectChatPartner(${c.user.id})" 
+          class="p-3 rounded-2xl border transition cursor-pointer flex items-center gap-3 ${
+            isActive 
+              ? 'border-teal-500 bg-teal-50/60 dark:bg-teal-950/40 shadow-xs' 
+              : 'border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800/80 hover:border-teal-300 dark:hover:border-teal-700'
+          }"
+        >
+          <div class="relative shrink-0">
+            <img src="${avatar}" class="w-10 h-10 rounded-full object-cover border border-gray-200 dark:border-gray-700" alt="${this.escapeHtml(c.user.name)}">
+            ${c.unread_count > 0 ? `
+              <span class="absolute -top-1 -right-1 bg-amber-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+                ${c.unread_count}
+              </span>
+            ` : ''}
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center justify-between gap-1 mb-0.5">
+              <div class="font-bold text-xs text-gray-900 dark:text-white truncate">
+                ${this.escapeHtml(c.user.name)}
+              </div>
+              <span class="text-[10px] text-gray-400 shrink-0">${time}</span>
+            </div>
+            <div class="text-[11px] text-gray-500 dark:text-gray-400 truncate ${c.unread_count > 0 ? 'font-bold text-gray-900 dark:text-white' : ''}">
+              ${lastMsgText}
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
+  },
+
+  toggleMobileChatList(showList) {
+    const sidebar = document.getElementById('chat-sidebar');
+    const win = document.getElementById('chat-window');
+    if (!sidebar || !win) return;
+
+    if (showList) {
+      ChatManager.stopPolling();
+      sidebar.classList.remove('hidden');
+      win.classList.add('hidden');
+      win.classList.remove('flex');
+      this.refreshConversationsList();
+    } else {
+      sidebar.classList.add('hidden');
+      win.classList.remove('hidden');
+      win.classList.add('flex');
+    }
+  },
+
+  scrollChatToBottom() {
+    const body = document.getElementById('chat-msgs-body');
+    if (body) {
+      body.scrollTo({ top: body.scrollHeight, behavior: 'smooth' });
+    }
+  },
+
+  applyQuickQuestion(questionText) {
+    const input = document.getElementById('chat-input-text');
+    if (input) {
+      input.value = questionText;
+      input.focus();
+    }
+  },
+
+  async refreshActiveChat(partnerId, productId = null) {
+    ToastManager.show('Atualizando conversa...', 'info');
+    await this.selectChatPartner(partnerId, productId);
   },
 
   // ----------------------------------------------------

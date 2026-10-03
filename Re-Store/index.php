@@ -157,6 +157,24 @@ $assetVersion = file_exists(__DIR__ . '/assets/js/app.js') ? filemtime(__DIR__ .
             </span>
           </button>
 
+          <!-- CHAT / MENSAGENS BUTTON (DESKTOP) -->
+          <button 
+            type="button" 
+            onclick="App.navigateTo('chat')" 
+            aria-label="Chat e Mensagens"
+            title="Chat com Vendedores e Usuários"
+            class="relative p-2 rounded-full text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition cursor-pointer pointer-events-auto"
+          >
+            <i data-lucide="message-circle" class="w-5 h-5 pointer-events-none"></i>
+
+            <span 
+              id="chat-header-badge" 
+              class="absolute -top-1 -right-1 bg-teal-500 text-white text-[10px] font-bold w-4 h-4 rounded-full items-center justify-center hidden pointer-events-none"
+            >
+              0
+            </span>
+          </button>
+
           <!-- CART BUTTON -->
           <button 
             type="button" 
@@ -237,9 +255,17 @@ $assetVersion = file_exists(__DIR__ . '/assets/js/app.js') ? filemtime(__DIR__ .
       <!-- CHAT -->
       <button 
         onclick="App.navigateTo('chat')" 
-        class="flex flex-col items-center text-xs text-gray-600 dark:text-gray-400 hover:text-teal-600"
+        class="flex flex-col items-center text-xs text-gray-600 dark:text-gray-400 hover:text-teal-600 relative"
       >
-        <i data-lucide="message-circle" class="w-5 h-5 mb-1"></i>
+        <div class="relative">
+          <i data-lucide="message-circle" class="w-5 h-5 mb-1 pointer-events-none"></i>
+          <span 
+            id="chat-mobile-badge" 
+            class="absolute -top-1 -right-2 bg-teal-500 text-white text-[9px] font-bold w-3.5 h-3.5 rounded-full items-center justify-center hidden pointer-events-none"
+          >
+            0
+          </span>
+        </div>
         <span>Chat</span>
       </button>
 
