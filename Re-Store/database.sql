@@ -166,7 +166,7 @@ CREATE TABLE IF NOT EXISTS review_votes (
     review_id INT NOT NULL,
     user_id INT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY unique_user_review (review_id, user_id),
+    CONSTRAINT unique_user_review UNIQUE (review_id, user_id),
     FOREIGN KEY (review_id) REFERENCES reviews(id) ON DELETE CASCADE,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
