@@ -774,7 +774,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // UPLOAD DO AVATAR
         // ----------------------------------------------------
 
-        $avatarUrl = null;
+        $avatarUrl = 'uploads/avatars/13360247-de-icone-de-foto-avatar-padrao-simbolo-de-sinal-de-perfil-de-midia-social-vetor.jpg';
 
 
         if (
