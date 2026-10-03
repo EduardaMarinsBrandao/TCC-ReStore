@@ -32,9 +32,29 @@ function initializeDatabase() {
     }
 
     $flagFile = __DIR__ . '/.db_initialized';
-    if ($tableExists && file_exists($flagFile)) {
-        $alreadyRan = true;
-        return;
+    if ($tableExists) {
+        try {
+            $checkSup = $db->prepare("SELECT id FROM users WHERE LOWER(TRIM(email)) = 'tccdssuporte@gmail.com' LIMIT 1");
+            $checkSup->execute();
+            if (!$checkSup->fetch()) {
+                $passHash = password_hash('Suporte@ReStore2026', PASSWORD_DEFAULT);
+                $supAvatar = 'https://ui-avatars.com/api/?name=Suporte+ReStore&background=0d9488&color=fff&size=128';
+                try {
+                    $db->prepare("INSERT INTO users (email, name, password_hash, avatar, is_verified_business, business_name, email_verified) VALUES ('tccdssuporte@gmail.com', 'Suporte Re-Store', ?, ?, 1, 'Central de Atendimento Oficial', 1)")->execute([$passHash, $supAvatar]);
+                } catch (Exception $e1) {
+                    try {
+                        $db->prepare("INSERT INTO users (email, name, password_hash, avatar, is_verified_business, business_name) VALUES ('tccdssuporte@gmail.com', 'Suporte Re-Store', ?, ?, 1, 'Central de Atendimento Oficial')")->execute([$passHash, $supAvatar]);
+                    } catch (Exception $e2) {
+                        $db->prepare("INSERT INTO users (email, name, password_hash, avatar) VALUES ('tccdssuporte@gmail.com', 'Suporte Re-Store', ?, ?)")->execute([$passHash, $supAvatar]);
+                    }
+                }
+            }
+        } catch (Exception $e) {}
+
+        if (file_exists($flagFile)) {
+            $alreadyRan = true;
+            return;
+        }
     }
 
     if ($driver === 'sqlite') {

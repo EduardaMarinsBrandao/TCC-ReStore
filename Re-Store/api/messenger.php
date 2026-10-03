@@ -9,20 +9,93 @@ require_once __DIR__ . '/../config/db_init.php';
 initializeDatabase();
 $db = getDbConnection();
 
-if (!isset($_SESSION['user_id'])) {
-    echo json_encode(['success' => false, 'error' => 'Não autenticado.']);
-    exit;
-}
-
 $rawInput = file_get_contents('php://input');
+if (!empty($rawInput) && function_exists('mb_check_encoding') && !mb_check_encoding($rawInput, 'UTF-8')) {
+    $rawInput = mb_convert_encoding($rawInput, 'UTF-8', 'ISO-8859-1, Windows-1252, UTF-8');
+}
 $data = json_decode($rawInput, true) ?? [];
 if (empty($data) && !empty($_POST)) {
     $data = $_POST;
 }
 
-$userId = (int)$_SESSION['user_id'];
 $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? $_POST['action'] ?? $data['action'] ?? 'conversations';
+
+// ----------------------------------------------------
+// 0.1 LOCALIZAR CONTA OFICIAL DE SUPORTE (Pública)
+// ----------------------------------------------------
+if ($method === 'GET' && ($action === 'get_support_user' || $action === 'support_user')) {
+    $supportEmail = 'tccdssuporte@gmail.com';
+    try {
+        $stmt = $db->prepare("SELECT id, name, avatar, is_verified_business, business_name FROM users WHERE LOWER(TRIM(email)) = LOWER(?) LIMIT 1");
+        $stmt->execute([$supportEmail]);
+        $supportUser = $stmt->fetch();
+
+        if (!$supportUser) {
+            $tempPass = password_hash('Suporte@ReStore2026', PASSWORD_DEFAULT);
+            $supAvatar = 'https://ui-avatars.com/api/?name=Suporte+ReStore&background=0d9488&color=fff&size=128';
+            try {
+                $insStmt = $db->prepare("INSERT INTO users (email, name, password_hash, avatar, is_verified_business, business_name, email_verified) VALUES (?, ?, ?, ?, 1, ?, 1)");
+                $insStmt->execute([
+                    $supportEmail,
+                    'Suporte Re-Store',
+                    $tempPass,
+                    $supAvatar,
+                    'Central de Atendimento Oficial'
+                ]);
+            } catch (Exception $e1) {
+                try {
+                    $insStmt = $db->prepare("INSERT INTO users (email, name, password_hash, avatar, is_verified_business, business_name) VALUES (?, ?, ?, ?, 1, ?)");
+                    $insStmt->execute([
+                        $supportEmail,
+                        'Suporte Re-Store',
+                        $tempPass,
+                        $supAvatar,
+                        'Central de Atendimento Oficial'
+                    ]);
+                } catch (Exception $e2) {
+                    try {
+                        $insStmt = $db->prepare("INSERT INTO users (email, name, password_hash, avatar) VALUES (?, ?, ?, ?)");
+                        $insStmt->execute([
+                            $supportEmail,
+                            'Suporte Re-Store',
+                            $tempPass,
+                            $supAvatar
+                        ]);
+                    } catch (Exception $e3) {}
+                }
+            }
+            $stmt = $db->prepare("SELECT id, name, avatar, is_verified_business, business_name FROM users WHERE LOWER(TRIM(email)) = LOWER(?) LIMIT 1");
+            $stmt->execute([$supportEmail]);
+            $supportUser = $stmt->fetch();
+        }
+
+        if ($supportUser) {
+            echo json_encode(['success' => true, 'support_user' => $supportUser]);
+            exit;
+        } else {
+            echo json_encode(['success' => false, 'error' => 'Conta de suporte não encontrada.']);
+            exit;
+        }
+    } catch (Exception $e) {
+        $stmt = $db->prepare("SELECT id, name, avatar, is_verified_business, business_name FROM users WHERE LOWER(TRIM(email)) = LOWER(?) LIMIT 1");
+        $stmt->execute([$supportEmail]);
+        $supportUser = $stmt->fetch();
+        if ($supportUser) {
+            echo json_encode(['success' => true, 'support_user' => $supportUser]);
+            exit;
+        }
+        echo json_encode(['success' => false, 'error' => 'Falha ao buscar conta de suporte: ' . $e->getMessage()]);
+        exit;
+    }
+}
+
+if (!isset($_SESSION['user_id'])) {
+    echo json_encode(['success' => false, 'error' => 'Não autenticado.']);
+    exit;
+}
+
+$userId = (int)$_SESSION['user_id'];
 
 // ----------------------------------------------------
 // 0. CONTADOR DE MENSAGENS NÃO LIDAS TOTAIS
@@ -34,36 +107,6 @@ if ($method === 'GET' && $action === 'unread_count') {
     $unreadCount = $row ? (int)$row['unread'] : 0;
 
     echo json_encode(['success' => true, 'unread_count' => $unreadCount]);
-    exit;
-}
-
-// ----------------------------------------------------
-// 0.1 LOCALIZAR CONTA OFICIAL DE SUPORTE
-// ----------------------------------------------------
-if ($method === 'GET' && ($action === 'get_support_user' || $action === 'support_user')) {
-    $supportEmail = 'tccdssuporte@gmail.com';
-    $stmt = $db->prepare("SELECT id, name, avatar, is_verified_business, business_name FROM users WHERE email = ? LIMIT 1");
-    $stmt->execute([$supportEmail]);
-    $supportUser = $stmt->fetch();
-
-    if (!$supportUser) {
-        // Fallback: se ainda não foi registrada no banco de dados local, cria/provisiona a conta
-        $tempPass = password_hash('Suporte@ReStore2026', PASSWORD_DEFAULT);
-        $insStmt = $db->prepare("INSERT INTO users (email, name, password_hash, avatar, is_verified_business, business_name) VALUES (?, ?, ?, ?, 1, ?)");
-        $insStmt->execute([
-            $supportEmail,
-            'Suporte Re-Store',
-            $tempPass,
-            'https://ui-avatars.com/api/?name=Suporte+ReStore&background=0d9488&color=fff&size=128',
-            'Central de Atendimento Oficial'
-        ]);
-        $newId = (int)$db->lastInsertId();
-        $stmt = $db->prepare("SELECT id, name, avatar, is_verified_business, business_name FROM users WHERE id = ?");
-        $stmt->execute([$newId]);
-        $supportUser = $stmt->fetch();
-    }
-
-    echo json_encode(['success' => true, 'support_user' => $supportUser]);
     exit;
 }
 
@@ -134,9 +177,9 @@ if ($method === 'GET' && ($action === 'messages' || $action === 'get_messages'))
     // 2.1 Polling Delta Rápido (apenas mensagens novas com ID > after_id)
     if ($afterId > 0) {
         $sql = "SELECT m.id, m.sender_id, m.receiver_id, m.product_id, m.message, m.is_read, m.created_at,
-                       s.name as sender_name, s.avatar as sender_avatar
+                       COALESCE(s.name, 'Usuário') as sender_name, s.avatar as sender_avatar
                 FROM messages m 
-                JOIN users s ON m.sender_id = s.id 
+                LEFT JOIN users s ON m.sender_id = s.id 
                 WHERE ((m.sender_id = ? AND m.receiver_id = ?) OR (m.sender_id = ? AND m.receiver_id = ?))
                   AND m.id > ?
                 ORDER BY m.id ASC";
@@ -160,9 +203,9 @@ if ($method === 'GET' && ($action === 'messages' || $action === 'get_messages'))
        ->execute([$userId, $withUserId]);
 
     $sql = "SELECT m.id, m.sender_id, m.receiver_id, m.product_id, m.message, m.is_read, m.created_at,
-                   s.name as sender_name, s.avatar as sender_avatar
+                   COALESCE(s.name, 'Usuário') as sender_name, s.avatar as sender_avatar
             FROM messages m 
-            JOIN users s ON m.sender_id = s.id 
+            LEFT JOIN users s ON m.sender_id = s.id 
             WHERE (m.sender_id = ? AND m.receiver_id = ?) OR (m.sender_id = ? AND m.receiver_id = ?) 
             ORDER BY m.id ASC";
     
@@ -176,8 +219,15 @@ if ($method === 'GET' && ($action === 'messages' || $action === 'get_messages'))
     $partner = $partnerStmt->fetch();
 
     if (!$partner) {
-        echo json_encode(['success' => false, 'error' => 'Usuário interlocutor não encontrado.']);
-        exit;
+        $supStmt = $db->prepare("SELECT id, name, avatar, is_verified_business, business_name FROM users WHERE LOWER(TRIM(email)) = 'tccdssuporte@gmail.com' LIMIT 1");
+        $supStmt->execute();
+        $supportPartner = $supStmt->fetch();
+        if ($supportPartner && (int)$supportPartner['id'] === $withUserId) {
+            $partner = $supportPartner;
+        } else {
+            echo json_encode(['success' => false, 'error' => 'Usuário interlocutor não encontrado.']);
+            exit;
+        }
     }
 
     // Identificar produto associado (se fornecido via GET ou extraído da última mensagem que teve produto)
@@ -213,9 +263,6 @@ if ($method === 'GET' && ($action === 'messages' || $action === 'get_messages'))
 // 3. ENVIAR NOVA MENSAGEM
 // ----------------------------------------------------
 if ($method === 'POST' && ($action === 'send' || $action === 'send_message')) {
-    $rawInput = file_get_contents('php://input');
-    $data = json_decode($rawInput, true) ?? $_POST;
-
     $receiverId = (int)($data['receiver_id'] ?? 0);
     $productId = isset($data['product_id']) && (int)$data['product_id'] > 0 ? (int)$data['product_id'] : null;
     $messageText = trim($data['message'] ?? '');
@@ -242,9 +289,9 @@ if ($method === 'POST' && ($action === 'send' || $action === 'send_message')) {
     $msgId = (int)$db->lastInsertId();
 
     $msgStmt = $db->prepare("SELECT m.id, m.sender_id, m.receiver_id, m.product_id, m.message, m.is_read, m.created_at,
-                                    s.name as sender_name, s.avatar as sender_avatar
+                                    COALESCE(s.name, 'Usuário') as sender_name, s.avatar as sender_avatar
                              FROM messages m 
-                             JOIN users s ON m.sender_id = s.id 
+                             LEFT JOIN users s ON m.sender_id = s.id 
                              WHERE m.id = ?");
     $msgStmt->execute([$msgId]);
     $sentMsg = $msgStmt->fetch();
@@ -257,8 +304,6 @@ if ($method === 'POST' && ($action === 'send' || $action === 'send_message')) {
 // 4. APAGAR MENSAGEM ENVIADA
 // ----------------------------------------------------
 if ($method === 'POST' && ($action === 'delete' || $action === 'delete_message')) {
-    $rawInput = file_get_contents('php://input');
-    $data = json_decode($rawInput, true) ?? $_POST;
     $msgId = (int)($data['message_id'] ?? 0);
 
     $stmt = $db->prepare("SELECT * FROM messages WHERE id = ? AND sender_id = ?");

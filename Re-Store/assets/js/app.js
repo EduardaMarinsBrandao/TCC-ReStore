@@ -9,6 +9,8 @@ const App = {
   productsCache: null,
   favoriteIds: [], // IDs dos produtos favoritados pelo usuário
   selectedRole: 'buyer', // 'buyer' ou 'seller'
+  currentChatPartnerId: null,
+  currentChatView: 'sidebar', // 'sidebar' ou 'chat'
 
   async init() {
     await AuthManager.checkAuth();
@@ -2289,8 +2291,12 @@ const App = {
       return;
     }
 
-    if (AuthManager.currentUser.email === 'tccdssuporte@gmail.com') {
+    const currentEmail = (AuthManager.currentUser.email || '').toLowerCase().trim();
+    if (currentEmail === 'tccdssuporte@gmail.com') {
       ToastManager.show('Você está logado na conta de Suporte. Selecione uma conversa na lista para atender.', 'info');
+      if (this.currentScreen !== 'chat') {
+        this.navigateTo('chat');
+      }
       return;
     }
 
@@ -2304,13 +2310,14 @@ const App = {
           ToastManager.show('Você é o operador da conta de suporte.', 'info');
           return;
         }
+        this.chatParams = { withUserId: supportId };
         if (this.currentScreen !== 'chat') {
           this.navigateTo('chat', { withUserId: supportId });
         } else {
           await this.selectChatPartner(supportId);
         }
       } else {
-        ToastManager.show('Não foi possível conectar ao suporte agora. Tente novamente em instantes.', 'error');
+        ToastManager.show((res && res.error) ? res.error : 'Não foi possível conectar ao suporte agora. Tente novamente em instantes.', 'error');
       }
     } catch (err) {
       console.error('Erro ao abrir chat de suporte:', err);
@@ -2339,26 +2346,29 @@ const App = {
     const targetPartnerId = this.chatParams?.withUserId ? parseInt(this.chatParams.withUserId, 10) : null;
     const targetProductId = this.chatParams?.productId ? parseInt(this.chatParams.productId, 10) : null;
 
+    this.currentChatPartnerId = targetPartnerId;
+    this.currentChatView = targetPartnerId ? 'chat' : 'sidebar';
+
     container.innerHTML = `
       <div class="h-[78vh] min-h-[520px] rounded-3xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800 flex overflow-hidden shadow-xl animate-fade-in relative">
         <!-- BARRA LATERAL: LISTA DE CONVERSAS -->
-        <div id="chat-sidebar" class="w-full md:w-80 lg:w-96 md:shrink-0 border-r border-gray-200 dark:border-gray-800 flex flex-col bg-gray-50/50 dark:bg-gray-900/30 overflow-hidden">
-          <div class="p-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
+        <div id="chat-sidebar" class="w-full md:w-80 lg:w-96 md:shrink-0 border-r border-gray-200 dark:border-gray-800 flex md:flex flex-col bg-gray-50/80 dark:bg-gray-900/50 overflow-hidden">
+          <div class="p-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between bg-white dark:bg-gray-800/80">
             <div class="flex items-center gap-2">
               <h2 class="font-extrabold text-base text-gray-900 dark:text-white">Mensagens</h2>
               <span id="chat-sidebar-badge" class="hidden bg-teal-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">0</span>
             </div>
-            <button type="button" onclick="App.refreshConversationsList()" title="Atualizar conversas" class="text-gray-400 hover:text-teal-600 transition p-1.5 rounded-lg cursor-pointer">
+            <button type="button" onclick="App.refreshConversationsList()" title="Atualizar conversas" class="text-gray-400 hover:text-teal-600 dark:hover:text-teal-400 transition p-1.5 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700/60">
               <i data-lucide="rotate-cw" class="w-4 h-4"></i>
             </button>
           </div>
 
-          <!-- BOTÃO DESTACADO: SUPORTE OFICIAL RE-STORE -->
-          <div class="p-3 pb-2 border-b border-gray-100 dark:border-gray-800/80">
+          <!-- BOTÃO DESTACADO: SUPORTE OFICIAL RE-STORE (ALTO CONTRASTE E COMPATÍVEL COM MODO CLARO E ESCURO) -->
+          <div class="p-3 pb-2.5 border-b border-gray-200 dark:border-gray-800 bg-white/70 dark:bg-gray-800/40">
             <button 
               type="button" 
               onclick="App.openSupportChat()" 
-              class="w-full p-2.5 rounded-2xl bg-linear-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white flex items-center justify-between shadow-xs transition-all duration-200 cursor-pointer group"
+              class="w-full p-2.5 rounded-2xl btn-support-banner flex items-center justify-between transition-all duration-200 cursor-pointer group shadow-sm"
               title="Falar diretamente com a equipe de suporte"
             >
               <div class="flex items-center gap-2.5">
@@ -2366,11 +2376,11 @@ const App = {
                   <i data-lucide="headphones" class="w-4 h-4 pointer-events-none"></i>
                 </div>
                 <div class="text-left">
-                  <div class="font-bold text-xs flex items-center gap-1.5">
+                  <div class="font-bold text-xs flex items-center gap-1.5 text-white">
                     <span>Falar com o Suporte</span>
                     <span class="text-[9px] bg-white/25 px-1.5 py-0.5 rounded-full font-bold">Oficial</span>
                   </div>
-                  <div class="text-[10px] text-teal-100">Atendimento e dúvidas do Re-Store</div>
+                  <div class="text-[10px] text-teal-100 subtext">Atendimento e dúvidas do Re-Store</div>
                 </div>
               </div>
               <i data-lucide="chevron-right" class="w-4 h-4 text-white/80 group-hover:translate-x-0.5 transition-transform pointer-events-none"></i>
@@ -2378,18 +2388,18 @@ const App = {
           </div>
 
           <div id="chat-convs-list" class="flex-1 overflow-y-auto p-3 space-y-2">
-            <div class="text-center py-8 text-xs text-gray-400">Carregando conversas...</div>
+            <div class="text-center py-8 text-xs text-gray-400 dark:text-gray-500">Carregando conversas...</div>
           </div>
         </div>
 
         <!-- JANELA PRINCIPAL DO CHAT -->
         <div id="chat-window" class="hidden md:flex flex-1 min-w-0 flex-col justify-between bg-white dark:bg-gray-900 relative h-full overflow-hidden">
-          <div class="text-center my-auto p-6 space-y-3 text-gray-400">
-            <div class="w-16 h-16 rounded-full bg-teal-50 dark:bg-teal-950/50 flex items-center justify-center mx-auto text-teal-600 dark:text-teal-400 mb-1">
+          <div class="text-center my-auto p-6 space-y-3 text-gray-500 dark:text-gray-400">
+            <div class="w-16 h-16 rounded-full bg-teal-50 dark:bg-teal-950/50 flex items-center justify-center mx-auto text-teal-600 dark:text-teal-400 mb-1 border border-teal-100 dark:border-teal-900">
               <i data-lucide="messages-square" class="w-8 h-8"></i>
             </div>
-            <div class="font-bold text-sm text-gray-700 dark:text-gray-200">Central de Mensagens Re-Store</div>
-            <div class="text-xs text-gray-400 max-w-xs mx-auto">Selecione uma conversa ao lado para responder ou tire suas dúvidas diretamente com nossa equipe.</div>
+            <div class="font-bold text-sm text-gray-800 dark:text-gray-100">Central de Mensagens Re-Store</div>
+            <div class="text-xs text-gray-500 dark:text-gray-400 max-w-xs mx-auto leading-relaxed">Selecione uma conversa ao lado para responder ou tire suas dúvidas diretamente com nossa equipe.</div>
             <div class="pt-2">
               <button 
                 type="button" 
@@ -2409,6 +2419,9 @@ const App = {
       lucide.createIcons();
     }
 
+    // Configura layout garantindo que a barra lateral permaneça sempre visível no desktop
+    this.updateChatLayout(this.currentChatView);
+
     // Carrega lista lateral de conversas
     await this.refreshConversationsList(targetPartnerId);
 
@@ -2418,33 +2431,75 @@ const App = {
     }
   },
 
-  async selectChatPartner(partnerId, productId = null) {
-    partnerId = parseInt(partnerId, 10);
-    ChatManager.stopPolling();
-
-    // Em mobile, oculta lista lateral e exibe a janela de mensagens sem conflito de classes
+  updateChatLayout(view = 'chat') {
     const sidebar = document.getElementById('chat-sidebar');
     const win = document.getElementById('chat-window');
-    if (sidebar && win) {
-      sidebar.classList.remove('flex');
-      sidebar.classList.add('hidden');
+    if (!sidebar || !win) return;
+
+    const isMobile = window.innerWidth < 768;
+
+    if (isMobile) {
+      if (view === 'sidebar') {
+        sidebar.classList.remove('hidden');
+        sidebar.classList.add('flex');
+        win.classList.remove('flex');
+        win.classList.add('hidden');
+      } else {
+        sidebar.classList.remove('flex');
+        sidebar.classList.add('hidden');
+        win.classList.remove('hidden');
+        win.classList.add('flex');
+      }
+    } else {
+      // No desktop (>= 768px): AMBOS SEMPRE VISÍVEIS lado a lado para navegação imediata
+      sidebar.classList.remove('hidden');
+      sidebar.classList.add('flex');
       win.classList.remove('hidden');
       win.classList.add('flex');
     }
+  },
+
+  async selectChatPartner(partnerId, productId = null) {
+    partnerId = parseInt(partnerId, 10);
+    if (isNaN(partnerId) || partnerId <= 0) return;
+
+    this.currentChatPartnerId = partnerId;
+    this.currentChatView = 'chat';
+    this.chatParams = { withUserId: partnerId, productId: productId };
+    ChatManager.stopPolling();
+
+    // Mantém a barra lateral e o chat no layout correto (mobile foca na conversa; desktop mantém ambos lado a lado)
+    this.updateChatLayout('chat');
+
+    // Atualiza imediatamente o destaque visual do item ativo na lista lateral
+    const convItems = document.querySelectorAll('#chat-convs-list [data-partner-id]');
+    if (convItems.length > 0) {
+      convItems.forEach(el => {
+        const id = parseInt(el.getAttribute('data-partner-id'), 10);
+        if (id === partnerId) {
+          el.className = 'p-3 rounded-2xl border transition cursor-pointer flex items-center gap-3 border-teal-500 bg-teal-50 dark:bg-teal-950/50 shadow-sm ring-1 ring-teal-500/30';
+        } else {
+          el.className = 'p-3 rounded-2xl border transition cursor-pointer flex items-center gap-3 border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800 hover:border-teal-300 dark:hover:border-teal-700 hover:bg-gray-100/50 dark:hover:bg-gray-700/50';
+        }
+      });
+    }
+
+    const win = document.getElementById('chat-window');
+    if (!win) return;
 
     win.innerHTML = `
-      <div class="text-center my-auto p-8 text-gray-400 space-y-2">
+      <div class="text-center my-auto p-8 text-gray-400 dark:text-gray-500 space-y-2">
         <div class="animate-spin inline-block w-6 h-6 border-2 border-teal-500 border-t-transparent rounded-full"></div>
         <div class="text-xs">Carregando mensagens...</div>
       </div>
     `;
 
     const res = await ChatManager.getMessages(partnerId, productId);
-    if (!res.success) {
+    if (!res || !res.success || !res.partner) {
       win.innerHTML = `
         <div class="p-6 text-center my-auto space-y-3">
-          <div class="text-sm text-red-500">${res.error || 'Não foi possível carregar a conversa.'}</div>
-          <button type="button" onclick="App.toggleMobileChatList(true)" class="btn-outline text-xs py-1.5 px-3">Voltar às Conversas</button>
+          <div class="text-sm text-red-500">${res?.error || 'Não foi possível carregar a conversa.'}</div>
+          <button type="button" onclick="App.toggleMobileChatList(true)" class="btn-outline text-xs py-1.5 px-3 cursor-pointer">Voltar às Conversas</button>
         </div>
       `;
       return;
@@ -2458,16 +2513,16 @@ const App = {
 
     win.innerHTML = `
       <!-- CABEÇALHO DO CHAT -->
-      <div class="p-3.5 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between bg-white dark:bg-gray-800 z-10 shadow-xs">
+      <div class="p-3.5 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between bg-white dark:bg-gray-800 z-10 shadow-sm">
         <div class="flex items-center gap-3">
-          <button type="button" onclick="App.toggleMobileChatList(true)" class="md:hidden p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 cursor-pointer" title="Voltar para lista">
+          <button type="button" onclick="App.toggleMobileChatList(true)" class="md:hidden p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 cursor-pointer" title="Voltar para lista">
             <i data-lucide="arrow-left" class="w-5 h-5"></i>
           </button>
           <img src="${partnerAvatar}" class="w-10 h-10 rounded-full object-cover border border-teal-500/30" alt="${this.escapeHtml(partner.name)}">
           <div>
             <div class="font-bold text-sm text-gray-900 dark:text-white flex items-center gap-1.5">
               ${this.escapeHtml(partner.name)}
-              ${partner.is_verified_business ? '<span class="text-teal-500 text-xs font-bold" title="Vendedor Verificado">✓</span>' : ''}
+              ${partner.is_verified_business ? '<span class="text-teal-600 dark:text-teal-400 text-xs font-bold" title="Vendedor Verificado">✓</span>' : ''}
             </div>
             <div class="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
               <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -2477,7 +2532,7 @@ const App = {
         </div>
 
         <div class="flex items-center gap-1">
-          <button type="button" onclick="App.refreshActiveChat(${partnerId}, ${product ? product.id : (productId || 'null')})" title="Recarregar conversa" class="p-2 text-gray-400 hover:text-teal-600 transition rounded-lg cursor-pointer">
+          <button type="button" onclick="App.refreshActiveChat(${partnerId}, ${product && product.id ? product.id : (productId ? productId : 'null')})" title="Recarregar conversa" class="p-2 text-gray-400 hover:text-teal-600 dark:hover:text-teal-400 hover:bg-gray-100 dark:hover:bg-gray-700/60 transition rounded-lg cursor-pointer">
             <i data-lucide="rotate-cw" class="w-4 h-4"></i>
           </button>
         </div>
@@ -2485,7 +2540,7 @@ const App = {
 
       <!-- CARD DO PRODUTO EM NEGOCIAÇÃO (SE HOUVER) -->
       ${product ? `
-        <div class="p-2.5 mx-4 mt-3 bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800/60 rounded-2xl flex items-center justify-between">
+        <div class="p-2.5 mx-4 mt-3 bg-teal-50/80 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800/60 rounded-2xl flex items-center justify-between shadow-sm">
           <div class="flex items-center gap-2.5 min-w-0">
             <img src="${product.image_url || 'https://images.unsplash.com/photo-1544816155-12df9643f363?w=100'}" class="w-9 h-9 rounded-xl object-cover shrink-0 border border-teal-200 dark:border-teal-700">
             <div class="min-w-0">
@@ -2500,13 +2555,13 @@ const App = {
         </div>
       ` : ''}
 
-      <!-- CORPO DE MENSAGENS -->
-      <div id="chat-msgs-body" class="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 space-y-3 min-h-0 w-full">
+      <!-- CORPO DE MENSAGENS COM CONTRASTE EQUILIBRADO NO MODO CLARO E ESCURO -->
+      <div id="chat-msgs-body" class="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 space-y-3 min-h-0 w-full chat-body-bg bg-slate-50/70 dark:bg-gray-950/40">
         ${msgs.length === 0 ? `
-          <div id="chat-empty-intro" class="text-center py-12 space-y-2 text-gray-400">
+          <div id="chat-empty-intro" class="text-center py-12 space-y-2 text-gray-400 dark:text-gray-500">
             <div class="text-3xl">💬</div>
             <div class="font-bold text-xs text-gray-700 dark:text-gray-300">Inicie uma conversa com ${this.escapeHtml(partner.name)}!</div>
-            <div class="text-[11px] text-gray-400 max-w-xs mx-auto">Tire dúvidas sobre o produto, combine formas de entrega ou faça sua proposta.</div>
+            <div class="text-[11px] text-gray-500 dark:text-gray-400 max-w-xs mx-auto">Tire dúvidas sobre o produto, combine formas de entrega ou faça sua proposta.</div>
           </div>
         ` : ''}
 
@@ -2514,7 +2569,7 @@ const App = {
       </div>
 
       <!-- SUGESTÕES RÁPIDAS -->
-      <div class="px-4 py-1.5 border-t border-gray-100 dark:border-gray-800/80 bg-gray-50/50 dark:bg-gray-900/30 flex gap-2 overflow-x-auto no-scrollbar">
+      <div class="px-4 py-2 border-t border-gray-200 dark:border-gray-800/80 bg-white dark:bg-gray-900 flex gap-2 overflow-x-auto no-scrollbar">
         ${(partner.name.toLowerCase().includes('suporte') || (partner.business_name && partner.business_name.toLowerCase().includes('suporte')) ? [
           'Como funciona o sistema de pontos e cupons?',
           'Preciso de ajuda com um pedido meu',
@@ -2526,23 +2581,23 @@ const App = {
           'Aceita negociar o valor?',
           'Pode me enviar mais fotos/detalhes?'
         ]).map(q => `
-          <button type="button" onclick="App.applyQuickQuestion('${this.escapeHtml(q)}')" class="text-[11px] font-medium bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-1 rounded-full whitespace-nowrap hover:border-teal-500 hover:text-teal-600 dark:hover:text-teal-400 transition text-gray-600 dark:text-gray-300 cursor-pointer shadow-2xs">
+          <button type="button" onclick="App.applyQuickQuestion('${this.escapeHtml(q)}')" class="text-[11px] font-medium bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-1.5 rounded-full whitespace-nowrap hover:border-teal-500 hover:text-teal-600 dark:hover:text-teal-400 transition text-gray-700 dark:text-gray-300 cursor-pointer shadow-sm">
             ${this.escapeHtml(q)}
           </button>
         `).join('')}
       </div>
 
       <!-- FORMULÁRIO DE ENVIO -->
-      <form onsubmit="App.sendChatMessage(event, ${partnerId}, ${product ? product.id : (productId || 'null')})" class="p-3 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800 flex items-center gap-2">
+      <form onsubmit="App.sendChatMessage(event, ${partnerId}, ${product && product.id ? product.id : (productId ? productId : 'null')})" class="p-3 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800 flex items-center gap-2">
         <input 
           type="text" 
           id="chat-input-text" 
           autocomplete="off" 
           required 
           placeholder="Digite sua mensagem aqui..." 
-          class="flex-1 px-4 py-2.5 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-2xl focus:outline-none focus:ring-2 focus:ring-teal-500 transition text-gray-900 dark:text-white"
+          class="flex-1 px-4 py-2.5 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-2xl focus:outline-none focus:ring-2 focus:ring-teal-500 transition text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
         >
-        <button type="submit" id="chat-send-btn" class="btn-primary text-xs py-2.5 px-5 rounded-2xl flex items-center gap-1.5 font-bold cursor-pointer shrink-0">
+        <button type="submit" id="chat-send-btn" class="btn-primary text-xs py-2.5 px-5 rounded-2xl flex items-center gap-1.5 font-bold cursor-pointer shrink-0 shadow-sm">
           <span>Enviar</span>
           <i data-lucide="send" class="w-3.5 h-3.5"></i>
         </button>
@@ -2571,13 +2626,13 @@ const App = {
 
     return `
       <div id="${bubbleId}" class="flex w-full ${isMe ? 'justify-end' : 'justify-start'} group animate-fade-in">
-        <div class="relative max-w-[85%] sm:max-w-md px-4 py-2.5 rounded-2xl text-sm shadow-xs break-words overflow-hidden ${
+        <div class="relative max-w-[85%] sm:max-w-md px-4 py-2.5 rounded-2xl text-sm shadow-sm break-words overflow-hidden ${
           isMe 
-            ? 'bg-teal-600 text-white rounded-br-xs' 
-            : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 rounded-bl-xs'
+            ? 'chat-bubble-me bg-teal-600 text-white rounded-br-sm' 
+            : 'chat-bubble-other bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 rounded-bl-sm'
         }">
           <div class="break-words leading-relaxed whitespace-pre-wrap">${this.escapeHtml(m.message)}</div>
-          <div class="flex items-center justify-end gap-1.5 mt-1 text-[10px] ${isMe ? 'text-teal-100/90' : 'text-gray-400'}">
+          <div class="flex items-center justify-end gap-1.5 mt-1 text-[10px] ${isMe ? 'text-teal-100' : 'text-gray-500 dark:text-gray-400'}">
             <span>${timeFormatted}</span>
             ${isMe ? `<span class="msg-status font-bold">${m.is_read ? '✓✓' : '✓'}</span>` : ''}
             ${isMe ? `
@@ -2646,9 +2701,9 @@ const App = {
       const tempHolder = document.createElement('div');
       tempHolder.innerHTML = `
         <div id="chat-msg-${tempId}" class="flex w-full justify-end group animate-fade-in">
-          <div class="relative max-w-[85%] sm:max-w-md px-4 py-2.5 rounded-2xl text-sm shadow-xs break-words overflow-hidden bg-teal-600 text-white rounded-br-xs">
+          <div class="relative max-w-[85%] sm:max-w-md px-4 py-2.5 rounded-2xl text-sm shadow-sm break-words overflow-hidden chat-bubble-me bg-teal-600 text-white rounded-br-sm">
             <div class="break-words leading-relaxed whitespace-pre-wrap">${this.escapeHtml(text)}</div>
-            <div class="flex items-center justify-end gap-1.5 mt-1 text-[10px] text-teal-100/90">
+            <div class="flex items-center justify-end gap-1.5 mt-1 text-[10px] text-teal-100">
               <span>${nowTime}</span>
               <span class="msg-status">Enviando...</span>
             </div>
@@ -2722,6 +2777,9 @@ const App = {
   },
 
   async refreshConversationsList(activePartnerId = null) {
+    if (!activePartnerId && this.currentChatPartnerId) {
+      activePartnerId = this.currentChatPartnerId;
+    }
     const convsList = document.getElementById('chat-convs-list');
     if (!convsList) return;
 
@@ -2765,11 +2823,12 @@ const App = {
 
       return `
         <div 
+          data-partner-id="${c.user.id}"
           onclick="App.selectChatPartner(${c.user.id})" 
           class="p-3 rounded-2xl border transition cursor-pointer flex items-center gap-3 ${
             isActive 
-              ? 'border-teal-500 bg-teal-50/60 dark:bg-teal-950/40 shadow-xs' 
-              : 'border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800/80 hover:border-teal-300 dark:hover:border-teal-700'
+              ? 'border-teal-500 bg-teal-50 dark:bg-teal-950/50 shadow-sm ring-1 ring-teal-500/30' 
+              : 'border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800 hover:border-teal-300 dark:hover:border-teal-700 hover:bg-gray-100/50 dark:hover:bg-gray-700/50'
           }"
         >
           <div class="relative shrink-0">
@@ -2785,9 +2844,9 @@ const App = {
               <div class="font-bold text-xs text-gray-900 dark:text-white truncate">
                 ${this.escapeHtml(c.user.name)}
               </div>
-              <span class="text-[10px] text-gray-400 shrink-0">${time}</span>
+              <span class="text-[10px] text-gray-500 dark:text-gray-400 shrink-0">${time}</span>
             </div>
-            <div class="text-[11px] text-gray-500 dark:text-gray-400 truncate ${c.unread_count > 0 ? 'font-bold text-gray-900 dark:text-white' : ''}">
+            <div class="text-[11px] text-gray-600 dark:text-gray-300 truncate ${c.unread_count > 0 ? 'font-bold text-gray-900 dark:text-white' : ''}">
               ${lastMsgText}
             </div>
           </div>
@@ -2801,22 +2860,14 @@ const App = {
   },
 
   toggleMobileChatList(showList) {
-    const sidebar = document.getElementById('chat-sidebar');
-    const win = document.getElementById('chat-window');
-    if (!sidebar || !win) return;
-
     if (showList) {
       ChatManager.stopPolling();
-      sidebar.classList.remove('hidden');
-      sidebar.classList.add('flex');
-      win.classList.remove('flex');
-      win.classList.add('hidden');
-      this.refreshConversationsList();
+      this.currentChatView = 'sidebar';
+      this.updateChatLayout('sidebar');
+      this.refreshConversationsList(this.currentChatPartnerId || null);
     } else {
-      sidebar.classList.remove('flex');
-      sidebar.classList.add('hidden');
-      win.classList.remove('hidden');
-      win.classList.add('flex');
+      this.currentChatView = 'chat';
+      this.updateChatLayout('chat');
     }
   },
 
@@ -2999,9 +3050,9 @@ const App = {
         </div>
 
         <!-- CARD DE ATENDIMENTO DIRETO COM SUPORTE -->
-        <div class="p-6 rounded-3xl border border-teal-200 dark:border-teal-900 bg-linear-to-r from-teal-50/80 to-emerald-50/80 dark:from-teal-950/30 dark:to-emerald-950/30 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div class="p-6 rounded-3xl border border-teal-200 dark:border-teal-900 bg-gradient-to-r from-teal-50 to-emerald-50 dark:from-teal-950/30 dark:to-emerald-950/30 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
           <div class="flex items-center gap-3.5">
-            <div class="w-12 h-12 rounded-2xl bg-teal-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+            <div class="w-12 h-12 rounded-2xl bg-teal-600 text-white flex items-center justify-center shrink-0 shadow-sm">
               <i data-lucide="headphones" class="w-6 h-6"></i>
             </div>
             <div>
@@ -3009,7 +3060,7 @@ const App = {
               <p class="text-xs text-gray-600 dark:text-gray-300">Nossa equipe de atendimento oficial está disponível para tirar dúvidas pelo chat.</p>
             </div>
           </div>
-          <button type="button" onclick="App.openSupportChat()" class="btn-primary text-xs py-2.5 px-5 rounded-2xl inline-flex items-center gap-2 cursor-pointer shadow-xs shrink-0 font-bold">
+          <button type="button" onclick="App.openSupportChat()" class="btn-primary text-xs py-2.5 px-5 rounded-2xl inline-flex items-center gap-2 cursor-pointer shadow-sm shrink-0 font-bold">
             <i data-lucide="message-circle" class="w-4 h-4"></i>
             <span>Falar com o Suporte</span>
           </button>
@@ -4394,6 +4445,11 @@ const App = {
   setupEventListeners() {
     window.addEventListener('popstate', () => {
       this.renderCurrentScreen();
+    });
+    window.addEventListener('resize', () => {
+      if (this.currentScreen === 'chat') {
+        this.updateChatLayout(this.currentChatView || 'chat');
+      }
     });
   }
 };
