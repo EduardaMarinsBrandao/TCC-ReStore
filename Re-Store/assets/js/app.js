@@ -2260,7 +2260,11 @@ const App = {
           ToastManager.show('Você é o operador da conta de suporte.', 'info');
           return;
         }
-        await this.selectChatPartner(supportId);
+        if (this.currentScreen !== 'chat') {
+          this.navigateTo('chat', { withUserId: supportId });
+        } else {
+          await this.selectChatPartner(supportId);
+        }
       } else {
         ToastManager.show('Não foi possível conectar ao suporte agora. Tente novamente em instantes.', 'error');
       }
@@ -2294,7 +2298,7 @@ const App = {
     container.innerHTML = `
       <div class="h-[78vh] min-h-[520px] rounded-3xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800 flex overflow-hidden shadow-xl animate-fade-in relative">
         <!-- BARRA LATERAL: LISTA DE CONVERSAS -->
-        <div id="chat-sidebar" class="w-full md:w-1/3 md:max-w-sm border-r border-gray-200 dark:border-gray-800 flex flex-col bg-gray-50/50 dark:bg-gray-900/30">
+        <div id="chat-sidebar" class="w-full md:w-80 lg:w-96 md:shrink-0 border-r border-gray-200 dark:border-gray-800 flex flex-col bg-gray-50/50 dark:bg-gray-900/30 overflow-hidden">
           <div class="p-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
             <div class="flex items-center gap-2">
               <h2 class="font-extrabold text-base text-gray-900 dark:text-white">Mensagens</h2>
@@ -2310,7 +2314,7 @@ const App = {
             <button 
               type="button" 
               onclick="App.openSupportChat()" 
-              class="w-full p-2.5 rounded-2xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white flex items-center justify-between shadow-xs transition-all duration-200 cursor-pointer group"
+              class="w-full p-2.5 rounded-2xl bg-linear-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white flex items-center justify-between shadow-xs transition-all duration-200 cursor-pointer group"
               title="Falar diretamente com a equipe de suporte"
             >
               <div class="flex items-center gap-2.5">
@@ -2335,7 +2339,7 @@ const App = {
         </div>
 
         <!-- JANELA PRINCIPAL DO CHAT -->
-        <div id="chat-window" class="hidden md:flex flex-1 flex-col justify-between bg-white dark:bg-gray-900 relative">
+        <div id="chat-window" class="hidden md:flex flex-1 min-w-0 flex-col justify-between bg-white dark:bg-gray-900 relative h-full overflow-hidden">
           <div class="text-center my-auto p-6 space-y-3 text-gray-400">
             <div class="w-16 h-16 rounded-full bg-teal-50 dark:bg-teal-950/50 flex items-center justify-center mx-auto text-teal-600 dark:text-teal-400 mb-1">
               <i data-lucide="messages-square" class="w-8 h-8"></i>
@@ -2374,12 +2378,12 @@ const App = {
     partnerId = parseInt(partnerId, 10);
     ChatManager.stopPolling();
 
-    // Em mobile, oculta lista lateral e exibe a janela de mensagens
+    // Em mobile, oculta lista lateral e exibe a janela de mensagens sem conflito de classes
     const sidebar = document.getElementById('chat-sidebar');
     const win = document.getElementById('chat-window');
     if (sidebar && win) {
+      sidebar.classList.remove('flex');
       sidebar.classList.add('hidden');
-      sidebar.classList.add('md:flex');
       win.classList.remove('hidden');
       win.classList.add('flex');
     }
@@ -2453,7 +2457,7 @@ const App = {
       ` : ''}
 
       <!-- CORPO DE MENSAGENS -->
-      <div id="chat-msgs-body" class="flex-1 overflow-y-auto p-4 space-y-3">
+      <div id="chat-msgs-body" class="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 space-y-3 min-h-0 w-full">
         ${msgs.length === 0 ? `
           <div id="chat-empty-intro" class="text-center py-12 space-y-2 text-gray-400">
             <div class="text-3xl">💬</div>
@@ -2522,13 +2526,13 @@ const App = {
     const bubbleId = `chat-msg-${m.id}`;
 
     return `
-      <div id="${bubbleId}" class="flex ${isMe ? 'justify-end' : 'justify-start'} group animate-fade-in">
-        <div class="relative max-w-[80%] sm:max-w-md px-4 py-2.5 rounded-2xl text-sm shadow-2xs ${
+      <div id="${bubbleId}" class="flex w-full ${isMe ? 'justify-end' : 'justify-start'} group animate-fade-in">
+        <div class="relative max-w-[85%] sm:max-w-md px-4 py-2.5 rounded-2xl text-sm shadow-xs break-words overflow-hidden ${
           isMe 
             ? 'bg-teal-600 text-white rounded-br-xs' 
             : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 rounded-bl-xs'
         }">
-          <div class="break-words leading-relaxed">${this.escapeHtml(m.message)}</div>
+          <div class="break-words leading-relaxed whitespace-pre-wrap">${this.escapeHtml(m.message)}</div>
           <div class="flex items-center justify-end gap-1.5 mt-1 text-[10px] ${isMe ? 'text-teal-100/90' : 'text-gray-400'}">
             <span>${timeFormatted}</span>
             ${isMe ? `<span class="msg-status font-bold">${m.is_read ? '✓✓' : '✓'}</span>` : ''}
@@ -2597,9 +2601,9 @@ const App = {
     if (body) {
       const tempHolder = document.createElement('div');
       tempHolder.innerHTML = `
-        <div id="chat-msg-${tempId}" class="flex justify-end group animate-fade-in">
-          <div class="relative max-w-[80%] sm:max-w-md px-4 py-2.5 rounded-2xl text-sm shadow-2xs bg-teal-600 text-white rounded-br-xs">
-            <div class="break-words leading-relaxed">${this.escapeHtml(text)}</div>
+        <div id="chat-msg-${tempId}" class="flex w-full justify-end group animate-fade-in">
+          <div class="relative max-w-[85%] sm:max-w-md px-4 py-2.5 rounded-2xl text-sm shadow-xs break-words overflow-hidden bg-teal-600 text-white rounded-br-xs">
+            <div class="break-words leading-relaxed whitespace-pre-wrap">${this.escapeHtml(text)}</div>
             <div class="flex items-center justify-end gap-1.5 mt-1 text-[10px] text-teal-100/90">
               <span>${nowTime}</span>
               <span class="msg-status">Enviando...</span>
@@ -2760,10 +2764,12 @@ const App = {
     if (showList) {
       ChatManager.stopPolling();
       sidebar.classList.remove('hidden');
-      win.classList.add('hidden');
+      sidebar.classList.add('flex');
       win.classList.remove('flex');
+      win.classList.add('hidden');
       this.refreshConversationsList();
     } else {
+      sidebar.classList.remove('flex');
       sidebar.classList.add('hidden');
       win.classList.remove('hidden');
       win.classList.add('flex');
