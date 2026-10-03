@@ -53,6 +53,102 @@ if ($method === 'GET' && $action === 'list') {
     }
 }
 
+// --- EDITAR AVALIAÇÃO ---
+if ($method === 'POST' && $action === 'update') {
+    if (!isset($_SESSION['user_id'])) {
+        echo json_encode(['success' => false, 'error' => 'Sessão expirada.']);
+        exit;
+    }
+
+    $userId = $_SESSION['user_id'];
+    $reviewId = (int)($data['review_id'] ?? 0);
+    $rating = (int)($data['rating'] ?? 5);
+    $comment = trim($data['comment'] ?? '');
+
+    if ($reviewId <= 0 || $rating < 1 || $rating > 5) {
+        echo json_encode(['success' => false, 'error' => 'Dados inválidos.']);
+        exit;
+    }
+
+    // Verifica se a avaliação pertence ao usuário logado
+    $stmt = $db->prepare("SELECT product_id FROM reviews WHERE id = ? AND user_id = ?");
+    $stmt->execute([$reviewId, $userId]);
+    $review = $stmt->fetch();
+
+    if (!$review) {
+        echo json_encode(['success' => false, 'error' => 'Avaliação não encontrada ou sem permissão.']);
+        exit;
+    }
+
+    $productId = $review['product_id'];
+
+    $db->beginTransaction();
+    try {
+        $db->prepare("UPDATE reviews SET rating = ?, comment = ? WHERE id = ? AND user_id = ?")
+           ->execute([$rating, $comment, $reviewId, $userId]);
+
+        // Recalcula a média do produto
+        $calcStmt = $db->prepare("SELECT AVG(rating) as avg_rating FROM reviews WHERE product_id = ?");
+        $calcStmt->execute([$productId]);
+        $avgRating = round((float)($calcStmt->fetch()['avg_rating'] ?? 0), 1);
+
+        $db->prepare("UPDATE products SET rating = ? WHERE id = ?")->execute([$avgRating, $productId]);
+
+        $db->commit();
+        echo json_encode(['success' => true, 'message' => 'Avaliação atualizada com sucesso!']);
+        exit;
+    } catch (Exception $e) {
+        $db->rollBack();
+        echo json_encode(['success' => false, 'error' => 'Erro ao editar: ' . $e->getMessage()]);
+        exit;
+    }
+}
+
+// --- EXCLUIR AVALIAÇÃO ---
+if ($method === 'POST' && $action === 'delete') {
+    if (!isset($_SESSION['user_id'])) {
+        echo json_encode(['success' => false, 'error' => 'Sessão expirada.']);
+        exit;
+    }
+
+    $userId = $_SESSION['user_id'];
+    $reviewId = (int)($data['review_id'] ?? 0);
+
+    $stmt = $db->prepare("SELECT product_id FROM reviews WHERE id = ? AND user_id = ?");
+    $stmt->execute([$reviewId, $userId]);
+    $review = $stmt->fetch();
+
+    if (!$review) {
+        echo json_encode(['success' => false, 'error' => 'Permissão negada ou registro inexistente.']);
+        exit;
+    }
+
+    $productId = $review['product_id'];
+
+    $db->beginTransaction();
+    try {
+        $db->prepare("DELETE FROM reviews WHERE id = ? AND user_id = ?")->execute([$reviewId, $userId]);
+
+        // Recalcula média e total
+        $calcStmt = $db->prepare("SELECT AVG(rating) as avg_rating, COUNT(*) as cnt FROM reviews WHERE product_id = ?");
+        $calcStmt->execute([$productId]);
+        $stat = $calcStmt->fetch();
+
+        $avgRating = round((float)($stat['avg_rating'] ?? 0), 1);
+        $totalReviews = (int)($stat['cnt'] ?? 0);
+
+        $db->prepare("UPDATE products SET rating = ?, total_reviews = ? WHERE id = ?")->execute([$avgRating, $totalReviews, $productId]);
+
+        $db->commit();
+        echo json_encode(['success' => true, 'message' => 'Avaliação removida!']);
+        exit;
+    } catch (Exception $e) {
+        $db->rollBack();
+        echo json_encode(['success' => false, 'error' => 'Erro ao excluir: ' . $e->getMessage()]);
+        exit;
+    }
+}
+
 if ($method === 'POST' && $action === 'create') {
     if (!isset($_SESSION['user_id'])) {
         echo json_encode(['success' => false, 'error' => 'É necessário estar logado para enviar uma avaliação.']);
