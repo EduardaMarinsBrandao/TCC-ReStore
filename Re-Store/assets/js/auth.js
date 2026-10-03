@@ -33,11 +33,50 @@ const AuthManager = {
     return data;
   },
 
-  async register(name, email, password, phone = '') {
+  async loginWithGoogle(credential) {
     const res = await fetch('api/auth.php', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'register', name, email, password, phone })
+      body: JSON.stringify({ action: 'google_login', credential })
+    });
+    const data = await res.json();
+    if (data.success) {
+      this.currentUser = data.user;
+    }
+    return data;
+  },
+
+  async sendRegisterCode(name, email) {
+    const res = await fetch('api/auth.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'send_register_code', name, email })
+    });
+    return await res.json();
+  },
+
+  async verifyRegisterCode(code, email) {
+    const res = await fetch('api/auth.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'verify_register_code', code, email })
+    });
+    return await res.json();
+  },
+
+  async register(name, email, password, phone = '', code = '', extraData = {}) {
+    const res = await fetch('api/auth.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'register',
+        name,
+        email,
+        password,
+        phone,
+        code,
+        ...extraData
+      })
     });
     const data = await res.json();
     if (data.success) {

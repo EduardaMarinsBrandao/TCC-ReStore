@@ -35,6 +35,11 @@ if ($method === 'GET' && $action === 'list') {
     }
 
     if ($userId > 0) {
+        if (!isset($_SESSION['user_id'])) {
+            echo json_encode(['success' => false, 'error' => 'Não autenticado.']);
+            exit;
+        }
+        $userId = (int)$_SESSION['user_id'];
         $stmt = $db->prepare("SELECT r.*, p.name as product_name, 
                               (SELECT image_url FROM product_images WHERE product_id = p.id ORDER BY is_primary DESC LIMIT 1) as product_image 
                               FROM reviews r 
@@ -103,6 +108,11 @@ if ($method === 'POST' && $action === 'create') {
 }
 
 if ($method === 'POST' && $action === 'vote_helpful') {
+    if (!isset($_SESSION['user_id'])) {
+        echo json_encode(['success' => false, 'error' => 'É necessário estar logado para avaliar feedback.']);
+        exit;
+    }
+
     $reviewId = (int)($data['review_id'] ?? 0);
     if ($reviewId > 0) {
         $db->prepare("UPDATE reviews SET helpful_count = helpful_count + 1 WHERE id = ?")->execute([$reviewId]);

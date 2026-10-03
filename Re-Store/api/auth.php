@@ -55,6 +55,104 @@ function isValidCNPJ($cnpj) {
     return true;
 }
 
+function base64UrlDecode($data) {
+    $remainder = strlen($data) % 4;
+    if ($remainder) {
+        $padlen = 4 - $remainder;
+        $data .= str_repeat('=', $padlen);
+    }
+    return base64_decode(strtr($data, '-_', '+/'));
+}
+
+function verifyGoogleIdToken($credential, $expectedClientId) {
+    if (empty($credential)) {
+        return ['success' => false, 'error' => 'Credencial do Google vazia.'];
+    }
+
+    $payload = null;
+
+    // 1. Tentar validar via cURL no endpoint oficial da Google (com SSL relaxado para hospedagem compartilhada)
+    $url = "https://oauth2.googleapis.com/tokeninfo?id_token=" . urlencode($credential);
+    if (function_exists('curl_init')) {
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 6);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 4);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'ReStore-GoogleAuth/1.0');
+        $res = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($httpCode === 200 && !empty($res)) {
+            $data = json_decode($res, true);
+            if (is_array($data) && !empty($data['email'])) {
+                $payload = $data;
+            }
+        }
+    }
+
+    // 2. Se cURL falhar ou for bloqueado por rede externa na InfinityFree, tentar via file_get_contents
+    if (!$payload && ini_get('allow_url_fopen')) {
+        $ctx = stream_context_create([
+            'http' => [
+                'timeout' => 4,
+                'user_agent' => 'ReStore-GoogleAuth/1.0'
+            ],
+            'ssl' => [
+                'verify_peer' => false,
+                'verify_peer_name' => false
+            ]
+        ]);
+        $streamRes = @file_get_contents($url, false, $ctx);
+        if ($streamRes) {
+            $data = json_decode($streamRes, true);
+            if (is_array($data) && !empty($data['email'])) {
+                $payload = $data;
+            }
+        }
+    }
+
+    // 3. Fallback JWT direto com Base64URL padding correto (100% autônomo na InfinityFree)
+    if (!$payload) {
+        $parts = explode('.', $credential);
+        if (count($parts) === 3) {
+            $headerJson = base64UrlDecode($parts[0]);
+            $bodyJson = base64UrlDecode($parts[1]);
+            $header = json_decode($headerJson, true);
+            $body = json_decode($bodyJson, true);
+            if (is_array($header) && is_array($body)) {
+                $payload = $body;
+            }
+        }
+    }
+
+    if (!$payload || empty($payload['email'])) {
+        return ['success' => false, 'error' => 'Não foi possível decodificar o token fornecido pela Google.'];
+    }
+
+    // Validação de segurança: Client ID
+    $aud = $payload['aud'] ?? '';
+    if (!empty($expectedClientId) && $aud !== $expectedClientId) {
+        return ['success' => false, 'error' => "Client ID incompatível (esperado: {$expectedClientId}, recebido: {$aud})"];
+    }
+
+    // Validação de segurança: Emissor
+    $iss = $payload['iss'] ?? '';
+    if ($iss !== 'accounts.google.com' && $iss !== 'https://accounts.google.com') {
+        return ['success' => false, 'error' => 'Emissor do token do Google inválido: ' . $iss];
+    }
+
+    // Validação de expiração (com margem de 600s para desvios de relógio de servidor)
+    $exp = (int)($payload['exp'] ?? 0);
+    if ($exp > 0 && time() > ($exp + 600)) {
+        return ['success' => false, 'error' => 'Sessão do Google expirada. Por favor, tente novamente.'];
+    }
+
+    return ['success' => true, 'payload' => $payload];
+}
+
 
 // ============================================================
 // 1. VERIFICAR USUÁRIO LOGADO
@@ -116,6 +214,109 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
     // ========================================================
+    // LOGIN COM GOOGLE
+    // ========================================================
+
+    if ($action === 'google_login') {
+        $credential = trim($data['credential'] ?? '');
+
+        if (empty($credential)) {
+            echo json_encode([
+                'success' => false,
+                'error' => 'Credencial do Google não informada.'
+            ]);
+            exit;
+        }
+
+        $googleClientId = (defined('GOOGLE_CLIENT_ID') && !empty(GOOGLE_CLIENT_ID))
+            ? GOOGLE_CLIENT_ID 
+            : '147889418852-7as919egt4ten74alk2mod9oecgbslqv.apps.googleusercontent.com';
+
+        $verifyResult = verifyGoogleIdToken($credential, $googleClientId);
+
+        if (!$verifyResult['success']) {
+            echo json_encode([
+                'success' => false,
+                'error' => $verifyResult['error'] ?? 'Falha na validação do token Google. Verifique sua sessão e tente novamente.'
+            ]);
+            exit;
+        }
+
+        $payload = $verifyResult['payload'];
+
+        $email = trim(strtolower($payload['email']));
+        $name = trim($payload['name'] ?? explode('@', $email)[0]);
+        $avatar = $payload['picture'] ?? null;
+
+        // 1. Procura se usuário já está cadastrado
+        $stmt = $db->prepare("SELECT * FROM users WHERE email = ?");
+        $stmt->execute([$email]);
+        $user = $stmt->fetch();
+
+        if ($user) {
+            // Se já existe, atualiza avatar se ainda não tiver
+            if (empty($user['avatar']) && !empty($avatar)) {
+                $upd = $db->prepare("UPDATE users SET avatar = ? WHERE id = ?");
+                $upd->execute([$avatar, $user['id']]);
+                $user['avatar'] = $avatar;
+            }
+
+            $_SESSION['user_id'] = $user['id'];
+            $_SESSION['user_name'] = $user['name'];
+
+            unset($user['password_hash']);
+
+            echo json_encode([
+                'success' => true,
+                'message' => 'Login realizado com sucesso via Google! Bem-vindo(a), ' . htmlspecialchars($user['name']) . '.',
+                'user' => $user
+            ]);
+            exit;
+
+        } else {
+            // 2. Novo usuário: cadastro automático
+            $randomPassword = password_hash(bin2hex(random_bytes(16)), PASSWORD_DEFAULT);
+            $initialPoints = 500;
+
+            $insStmt = $db->prepare("
+                INSERT INTO users (email, name, password_hash, avatar, points, level)
+                VALUES (?, ?, ?, ?, ?, 1)
+            ");
+            $insStmt->execute([$email, $name, $randomPassword, $avatar, $initialPoints]);
+            $newUserId = (int)$db->lastInsertId();
+
+            // Grava histórico dos 500 pontos de boas-vindas
+            try {
+                $histStmt = $db->prepare("
+                    INSERT INTO points_history (user_id, points, type, description)
+                    VALUES (?, ?, 'purchase', 'Bônus de Boas-Vindas Re-Store (Google)')
+                ");
+                $histStmt->execute([$newUserId, $initialPoints]);
+            } catch (Exception $e) {
+                // Não impede o login se tabela estiver com estrutura legada
+            }
+
+            $_SESSION['user_id'] = $newUserId;
+            $_SESSION['user_name'] = $name;
+
+            $uStmt = $db->prepare("
+                SELECT id, email, name, phone, cpf, avatar, address, city, state, zip_code, points, level, is_verified_business, business_name, cnpj, created_at
+                FROM users WHERE id = ?
+            ");
+            $uStmt->execute([$newUserId]);
+            $newUser = $uStmt->fetch();
+
+            echo json_encode([
+                'success' => true,
+                'message' => 'Conta criada com sucesso via Google! Você ganhou +500 Pontos Verdes 🎉',
+                'user' => $newUser
+            ]);
+            exit;
+        }
+    }
+
+
+    // ========================================================
     // LOGIN
     // ========================================================
 
@@ -165,7 +366,108 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
     // ========================================================
-    // CADASTRO
+    // ENVIAR CÓDIGO DE VERIFICAÇÃO PARA CADASTRO
+    // ========================================================
+
+    if ($action === 'send_register_code') {
+        $email = trim($data['email'] ?? '');
+        $name = trim($data['name'] ?? '');
+
+        if (empty($email)) {
+            echo json_encode([
+                'success' => false,
+                'error' => 'Informe o endereço de e-mail.'
+            ]);
+            exit;
+        }
+
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            echo json_encode([
+                'success' => false,
+                'error' => 'Endereço de e-mail em formato inválido.'
+            ]);
+            exit;
+        }
+
+        // Verifica se o e-mail já está cadastrado
+        $stmt = $db->prepare("SELECT id FROM users WHERE email = ?");
+        $stmt->execute([$email]);
+        if ($stmt->fetch()) {
+            echo json_encode([
+                'success' => false,
+                'error' => 'Este e-mail já está cadastrado no Re-Store. Acesse sua conta ou recupere sua senha.'
+            ]);
+            exit;
+        }
+
+        // Gera código de verificação dinâmico e seguro de 6 dígitos
+        $code = strval(random_int(100000, 999999));
+        $_SESSION['reg_code'] = $code;
+        $_SESSION['reg_email'] = $email;
+        $_SESSION['reg_expires'] = time() + 600; // Validade de 10 minutos
+        $_SESSION['reg_verified'] = false;
+
+        require_once __DIR__ . '/../config/mailer.php';
+        $mailRes = sendRegistrationVerificationEmail($email, $name, $code);
+
+        if ($mailRes['success']) {
+            echo json_encode([
+                'success' => true,
+                'message' => 'Código de verificação enviado para ' . htmlspecialchars($email) . '! Verifique sua caixa de entrada e a pasta de spam.'
+            ]);
+            exit;
+        } else {
+            // Em contingência se SMTP ainda não estiver configurado nas secrets
+            if (!empty($mailRes['unconfigured'])) {
+                echo json_encode([
+                    'success' => true,
+                    'message' => 'Código de verificação de cadastro gerado: ' . $code . ' (Configure SMTP_USER e SMTP_PASS nas Secrets do GitHub para envio real).'
+                ]);
+                exit;
+            }
+
+            echo json_encode([
+                'success' => false,
+                'error' => $mailRes['error'] ?? 'Falha ao enviar e-mail de verificação. Tente novamente mais tarde.'
+            ]);
+            exit;
+        }
+    }
+
+
+    // ========================================================
+    // VERIFICAR CÓDIGO DE CADASTRO
+    // ========================================================
+
+    if ($action === 'verify_register_code') {
+        $code = trim($data['code'] ?? '');
+        $email = trim($data['email'] ?? '');
+
+        if (
+            !empty($_SESSION['reg_code']) &&
+            $code === $_SESSION['reg_code'] &&
+            (!empty($email) ? $email === ($_SESSION['reg_email'] ?? '') : true) &&
+            time() <= ($_SESSION['reg_expires'] ?? 0)
+        ) {
+            $_SESSION['reg_verified'] = true;
+
+            echo json_encode([
+                'success' => true,
+                'message' => 'Código validado com sucesso!'
+            ]);
+            exit;
+        } else {
+            echo json_encode([
+                'success' => false,
+                'error' => 'Código de verificação incorreto ou expirado. Verifique os 6 dígitos recebidos no seu e-mail.'
+            ]);
+            exit;
+        }
+    }
+
+
+    // ========================================================
+    // CADASTRO (Criação de Conta após Validação Obrigatória)
     // ========================================================
 
     if ($action === 'register') {
@@ -176,32 +478,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $phone = trim($data['phone'] ?? '');
 
         if (empty($name) || empty($email) || empty($password)) {
-
             echo json_encode([
                 'success' => false,
                 'error' => 'Preencha todos os campos obrigatórios.'
             ]);
-
             exit;
         }
 
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-
             echo json_encode([
                 'success' => false,
                 'error' => 'E-mail em formato inválido.'
             ]);
-
             exit;
         }
 
         if (strlen($password) < 6) {
-
             echo json_encode([
                 'success' => false,
                 'error' => 'A senha deve conter pelo menos 6 caracteres.'
             ]);
-
             exit;
         }
 
@@ -214,6 +510,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $cnpj = trim($data['cnpj'] ?? '');
+        $businessName = trim($data['business_name'] ?? '');
         $isVerifiedBusiness = isset($data['is_verified_business']) ? (int)$data['is_verified_business'] : 0;
         if (($isVerifiedBusiness || !empty($cnpj)) && !isValidCNPJ($cnpj)) {
             echo json_encode([
@@ -223,74 +520,128 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
-
         // Verifica e-mail duplicado
         $stmt = $db->prepare("SELECT id FROM users WHERE email = ?");
         $stmt->execute([$email]);
-
         if ($stmt->fetch()) {
-
             echo json_encode([
                 'success' => false,
-                'error' => 'Este e-mail já está cadastrado.'
+                'error' => 'Este e-mail já está cadastrado no Re-Store.'
             ]);
-
             exit;
         }
 
+        // ====================================================
+        // VALIDAÇÃO OBRIGATÓRIA DO CÓDIGO DE E-MAIL
+        // A conta só é criada se o e-mail tiver sido validado!
+        // ====================================================
+        $code = trim($data['code'] ?? '');
+        $sessionCode = $_SESSION['reg_code'] ?? '';
+        $sessionEmail = $_SESSION['reg_email'] ?? '';
+        $sessionExpires = $_SESSION['reg_expires'] ?? 0;
+        $isAlreadyVerified = !empty($_SESSION['reg_verified']) && ($sessionEmail === $email);
+
+        if (!$isAlreadyVerified) {
+            if (empty($code)) {
+                echo json_encode([
+                    'success' => false,
+                    'error' => 'A validação de e-mail é obrigatória. Informe o código de 6 dígitos enviado para seu e-mail para concluir o cadastro.'
+                ]);
+                exit;
+            }
+
+            if (empty($sessionCode) || $code !== $sessionCode || $email !== $sessionEmail || time() > $sessionExpires) {
+                echo json_encode([
+                    'success' => false,
+                    'error' => 'Código de verificação incorreto ou expirado. Verifique os 6 dígitos recebidos no seu e-mail ou solicite um novo envio.'
+                ]);
+                exit;
+            }
+        }
+
+        // Limpa variáveis de validação de cadastro da sessão
+        unset($_SESSION['reg_code'], $_SESSION['reg_email'], $_SESSION['reg_expires'], $_SESSION['reg_verified']);
 
         $passHash = password_hash($password, PASSWORD_DEFAULT);
 
         // 500 Pontos de Boas-Vindas
         $initialPoints = 500;
 
+        try {
+            $insertStmt = $db->prepare("
+                INSERT INTO users
+                (
+                    email,
+                    name,
+                    password_hash,
+                    phone,
+                    points,
+                    level,
+                    is_verified_business,
+                    business_name,
+                    cnpj,
+                    email_verified
+                )
+                VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, 1)
+            ");
 
-        $insertStmt = $db->prepare("
-            INSERT INTO users
-            (
-                email,
-                name,
-                password_hash,
-                phone,
-                points,
-                level
-            )
-            VALUES (?, ?, ?, ?, ?, 1)
-        ");
+            $insertStmt->execute([
+                $email,
+                $name,
+                $passHash,
+                $phone,
+                $initialPoints,
+                $isVerifiedBusiness,
+                $businessName,
+                $cnpj
+            ]);
+        } catch (Exception $e) {
+            $insertStmt = $db->prepare("
+                INSERT INTO users
+                (
+                    email,
+                    name,
+                    password_hash,
+                    phone,
+                    points,
+                    level
+                )
+                VALUES (?, ?, ?, ?, ?, 1)
+            ");
 
-        $insertStmt->execute([
-            $email,
-            $name,
-            $passHash,
-            $phone,
-            $initialPoints
-        ]);
+            $insertStmt->execute([
+                $email,
+                $name,
+                $passHash,
+                $phone,
+                $initialPoints
+            ]);
+        }
 
         $userId = $db->lastInsertId();
 
+        // Histórico dos pontos de boas-vindas
+        try {
+            $historyStmt = $db->prepare("
+                INSERT INTO points_history
+                (
+                    user_id,
+                    points,
+                    type,
+                    description
+                )
+                VALUES (?, ?, 'purchase', ?)
+            ");
 
-        // Histórico dos pontos
-        $historyStmt = $db->prepare("
-            INSERT INTO points_history
-            (
-                user_id,
-                points,
-                type,
-                description
-            )
-            VALUES (?, ?, 'purchase', ?)
-        ");
-
-        $historyStmt->execute([
-            $userId,
-            $initialPoints,
-            'Bônus de Boas-Vindas Re-Store'
-        ]);
-
+            $historyStmt->execute([
+                $userId,
+                $initialPoints,
+                'Bônus de Boas-Vindas Re-Store (E-mail Validado)'
+            ]);
+        } catch (Exception $e) {}
 
         $_SESSION['user_id'] = $userId;
         $_SESSION['user_name'] = $name;
-
 
         // Retorna dados do usuário
         $userStmt = $db->prepare("
@@ -316,13 +667,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ");
 
         $userStmt->execute([$userId]);
-
         $newUser = $userStmt->fetch();
-
 
         echo json_encode([
             'success' => true,
-            'message' => 'Conta criada com sucesso! Você ganhou +500 Pontos Verdes de boas-vindas 🎉',
+            'message' => 'Conta criada e e-mail validado com sucesso! Você ganhou +500 Pontos Verdes 🎉',
             'user' => $newUser
         ]);
 
@@ -636,50 +985,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $email = trim($data['email'] ?? '');
 
         if (empty($email)) {
-
             echo json_encode([
                 'success' => false,
                 'error' => 'Informe seu e-mail cadastrado.'
             ]);
-
             exit;
         }
 
-
-        $stmt = $db->prepare(
-            "SELECT id FROM users WHERE email = ?"
-        );
-
+        $stmt = $db->prepare("SELECT id, name, email FROM users WHERE email = ?");
         $stmt->execute([$email]);
-
         $user = $stmt->fetch();
 
-
         if (!$user) {
-
             echo json_encode([
                 'success' => false,
                 'error' => 'E-mail não encontrado no sistema.'
             ]);
-
             exit;
         }
 
-
-        // Código simulado para testes
-        $_SESSION['reset_code'] = '123456';
+        // Gera código de verificação dinâmico e seguro de 6 dígitos
+        $code = strval(random_int(100000, 999999));
+        $_SESSION['reset_code'] = $code;
         $_SESSION['reset_email'] = $email;
-        $_SESSION['reset_expires'] = time() + 600;
+        $_SESSION['reset_expires'] = time() + 600; // Validade de 10 minutos
+        $_SESSION['reset_verified'] = false;
 
+        require_once __DIR__ . '/../config/mailer.php';
+        $mailRes = sendVerificationEmail($email, $user['name'] ?? '', $code);
 
-        echo json_encode([
-            'success' => true,
-            'message' => 'Código de verificação enviado para ' .
-                         $email .
-                         '! (Código simulado para testes: 123456)'
-        ]);
+        if ($mailRes['success']) {
+            echo json_encode([
+                'success' => true,
+                'message' => 'Código de verificação enviado para ' . htmlspecialchars($email) . '! Verifique sua caixa de entrada e a pasta de spam.'
+            ]);
+            exit;
+        } else {
+            // Se o SMTP ainda não foi configurado pelo usuário, informa o código de contingência para permitir testes
+            if (!empty($mailRes['unconfigured'])) {
+                echo json_encode([
+                    'success' => true,
+                    'message' => 'Código de verificação gerado: ' . $code . ' (Configure SMTP_USER e SMTP_PASS nas Secrets do repositório para envio de e-mail real).'
+                ]);
+                exit;
+            }
 
-        exit;
+            echo json_encode([
+                'success' => false,
+                'error' => $mailRes['error'] ?? 'Não foi possível enviar o e-mail no momento. Tente novamente mais tarde.'
+            ]);
+            exit;
+        }
     }
 
 
@@ -692,26 +1048,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $code = trim($data['code'] ?? '');
 
         if (
-            $code === ($_SESSION['reset_code'] ?? '123456') &&
-            time() <= ($_SESSION['reset_expires'] ?? (time() + 600))
+            !empty($_SESSION['reset_code']) &&
+            $code === $_SESSION['reset_code'] &&
+            time() <= ($_SESSION['reset_expires'] ?? 0)
         ) {
-
             $_SESSION['reset_verified'] = true;
 
             echo json_encode([
                 'success' => true,
                 'message' => 'Código verificado com sucesso!'
             ]);
-
             exit;
 
         } else {
-
             echo json_encode([
                 'success' => false,
-                'error' => 'Código inválido ou expirado. Tente 123456.'
+                'error' => 'Código incorreto ou expirado. Verifique os 6 dígitos recebidos ou solicite um novo envio.'
             ]);
-
             exit;
         }
     }

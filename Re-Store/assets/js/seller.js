@@ -35,6 +35,20 @@ const SellerManager = {
     }
   },
 
+  async updateProduct(formData) {
+    formData.append('action', 'update');
+    try {
+      const res = await fetch('api/products.php', {
+        method: 'POST',
+        body: formData
+      });
+      return await res.json();
+    } catch (e) {
+      console.error('Erro ao atualizar produto:', e);
+      return { success: false, error: 'Erro de conexão com o servidor.' };
+    }
+  },
+
   async deleteProduct(productId) {
     try {
       const formData = new FormData();

@@ -1,0 +1,86 @@
+name: CD - Continuous Deployment
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'Re-Store/**'
+      - '.github/workflows/cd.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: "Deploy para Hospedagem (FTP/FTPS)"
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout do Repositório
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🔍 Validar Configuração de Segredos (GitHub Secrets)
+        id: check_secrets
+        env:
+          FTP_SERVER: ${{ secrets.FTP_SERVER || secrets.FTP_HOST }}
+          FTP_USER: ${{ secrets.FTP_USERNAME || secrets.FTP_USER }}
+          FTP_PASS: ${{ secrets.FTP_PASSWORD || secrets.FTP_PASS }}
+        run: |
+          MISSING=""
+          [ -z "$FTP_SERVER" ] && MISSING="$MISSING FTP_SERVER"
+          [ -z "$FTP_USER" ] && MISSING="$MISSING FTP_USERNAME"
+          [ -z "$FTP_PASS" ] && MISSING="$MISSING FTP_PASSWORD"
+
+          if [ -n "$MISSING" ]; then
+            echo "::error title=Segredos de Deploy Ausentes::As seguintes Secrets estão ausentes ou vazias no repositório:$MISSING. Verifique em Settings > Secrets and variables > Actions."
+            exit 1
+          else
+            echo "configured=true" >> $GITHUB_OUTPUT
+            echo "✅ Todas as credenciais FTP necessárias foram localizadas nas Secrets."
+          fi
+
+      - name: ⚙️ Preparar Credenciais de Produção
+        run: |
+          cat << 'EOF' > Re-Store/config/credentials.local.php
+          <?php
+          // Arquivo de credenciais locais gerado de forma segura pelo GitHub Actions durante o Deploy
+          define('DB_HOST', '${{ secrets.DB_HOST || 'sql204.infinityfree.com' }}');
+          define('DB_NAME', '${{ secrets.DB_NAME || 'if0_42831392_restore' }}');
+          define('DB_USER', '${{ secrets.DB_USER || secrets.FTP_USERNAME || secrets.FTP_USER || 'if0_42831392' }}');
+          define('DB_PASS', '${{ secrets.DB_PASS || secrets.FTP_PASSWORD || secrets.FTP_PASS }}');
+          define('DB_DRIVER', 'auto');
+
+          define('GOOGLE_CLIENT_ID', '${{ secrets.GOOGLE_CLIENT_ID || '147889418852-7as919egt4ten74alk2mod9oecgbslqv.apps.googleusercontent.com' }}');
+          define('GOOGLE_CLIENT_SECRET', '${{ secrets.GOOGLE_CLIENT_SECRET || '' }}');
+
+          define('SMTP_HOST', '${{ secrets.SMTP_HOST || 'smtp.gmail.com' }}');
+          define('SMTP_PORT', ${{ secrets.SMTP_PORT || 587 }});
+          define('SMTP_USER', '${{ secrets.SMTP_USER || '' }}');
+          define('SMTP_PASS', '${{ secrets.SMTP_PASSWORD_EMAIL || secrets.SMTP_PASS || '' }}');
+          define('SMTP_FROM_EMAIL', '${{ secrets.SMTP_FROM_EMAIL || secrets.SMTP_USER || '' }}');
+          define('SMTP_FROM_NAME', '${{ secrets.SMTP_FROM_NAME || 'Re-Store Marketplace' }}');
+          EOF
+
+      - name: 📁 Deploy Contínuo via FTPS/FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER || secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USERNAME || secrets.FTP_USER }}
+          password: ${{ secrets.FTP_PASSWORD || secrets.FTP_PASS }}
+          port: ${{ secrets.FTP_PORT || 21 }}
+          protocol: ${{ secrets.FTP_PROTOCOL || 'ftps' }}
+          security: loose
+          server-dir: ${{ secrets.FTP_SERVER_DIR || '/htdocs/' }}
+          local-dir: Re-Store/
+          dangerous-clean-slate: false
+          log-level: verbose
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/tests/**
+            **/*.sqlite*
+            **/*.log

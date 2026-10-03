@@ -38,26 +38,98 @@ const App = {
   updateHeaderUI() {
     const user = AuthManager.currentUser;
     const userNav = document.getElementById('user-nav-actions');
+    const notifBadge = document.getElementById('notif-badge');
+
+    if (notifBadge) {
+      notifBadge.style.display = user ? 'flex' : 'none';
+    }
+
+    if (user && window.ChatManager) {
+      ChatManager.getUnreadCount().then(count => {
+        const headerBadge = document.getElementById('chat-header-badge');
+        const mobileBadge = document.getElementById('chat-mobile-badge');
+        if (headerBadge) {
+          if (count > 0) {
+            headerBadge.innerText = count > 99 ? '99+' : count;
+            headerBadge.classList.remove('hidden');
+            headerBadge.classList.add('flex');
+          } else {
+            headerBadge.classList.add('hidden');
+            headerBadge.classList.remove('flex');
+          }
+        }
+        if (mobileBadge) {
+          if (count > 0) {
+            mobileBadge.innerText = count > 99 ? '99+' : count;
+            mobileBadge.classList.remove('hidden');
+            mobileBadge.classList.add('flex');
+          } else {
+            mobileBadge.classList.add('hidden');
+            mobileBadge.classList.remove('flex');
+          }
+        }
+      }).catch(() => {});
+    }
 
     if (!userNav) return;
 
     if (user) {
       userNav.innerHTML = `
-        <button type="button" onclick="App.navigateTo('orders')" title="Meus Pedidos" class="text-xs font-semibold text-gray-700 dark:text-gray-200 hover:text-teal-600 cursor-pointer pointer-events-auto flex items-center gap-1">
-          <span class="pointer-events-none">📦</span> <span class="pointer-events-none">Pedidos</span>
-        </button>
-        <button type="button" onclick="App.navigateTo('points')" title="Saldo e Nível" class="badge-points px-3 py-1.5 rounded-full text-xs font-bold transition hover:opacity-90 cursor-pointer pointer-events-auto">
-          <span class="pointer-events-none">🌱</span> <span class="pointer-events-none">${user.points} pts</span> <span class="bg-white/20 px-1.5 py-0.5 rounded text-[10px] pointer-events-none">Nível ${user.level}</span>
-        </button>
-        <button type="button" onclick="App.navigateTo('seller')" class="text-sm font-semibold text-teal-600 hover:text-teal-700 dark:text-teal-400 cursor-pointer pointer-events-auto">
-          Área Vendedor
-        </button>
-        <button type="button" onclick="App.navigateTo('profile')" title="Meu Perfil" class="flex items-center gap-2 text-sm font-semibold hover:opacity-80 cursor-pointer pointer-events-auto border border-teal-500/50 rounded-full px-2 py-1 bg-white/10">
-          <img src="${user.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}" class="w-7 h-7 rounded-full object-cover border border-teal-500 pointer-events-none" alt="Avatar">
-          <span class="hidden md:inline pointer-events-none">${user.name.split(' ')[0]}</span>
-        </button>
-      `;
-    } else {
+    <button 
+      type="button" 
+      onclick="App.navigateTo('orders')" 
+      title="Meus Pedidos" 
+      class="text-xs font-semibold text-gray-700 dark:text-gray-200 hover:text-teal-600 cursor-pointer pointer-events-auto flex items-center gap-1"
+    >
+      <i data-lucide="package" class="w-4 h-4 pointer-events-none"></i>
+      <span class="pointer-events-none">Pedidos</span>
+    </button>
+
+    <button 
+      type="button" 
+      onclick="App.navigateTo('points')" 
+      title="Saldo e Nível" 
+      class="badge-points px-3 py-1.5 rounded-full text-xs font-bold transition hover:opacity-90 cursor-pointer pointer-events-auto"
+    >
+      <i data-lucide="sprout" class="w-4 h-4 pointer-events-none"></i>
+      <span class="pointer-events-none">${user.points} pts</span>
+
+      <span class="bg-white/20 px-1.5 py-0.5 rounded text-[10px] pointer-events-none">
+        Nível ${user.level}
+      </span>
+    </button>
+
+    <button 
+      type="button" 
+      onclick="App.navigateTo('seller')" 
+      class="text-sm font-semibold text-teal-600 hover:text-teal-700 dark:text-teal-400 cursor-pointer pointer-events-auto"
+    >
+      Área Vendedor
+    </button>
+
+    <button 
+      type="button" 
+      onclick="App.navigateTo('profile')" 
+      title="Meu Perfil" 
+      class="flex items-center gap-2 text-sm font-semibold hover:opacity-80 cursor-pointer pointer-events-auto border border-teal-500/50 rounded-full px-2 py-1 bg-white/10"
+    >
+      <img 
+        src="${user.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}" 
+        class="w-7 h-7 rounded-full object-cover border border-teal-500 pointer-events-none" 
+        alt="Avatar"
+      >
+      <span class="hidden md:inline pointer-events-none">
+        ${user.name.split(' ')[0]}
+      </span>
+    </button>
+  `;
+
+      // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+      if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+      }
+    }
+    else {
       userNav.innerHTML = `
         <button type="button" onclick="App.showLoginModal()" class="text-sm font-semibold text-gray-700 dark:text-gray-200 hover:text-teal-600 cursor-pointer pointer-events-auto px-2 py-1">
           Entrar
@@ -66,15 +138,40 @@ const App = {
           Criar Conta (+500 pts)
         </button>
       `;
+
+      // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+      if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+      }
     }
   },
 
+  googleClientId: '147889418852-7as919egt4ten74alk2mod9oecgbslqv.apps.googleusercontent.com',
+  redirectAfterLogin: null,
+  selectedProductImages: [],
+  editExistingImages: [],
+  editRemovedImageIds: [],
+  editNewImages: [],
+
   navigateTo(screen, params = {}) {
+    const protectedScreens = ['checkout', 'orders', 'notifications', 'profile', 'my-reviews', 'points', 'seller', 'add-product', 'edit-product', 'chat', 'favorites'];
+    if (protectedScreens.includes(screen) && !AuthManager.currentUser) {
+      this.redirectAfterLogin = { screen, params };
+      ToastManager.show('Faça login para acessar esta funcionalidade.', 'info');
+      this.showLoginModal();
+      return;
+    }
+
     this.currentScreen = screen;
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
-    if (screen !== 'chat') {
-      ChatManager.stopPolling();
+    if (screen === 'chat') {
+      this.chatParams = params || {};
+    } else {
+      this.chatParams = null;
+      if (window.ChatManager) {
+        ChatManager.stopPolling();
+      }
     }
 
     if (params.category !== undefined) this.selectedCategory = params.category;
@@ -88,6 +185,15 @@ const App = {
   async renderCurrentScreen() {
     const main = document.getElementById('main-content');
     if (!main) return;
+
+    const protectedScreens = ['checkout', 'orders', 'notifications', 'profile', 'my-reviews', 'points', 'seller', 'add-product', 'edit-product', 'chat', 'favorites'];
+    if (protectedScreens.includes(this.currentScreen) && !AuthManager.currentUser) {
+      this.redirectAfterLogin = { screen: this.currentScreen, params: {} };
+      this.currentScreen = 'home';
+      this.showLoginModal();
+      await this.renderHomeScreen(main);
+      return;
+    }
 
     switch (this.currentScreen) {
       case 'home':
@@ -129,6 +235,9 @@ const App = {
       case 'add-product':
         this.renderAddProductScreen(main);
         break;
+      case 'edit-product':
+        await this.renderEditProductScreen(main);
+        break;
       case 'chat':
         await this.renderChatScreen(main);
         break;
@@ -161,55 +270,73 @@ const App = {
   // ----------------------------------------------------
   async renderHomeScreen(container) {
     container.innerHTML = `
-      <!-- BANNER HERO -->
+     <!-- BANNER HERO -->
       <section class="relative bg-gradient-to-r from-teal-600 to-emerald-600 rounded-3xl p-6 md:p-10 text-white mb-8 overflow-hidden shadow-lg animate-fade-in flex flex-col md:flex-row items-center justify-between gap-6">
         <div class="relative z-10 max-w-2xl">
-          <span class="inline-block bg-white/20 backdrop-blur-md text-white text-xs font-bold px-3 py-1 rounded-full mb-3">
-            ♻️ Marketplace Reutilizável & Sustentável
+          
+          <span class="inline-flex items-center gap-1.5 bg-white/20 backdrop-blur-md text-white text-xs font-bold px-3 py-1 rounded-full mb-3">
+            <i data-lucide="recycle" class="w-4 h-4"></i>
+            <span>Marketplace Reutilizável & Sustentável</span>
           </span>
+
           <h1 class="text-2xl md:text-4xl font-extrabold tracking-tight mb-3">
             Compre, Venda e Troque Produtos Sustentáveis com Recompensas
           </h1>
+
           <p class="text-teal-100 text-sm md:text-base mb-6 leading-relaxed">
             Acumule Pontos Verdes a cada compra sustentável e troque por cupons exclusivos no Re-Store.
           </p>
 
           <div class="flex flex-wrap gap-3">
-            <button type="button" onclick="App.navigateTo('search')" class="bg-white text-teal-700 font-bold px-5 py-2.5 rounded-full shadow hover:bg-teal-50 transition cursor-pointer">
+            
+            <button 
+              type="button" 
+              onclick="App.navigateTo('search')" 
+              class="bg-white text-teal-700 font-bold px-5 py-2.5 rounded-full shadow hover:bg-teal-50 transition cursor-pointer flex items-center gap-2"
+            >
+              <i data-lucide="shopping-bag" class="w-4 h-4"></i>
               Explorar Produtos
             </button>
-            <button type="button" onclick="App.showTutorialModal()" class="bg-teal-700/60 border border-white/30 backdrop-blur-md text-white font-semibold px-5 py-2.5 rounded-full hover:bg-teal-700 transition cursor-pointer">
-              Como Funciona 🎓
+
+            <button 
+              type="button" 
+              onclick="App.showTutorialModal()" 
+              class="bg-teal-700/60 border border-white/30 backdrop-blur-md text-white font-semibold px-5 py-2.5 rounded-full hover:bg-teal-700 transition cursor-pointer flex items-center gap-2"
+            >
+              <i data-lucide="graduation-cap" class="w-4 h-4"></i>
+              Como Funciona
             </button>
+
           </div>
         </div>
       </section>
 
+
       <!-- ATALHOS RÁPIDOS DE ACESSO -->
       <section class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
         <button type="button" onclick="App.navigateTo('favorites')" class="p-4 rounded-2xl bg-white dark:bg-gray-800 border dark:border-gray-800 flex items-center gap-3 hover:border-teal-500 transition shadow-sm cursor-pointer">
-          <span class="text-2xl pointer-events-none">❤️</span>
+          <i data-lucide="heart" class="w-6 h-6 pointer-events-none"></i>
           <div class="text-left pointer-events-none">
             <div class="font-bold text-xs text-gray-900 dark:text-white">Meus Favoritos</div>
             <div class="text-[11px] text-gray-500">Itens salvos</div>
           </div>
         </button>
         <button type="button" onclick="App.navigateTo('orders')" class="p-4 rounded-2xl bg-white dark:bg-gray-800 border dark:border-gray-800 flex items-center gap-3 hover:border-teal-500 transition shadow-sm cursor-pointer">
-          <span class="text-2xl pointer-events-none">📦</span>
+          <i data-lucide="shopping-bag" class="w-6 h-6 pointer-events-none"></i>
           <div class="text-left pointer-events-none">
             <div class="font-bold text-xs text-gray-900 dark:text-white">Meus Pedidos</div>
             <div class="text-[11px] text-gray-500">Acompanhar status</div>
           </div>
         </button>
         <button type="button" onclick="App.navigateTo('points')" class="p-4 rounded-2xl bg-white dark:bg-gray-800 border dark:border-gray-800 flex items-center gap-3 hover:border-teal-500 transition shadow-sm cursor-pointer">
-          <span class="text-2xl pointer-events-none">🌱</span>
+          <i data-lucide="sprout" class="w-6 h-6 pointer-events-none"></i>
           <div class="text-left pointer-events-none">
             <div class="font-bold text-xs text-gray-900 dark:text-white">Extrato de Pontos</div>
             <div class="text-[11px] text-gray-500">Saldo e cupons</div>
           </div>
         </button>
         <button type="button" onclick="App.navigateTo('chat')" class="p-4 rounded-2xl bg-white dark:bg-gray-800 border dark:border-gray-800 flex items-center gap-3 hover:border-teal-500 transition shadow-sm cursor-pointer">
-          <span class="text-2xl pointer-events-none">💬</span>
+          <i data-lucide="message-circle" class="w-6 h-6 pointer-events-none"></i>
           <div class="text-left pointer-events-none">
             <div class="font-bold text-xs text-gray-900 dark:text-white">Chat Direto</div>
             <div class="text-[11px] text-gray-500">Conversar com vendedores</div>
@@ -224,24 +351,28 @@ const App = {
           <button type="button" onclick="App.navigateTo('search')" class="text-xs text-teal-600 hover:underline cursor-pointer">Ver todas</button>
         </h2>
         <div class="flex gap-3 overflow-x-auto no-scrollbar pb-2">
-          ${[
-            { name: 'Todas', icon: '🍃', cat: '' },
-            { name: 'Utilidades', icon: '🥛', cat: 'Utilidades' },
-            { name: 'Moda & Acessórios', icon: '👕', cat: 'Moda & Acessórios' },
-            { name: 'Móveis & Decoração', icon: '🪑', cat: 'Móveis & Decoração' },
-            { name: 'Eletrônicos Eco', icon: '🔌', cat: 'Eletrônicos Eco' }
-          ].map(c => `
-            <button type="button" onclick="App.navigateTo('search', { category: '${c.cat}' })" 
-              class="flex items-center gap-2 px-4 py-2 rounded-full border text-sm font-medium whitespace-nowrap transition cursor-pointer ${
-                this.selectedCategory === c.cat 
-                  ? 'bg-teal-600 text-white border-teal-600 shadow-sm' 
-                  : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-700 hover:border-teal-500'
-              }">
-              <span>${c.icon}</span> <span>${c.name}</span>
-            </button>
-          `).join('')}
+         ${[
+        { name: 'Todas', icon: 'leaf', cat: '' },
+        { name: 'Utilidades', icon: 'milk', cat: 'Utilidades' },
+        { name: 'Moda & Acessórios', icon: 'shirt', cat: 'Moda & Acessórios' },
+        { name: 'Móveis & Decoração', icon: 'armchair', cat: 'Móveis & Decoração' },
+        { name: 'Eletrônicos Eco', icon: 'plug', cat: 'Eletrônicos Eco' }
+      ].map(c => `
+          <button 
+            type="button" 
+            onclick="App.navigateTo('search', { category: '${c.cat}' })" 
+            class="flex items-center gap-2 px-4 py-2 rounded-full border text-sm font-medium whitespace-nowrap transition cursor-pointer ${this.selectedCategory === c.cat
+          ? 'bg-teal-600 text-white border-teal-600 shadow-sm'
+          : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-700 hover:border-teal-500'
+        }"
+          >
+            <i data-lucide="${c.icon}" class="w-5 h-5 pointer-events-none"></i>
+            <span>${c.name}</span>
+          </button>
+        `).join('')}
         </div>
-      </section>
+        </section>
+
 
       <!-- GRID DE PRODUTOS -->
       <section class="mb-10">
@@ -254,6 +385,11 @@ const App = {
         </div>
       </section>
     `;
+
+    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
 
     if (this.productsCache) {
       document.getElementById('home-products-grid').innerHTML = this.productsCache.map(p => this.renderProductCardHTML(p)).join('');
@@ -281,7 +417,7 @@ const App = {
     const isFav = this.favoriteIds.includes(p.id);
     const heartIcon = isFav ? '❤️' : '🤍';
 
-    const conditionBadge = p.product_condition === 'new' 
+    const conditionBadge = p.product_condition === 'new'
       ? '<span class="badge-condition-new px-2 py-0.5 rounded text-[11px] font-semibold">Novo</span>'
       : (p.product_condition === 'restored'
         ? '<span class="badge-condition-restored px-2 py-0.5 rounded text-[11px] font-semibold">Restaurado</span>'
@@ -289,7 +425,7 @@ const App = {
 
     return `
       <div class="card-restore flex flex-col h-full group animate-fade-in">
-        <div class="relative overflow-hidden aspect-square bg-gray-100 dark:bg-gray-800">
+        <div onclick="App.navigateTo('product-detail', { productId: ${p.id} })" class="relative overflow-hidden aspect-square bg-gray-100 dark:bg-gray-800 cursor-pointer">
           <img src="${p.primary_image}" alt="${p.name}" class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy">
           <div class="absolute top-2 left-2 flex flex-col gap-1 items-start">
             ${conditionBadge}
@@ -331,10 +467,12 @@ const App = {
     `;
   },
 
+
   // ----------------------------------------------------
   // TELA 7: DETALHES DO PRODUTO
   // ----------------------------------------------------
   async renderProductDetailScreen(container) {
+    const user = AuthManager.currentUser;
     if (!this.selectedProductId) {
       container.innerHTML = `<div class="text-center py-12">Produto não selecionado.</div>`;
       return;
@@ -355,6 +493,11 @@ const App = {
         </div>
       </div>
     `;
+
+    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
 
     try {
       const res = await fetch(`api/products.php?action=detail&id=${this.selectedProductId}`);
@@ -407,7 +550,9 @@ const App = {
                   <div class="text-2xl font-black text-teal-600 dark:text-teal-400">
                     R$ ${parseFloat(p.price).toFixed(2).replace('.', ',')}
                   </div>
-                  <span class="badge-points text-xs">🌱 Recompensa +${p.points} Pontos</span>
+                  <span class="badge-points text-xs inline-flex items-center gap-1">
+                  <i data-lucide="sprout" class="w-4 h-4 pointer-events-none"></i> Recompensa +${p.points} Pontos</span>
+
                 </div>
 
                 <div class="p-3 bg-emerald-50 dark:bg-emerald-950/40 rounded-xl mb-4 border border-emerald-200 dark:border-emerald-900 flex items-center gap-3">
@@ -436,10 +581,33 @@ const App = {
                       <div class="text-xs text-gray-500">Reputação: ★ 4.9 (Vendedor Confiável)</div>
                     </div>
                   </div>
-                  <button type="button" onclick="App.openChatWithUser(${p.seller_id}, ${p.id})" class="btn-outline text-xs py-1.5 px-3 cursor-pointer">
-                    💬 Chat
-                  </button>
+                  ${user && parseInt(user.id, 10) === parseInt(p.seller_id, 10) ? '' : `
+                    <button 
+                      type="button" 
+                      onclick="App.openChatWithUser(${p.seller_id}, ${p.id})" 
+                      class="btn-outline text-xs py-1.5 px-3 cursor-pointer inline-flex items-center gap-1.5"
+                    >
+                      <i data-lucide="message-circle" class="w-4 h-4 pointer-events-none"></i>
+                      <span>Chat</span>
+                    </button>
+                  `}
+
                 </div>
+
+                ${user && parseInt(user.id) === parseInt(p.seller_id) ? `
+                  <div class="mb-4 p-3 bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 rounded-xl flex items-center justify-between">
+                    <span class="text-xs font-bold text-teal-800 dark:text-teal-300">Você é o anunciante deste produto</span>
+                    <button 
+                      type="button" 
+                      onclick="App.navigateTo('edit-product', { productId: ${p.id} })" 
+                      class="btn-primary text-xs py-1.5 px-3 cursor-pointer flex items-center gap-1"
+                    >
+                      <i data-lucide="pencil" class="w-4 h-4 pointer-events-none"></i>
+                      Editar Anúncio
+                    </button>
+
+                  </div>
+                ` : ''}
               </div>
 
               <!-- BOTOES DE COMPRA -->
@@ -447,9 +615,16 @@ const App = {
                 <button type="button" onclick="App.addToCartAndCheckout(${p.id})" class="btn-secondary flex-1 py-3 text-base cursor-pointer">
                   ⚡ Comprar Agora
                 </button>
-                <button type="button" onclick="App.addToCartDirect(${p.id}, this)" class="btn-primary flex-1 py-3 text-base cursor-pointer">
-                  🛒 Adicionar ao Carrinho
+                <button 
+                  type="button" 
+                  onclick="App.addToCartDirect(${p.id}, this)" 
+                  class="btn-primary flex-1 py-3 text-base cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <i data-lucide="shopping-cart" class="w-8 h-8 pointer-events-none"></i>
+                  <span>Adicionar ao Carrinho</span>
                 </button>
+
+
               </div>
             </div>
           </div>
@@ -478,9 +653,15 @@ const App = {
                   </div>
                   <div class="flex items-center justify-between pt-2 border-t dark:border-gray-700">
                     <span class="text-[11px] text-gray-400">${r.created_at || 'Recente'}</span>
-                    <button type="button" onclick="App.voteReviewHelpful(${r.id}, this)" class="text-xs text-gray-500 hover:text-teal-600 flex items-center gap-1 font-semibold cursor-pointer">
-                      👍 Útil (${r.helpful_count || 0})
+                    <button 
+                      type="button" 
+                      onclick="App.voteReviewHelpful(${r.id}, this)" 
+                      class="text-xs text-gray-500 hover:text-teal-600 flex items-center gap-1 font-semibold cursor-pointer"
+                    >
+                      <i data-lucide="thumbs-up" class="w-4 h-4 pointer-events-none"></i>
+                      <span>Útil (${r.helpful_count || 0})</span>
                     </button>
+
                   </div>
                 </div>
               `).join('') : '<div class="text-gray-500 text-sm">Seja o primeiro a avaliar este produto após a compra!</div>'}
@@ -489,7 +670,13 @@ const App = {
         </div>
       `;
 
+      // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+      if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+      }
+
     } catch (e) {
+      console.error('Erro ao renderizar produto:', e);
       container.innerHTML = `<div class="text-center py-12 text-red-500">Erro ao carregar o produto.</div>`;
     }
   },
@@ -510,6 +697,11 @@ const App = {
           <button type="button" onclick="App.navigateTo('search')" class="btn-primary w-full py-3 cursor-pointer">Explorar Produtos</button>
         </div>
       `;
+
+      // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+      if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+      }
       return;
     }
 
@@ -521,9 +713,9 @@ const App = {
             ${cart.map(item => `
               <div class="flex items-center justify-between p-4 rounded-2xl border dark:border-gray-800 bg-white dark:bg-gray-800">
                 <div class="flex items-center gap-4">
-                  <img src="${item.image}" class="w-16 h-16 rounded-xl object-cover border dark:border-gray-700">
+                  <img src="${item.image}" onclick="App.navigateTo('product-detail', { productId: ${item.product_id} })" class="w-16 h-16 rounded-xl object-cover border dark:border-gray-700 cursor-pointer hover:opacity-80 transition" title="Ver Detalhes">
                   <div>
-                    <h3 class="font-bold text-gray-900 dark:text-white text-sm line-clamp-1">${item.name}</h3>
+                    <h3 onclick="App.navigateTo('product-detail', { productId: ${item.product_id} })" class="font-bold text-gray-900 dark:text-white text-sm line-clamp-1 hover:text-teal-600 cursor-pointer" title="Ver Detalhes">${item.name}</h3>
                     <div class="text-xs text-gray-500">Vendedor: ${item.seller_name}</div>
                     <div class="text-sm font-extrabold text-teal-600 mt-1">R$ ${item.price.toFixed(2).replace('.', ',')}</div>
                   </div>
@@ -534,7 +726,16 @@ const App = {
                     <span class="px-3 py-1 text-sm font-semibold">${item.quantity}</span>
                     <button type="button" onclick="App.updateCartQty(${item.product_id}, ${item.quantity + 1})" class="px-2.5 py-1 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">+</button>
                   </div>
-                  <button type="button" onclick="App.removeCartItem(${item.product_id})" title="Remover" class="text-red-500 hover:text-red-700 p-1 cursor-pointer">🗑️</button>
+                  <button 
+                    type="button" 
+                    onclick="App.removeCartItem(${item.product_id})" 
+                    title="Remover" 
+                    aria-label="Remover produto"
+                    class="text-red-500 hover:text-red-700 p-1 cursor-pointer"
+                  >
+                    <i data-lucide="trash-2" class="w-5 h-5 pointer-events-none"></i>
+                  </button>
+
                 </div>
               </div>
             `).join('')}
@@ -567,6 +768,11 @@ const App = {
         </div>
       </div>
     `;
+
+    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
   },
 
   // ----------------------------------------------------
@@ -589,7 +795,7 @@ const App = {
       const cRes = await fetch('api/points.php?action=discounts');
       const cData = await cRes.json();
       availableCoupons = (cData.discounts || []).filter(d => parseInt(d.is_used) === 0);
-    } catch (e) {}
+    } catch (e) { }
 
     let discountPercentage = 0;
     let appliedCoupon = null;
@@ -614,7 +820,7 @@ const App = {
 
     container.innerHTML = `
       <div class="animate-fade-in max-w-4xl mx-auto">
-        <h1 class="text-2xl font-extrabold mb-6">Finalizar Compra 💳</h1>
+        <h1 class="text-2xl font-extrabold mb-6">Finalizar Compra </h1>
         <form id="checkout-form" onsubmit="App.submitCheckout(event)" class="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div class="lg:col-span-2 space-y-6">
             <div class="p-6 rounded-2xl border dark:border-gray-800 bg-white dark:bg-gray-800">
@@ -641,7 +847,7 @@ const App = {
 
             <!-- CAMPO DE CUPOM DE DESCONTO -->
             <div class="p-6 rounded-2xl border dark:border-gray-800 bg-white dark:bg-gray-800">
-              <h2 class="font-bold text-base mb-2">2. Cupom de Desconto de Uso Único 🏷️</h2>
+              <h2 class="font-bold text-base mb-2">2. Cupom de Desconto de Uso Único </h2>
               <p class="text-xs text-gray-500 mb-4">Digite seu código de cupom ou selecione um dos cupons resgatados com seus Pontos Verdes.</p>
               
               ${this.appliedCouponCode && appliedCoupon ? `
@@ -675,13 +881,15 @@ const App = {
                   <span class="text-[11px] font-bold text-gray-500">Seus Cupons Disponíveis:</span>
                   <div class="flex flex-wrap gap-2 mt-1.5">
                     ${availableCoupons.map(c => {
-                      const isSelected = this.appliedCouponCode.toUpperCase() === c.code.toUpperCase();
-                      return `
+      const isSelected = this.appliedCouponCode.toUpperCase() === c.code.toUpperCase();
+      return `
                         <button type="button" onclick="App.applyCouponDirect('${c.code}')" class="text-xs font-mono ${isSelected ? 'bg-teal-600 text-white font-bold shadow' : 'bg-teal-50 dark:bg-teal-950 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 hover:bg-teal-100'} px-3 py-1 rounded-full cursor-pointer transition">
                           🏷️ ${c.code} (${c.discount_type}) ${isSelected ? '✓' : ''}
                         </button>
                       `;
-                    }).join('')}
+
+
+    }).join('')}
                   </div>
                 </div>
               ` : '<div class="text-xs text-gray-400 mt-2">Você não tem cupons ativos. Troque seus pontos na aba "Extrato de Pontos" para obter cupons!</div>'}
@@ -810,6 +1018,11 @@ const App = {
         </form>
       </div>
     `;
+
+    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
   },
 
   removeCouponCheckout() {
@@ -943,12 +1156,12 @@ const App = {
           </div>
 
           ${orders.length > 0 ? orders.map(o => {
-            const isCancelled = o.status === 'cancelled';
-            const statusBadge = isCancelled 
-              ? `<span class="bg-red-100 text-red-800 text-xs px-2.5 py-0.5 rounded-full font-bold">Cancelado ${o.coupon_code ? '(Cupom Reativado ✓)' : ''}</span>`
-              : '<span class="bg-emerald-100 text-emerald-800 text-xs px-2.5 py-0.5 rounded-full font-bold">✓ Confirmado / Em Separação</span>';
+        const isCancelled = o.status === 'cancelled';
+        const statusBadge = isCancelled
+          ? `<span class="bg-red-100 text-red-800 text-xs px-2.5 py-0.5 rounded-full font-bold">Cancelado ${o.coupon_code ? '(Cupom Reativado ✓)' : ''}</span>`
+          : '<span class="bg-emerald-100 text-emerald-800 text-xs px-2.5 py-0.5 rounded-full font-bold">✓ Confirmado / Em Separação</span>';
 
-            return `
+        return `
               <div class="p-6 rounded-2xl border dark:border-gray-800 bg-white dark:bg-gray-800 space-y-4 shadow-sm">
                 <div class="flex flex-wrap items-center justify-between gap-2 border-b dark:border-gray-700 pb-3">
                   <div>
@@ -966,6 +1179,12 @@ const App = {
                         <div>
                           <div class="font-bold text-sm text-gray-900 dark:text-white">${i.product_name}</div>
                           <div class="text-xs text-gray-500">Qtd: ${i.quantity} • Vendedor: ${i.seller_name}</div>
+                          ${i.seller_id ? `
+                            <button type="button" onclick="App.openChatWithUser(${i.seller_id}, ${i.product_id})" class="text-[11px] text-teal-600 hover:text-teal-700 dark:text-teal-400 font-semibold hover:underline inline-flex items-center gap-1 mt-1 cursor-pointer">
+                              <i data-lucide="message-circle" class="w-3 h-3 pointer-events-none"></i>
+                              <span>Conversar com vendedor</span>
+                            </button>
+                          ` : ''}
                         </div>
                       </div>
                       <div class="font-bold text-sm">R$ ${parseFloat(i.price).toFixed(2).replace('.', ',')}</div>
@@ -995,7 +1214,7 @@ const App = {
                 </div>
               </div>
             `;
-          }).join('') : `
+      }).join('') : `
             <div class="text-center py-16 bg-white dark:bg-gray-800 rounded-3xl border dark:border-gray-800">
               <div class="text-5xl mb-3">📦</div>
               <h2 class="text-lg font-bold mb-1">Você ainda não fez nenhum pedido</h2>
@@ -1006,6 +1225,11 @@ const App = {
         </div>
       `;
 
+      // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+      if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+      }
+
     } catch (e) {
       container.innerHTML = `<div class="text-center py-12 text-red-500">Erro ao carregar pedidos.</div>`;
     }
@@ -1015,6 +1239,12 @@ const App = {
   // TELA 13: CENTRAL DE NOTIFICAÇÕES
   // ----------------------------------------------------
   renderNotificationsScreen(container) {
+    const user = AuthManager.currentUser;
+    if (!user) {
+      this.showLoginModal();
+      return;
+    }
+
     container.innerHTML = `
       <div class="max-w-3xl mx-auto space-y-6 animate-fade-in">
         <h1 class="text-2xl font-extrabold mb-4">Central de Notificações 🔔</h1>
@@ -1058,6 +1288,11 @@ const App = {
         </div>
       </div>
     `;
+
+    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
   },
 
   // ----------------------------------------------------
@@ -1103,11 +1338,11 @@ const App = {
             <h2 class="text-xl font-bold mb-4">Resgatar Cupons de Desconto</h2>
             <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
               ${[
-                { type: '5%', name: 'Desconto de 5%', cost: 150 },
-                { type: '10%', name: 'Desconto de 10%', cost: 300 },
-                { type: '15%', name: 'Desconto de 15%', cost: 500 },
-                { type: 'free_shipping', name: 'Frete Grátis Ecológico', cost: 250 }
-              ].map(c => `
+          { type: '5%', name: 'Desconto de 5%', cost: 150 },
+          { type: '10%', name: 'Desconto de 10%', cost: 300 },
+          { type: '15%', name: 'Desconto de 15%', cost: 500 },
+          { type: 'free_shipping', name: 'Frete Grátis Ecológico', cost: 250 }
+        ].map(c => `
                 <div class="p-4 rounded-2xl border dark:border-gray-800 bg-white dark:bg-gray-800 flex flex-col justify-between shadow-sm">
                   <div>
                     <div class="text-2xl font-black text-teal-600 mb-1">${c.type === 'free_shipping' ? '🚚' : c.type}</div>
@@ -1133,8 +1368,8 @@ const App = {
             ${discounts.length > 0 ? `
               <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                 ${discounts.map(d => {
-                  const isUsed = parseInt(d.is_used) === 1;
-                  return `
+          const isUsed = parseInt(d.is_used) === 1;
+          return `
                     <div class="p-4 rounded-2xl border ${isUsed ? 'border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40 opacity-60' : 'border-teal-200 dark:border-teal-900 bg-teal-50/50 dark:bg-teal-950/30'} flex flex-col justify-between">
                       <div>
                         <div class="flex items-center justify-between mb-2">
@@ -1163,7 +1398,7 @@ const App = {
                       `}
                     </div>
                   `;
-                }).join('')}
+        }).join('')}
               </div>
             ` : `
               <div class="text-center py-8 text-gray-400 text-xs">
@@ -1173,6 +1408,11 @@ const App = {
           </div>
         </div>
       `;
+
+      // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+      if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+      }
 
     } catch (e) {
       container.innerHTML = `<div class="text-center py-12 text-red-500">Erro ao carregar sistema de pontos.</div>`;
@@ -1296,6 +1536,11 @@ const App = {
         </div>
       </div>
     `;
+
+    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
   },
 
   // ----------------------------------------------------
@@ -1329,6 +1574,11 @@ const App = {
           `).join('') : '<div class="text-center text-gray-500 text-sm py-8">Você ainda não avaliou nenhum produto.</div>'}
         </div>
       `;
+
+      // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+      if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+      }
     } catch (e) {
       container.innerHTML = `<div class="text-center py-12 text-red-500">Erro ao carregar avaliações.</div>`;
     }
@@ -1357,9 +1607,15 @@ const App = {
         <div class="space-y-8 animate-fade-in">
           <div class="flex items-center justify-between">
             <h1 class="text-2xl font-extrabold">Painel da Área do Vendedor</h1>
-            <button type="button" onclick="App.navigateTo('add-product')" class="btn-primary text-sm py-2 px-4 cursor-pointer">
-              + Cadastrar Novo Produto
-            </button>
+            <div class="flex items-center gap-2">
+              <button type="button" onclick="App.navigateTo('chat')" class="btn-outline text-sm py-2 px-4 cursor-pointer flex items-center gap-1.5">
+                <i data-lucide="message-circle" class="w-4 h-4"></i>
+                <span>Mensagens</span>
+              </button>
+              <button type="button" onclick="App.navigateTo('add-product')" class="btn-primary text-sm py-2 px-4 cursor-pointer">
+                + Cadastrar Novo Produto
+              </button>
+            </div>
           </div>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1386,22 +1642,32 @@ const App = {
             <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               ${products.map(p => `
                 <div class="p-4 rounded-2xl border dark:border-gray-800 bg-white dark:bg-gray-800 flex items-center justify-between">
-                  <div class="flex items-center gap-3">
-                    <img src="${p.primary_image}" class="w-12 h-12 rounded-xl object-cover">
+                  <div class="flex items-center gap-3 cursor-pointer" onclick="App.navigateTo('product-detail', { productId: ${p.id} })" title="Ver Detalhes do Produto">
+                    <img src="${p.primary_image}" class="w-12 h-12 rounded-xl object-cover hover:opacity-80 transition">
                     <div>
-                      <div class="font-bold text-sm text-gray-900 dark:text-white line-clamp-1">${p.name}</div>
+                      <div class="font-bold text-sm text-gray-900 dark:text-white line-clamp-1 hover:text-teal-600 transition">${p.name}</div>
                       <div class="text-xs text-gray-500">Estoque: ${p.stock} • R$ ${parseFloat(p.price).toFixed(2).replace('.', ',')}</div>
                     </div>
                   </div>
-                  <button type="button" onclick="App.deleteProductSeller(${p.id})" title="Excluir Anúncio" class="text-red-500 hover:text-red-700 p-2 text-sm cursor-pointer">
-                    🗑️
-                  </button>
+                  <div class="flex items-center gap-1">
+                    <button type="button" onclick="App.navigateTo('edit-product', { productId: ${p.id} })" title="Editar Anúncio" class="text-teal-600 hover:text-teal-800 hover:bg-teal-50 dark:hover:bg-teal-950/50 p-2 rounded-lg text-sm cursor-pointer transition">
+                      ✏️
+                    </button>
+                    <button type="button" onclick="App.deleteProductSeller(${p.id})" title="Excluir Anúncio" class="text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/50 p-2 rounded-lg text-sm cursor-pointer transition">
+                      🗑️
+                    </button>
+                  </div>
                 </div>
               `).join('')}
             </div>
           </div>
         </div>
       `;
+
+      // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+      if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+      }
 
     } catch (e) {
       container.innerHTML = `<div class="text-center py-12 text-red-500">Erro ao carregar área do vendedor.</div>`;
@@ -1412,6 +1678,14 @@ const App = {
   // TELA 21: ADICIONAR PRODUTO
   // ----------------------------------------------------
   renderAddProductScreen(container) {
+    const user = AuthManager.currentUser;
+    if (!user) {
+      this.showLoginModal();
+      return;
+    }
+
+    this.selectedProductImages = [];
+
     container.innerHTML = `
       <div class="max-w-2xl mx-auto animate-fade-in">
         <button type="button" onclick="App.navigateTo('seller')" class="text-sm text-teal-600 font-semibold hover:underline mb-4 block cursor-pointer">← Voltar para Área do Vendedor</button>
@@ -1419,17 +1693,17 @@ const App = {
 
         <form onsubmit="App.submitAddProduct(event)" class="space-y-4 p-6 rounded-3xl border dark:border-gray-800 bg-white dark:bg-gray-800 shadow-sm">
           <div>
-            <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Nome do Produto</label>
+            <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Nome do Produto *</label>
             <input type="text" id="prod-name" required placeholder="Ex: Garrafa Térmica Inox" class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 text-sm">
           </div>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Preço (R$)</label>
+              <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Preço (R$) *</label>
               <input type="number" step="0.01" id="prod-price" required placeholder="79.90" class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 text-sm">
             </div>
             <div>
-              <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Categoria</label>
+              <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Categoria *</label>
               <select id="prod-category" required class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 text-sm">
                 <option value="Utilidades">Utilidades</option>
                 <option value="Moda & Acessórios">Moda & Acessórios</option>
@@ -1441,7 +1715,7 @@ const App = {
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Condição do Produto</label>
+              <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Condição do Produto *</label>
               <select id="prod-condition" required class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 text-sm">
                 <option value="used">Usado (Reutilizável)</option>
                 <option value="restored">Restaurado / Upcycled</option>
@@ -1449,7 +1723,7 @@ const App = {
               </select>
             </div>
             <div>
-              <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Estoque Disponível</label>
+              <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Estoque Disponível *</label>
               <input type="number" id="prod-stock" value="1" required class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 text-sm">
             </div>
           </div>
@@ -1460,14 +1734,14 @@ const App = {
           </div>
 
           <div>
-            <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Descrição Detalhada & Impacto Ecológico</label>
+            <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Descrição Detalhada & Impacto Ecológico *</label>
             <textarea id="prod-desc" rows="4" required placeholder="Descreva o produto e seu impacto socioambiental positivo..." class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 text-sm"></textarea>
           </div>
 
           <div>
             <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Fotos do Produto (1 foto obrigatória, até 5 fotos) *</label>
-            <input type="file" id="prod-images" multiple accept="image/png,image/jpeg,image/jpg,image/webp" onchange="App.previewProductImages(event)" class="w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100 cursor-pointer">
-            <p class="text-[11px] text-gray-400 mt-1">Selecione de 1 a 5 fotos reais do produto. A primeira foto será a capa principal.</p>
+            <input type="file" id="prod-images" multiple accept="image/png,image/jpeg,image/jpg,image/webp" onchange="App.handleProductImageSelect(event)" class="w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100 cursor-pointer">
+            <p class="text-[11px] text-gray-400 mt-1">Selecione de 1 a 5 fotos. Você pode selecionar uma a uma ou várias juntas. A primeira foto será a capa principal.</p>
             <div id="prod-images-preview" class="hidden mt-3 p-3 bg-gray-50 dark:bg-gray-700/40 rounded-2xl border dark:border-gray-700"></div>
           </div>
 
@@ -1475,21 +1749,42 @@ const App = {
         </form>
       </div>
     `;
+
+    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
   },
 
-  previewProductImages(e) {
-    const files = e.target.files;
+  handleProductImageSelect(e) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+
+    for (const file of files) {
+      if (this.selectedProductImages.length >= 5) {
+        ToastManager.show('Você pode anexar no máximo 5 fotos por produto!', 'warning');
+        break;
+      }
+      if (!file.type.match(/^image\/(jpeg|jpg|png|webp)$/i)) {
+        ToastManager.show(`Formato não suportado: ${file.name}. Use JPG, PNG ou WEBP.`, 'error');
+        continue;
+      }
+      this.selectedProductImages.push(file);
+    }
+
+    // Limpar o input de arquivo para permitir selecionar a mesma ou outra foto individualmente
+    e.target.value = '';
+    this.renderProductImagesPreview();
+  },
+
+  renderProductImagesPreview() {
     const previewContainer = document.getElementById('prod-images-preview');
     if (!previewContainer) return;
 
     previewContainer.innerHTML = '';
-    if (!files || files.length === 0) {
+    if (!this.selectedProductImages || this.selectedProductImages.length === 0) {
       previewContainer.classList.add('hidden');
       return;
-    }
-
-    if (files.length > 5) {
-      ToastManager.show('Atenção: Você pode anexar no máximo 5 fotos por produto! Apenas as primeiras 5 serão enviadas.', 'warning');
     }
 
     previewContainer.classList.remove('hidden');
@@ -1497,32 +1792,56 @@ const App = {
     const header = document.createElement('div');
     header.className = 'text-xs font-bold text-teal-700 dark:text-teal-300 mb-2 flex items-center justify-between';
     header.innerHTML = `
-      <span>📸 ${Math.min(files.length, 5)} foto(s) selecionada(s) (máximo 5)</span>
+      <span>📸 ${this.selectedProductImages.length}/5 foto(s) selecionada(s)</span>
       <span class="text-[10px] text-gray-400 font-normal">A foto #1 será a capa</span>
     `;
+
+    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
     previewContainer.appendChild(header);
 
     const grid = document.createElement('div');
-    grid.className = 'grid grid-cols-5 gap-2';
+    grid.className = 'grid grid-cols-2 sm:grid-cols-5 gap-3';
 
-    const maxCount = Math.min(files.length, 5);
-    for (let i = 0; i < maxCount; i++) {
-      const file = files[i];
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const thumb = document.createElement('div');
-        thumb.className = 'relative aspect-square rounded-xl overflow-hidden border-2 ' + (i === 0 ? 'border-teal-500 ring-2 ring-teal-300' : 'border-gray-200 dark:border-gray-600') + ' shadow-sm bg-gray-100 dark:bg-gray-800';
-        thumb.innerHTML = `
-          <img src="${event.target.result}" class="w-full h-full object-cover" alt="Preview ${i + 1}">
-          <span class="absolute bottom-0 inset-x-0 ${i === 0 ? 'bg-teal-600' : 'bg-black/60'} text-white text-[9px] font-bold text-center py-0.5">
-            ${i === 0 ? 'Principal' : `#${i + 1}`}
-          </span>
-        `;
-        grid.appendChild(thumb);
+    this.selectedProductImages.forEach((file, i) => {
+      const thumb = document.createElement('div');
+      thumb.className = 'relative aspect-square rounded-xl overflow-hidden border-2 ' + (i === 0 ? 'border-teal-500 ring-2 ring-teal-300' : 'border-gray-200 dark:border-gray-600') + ' shadow-sm bg-gray-100 dark:bg-gray-800';
+
+      const img = document.createElement('img');
+      img.className = 'w-full h-full object-cover';
+      img.alt = `Foto ${i + 1}`;
+      img.src = URL.createObjectURL(file);
+
+      const badge = document.createElement('span');
+      badge.className = `absolute bottom-0 inset-x-0 ${i === 0 ? 'bg-teal-600' : 'bg-black/60'} text-white text-[9px] font-bold text-center py-0.5 pointer-events-none`;
+      badge.innerText = i === 0 ? 'Principal' : `#${i + 1}`;
+
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.title = 'Remover esta foto';
+      removeBtn.className = 'absolute top-1 right-1 bg-red-500 hover:bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-black shadow cursor-pointer transition';
+      removeBtn.innerHTML = '✕';
+      removeBtn.onclick = (evt) => {
+        evt.stopPropagation();
+        App.removeSelectedProductImage(i);
       };
-      reader.readAsDataURL(file);
-    }
+
+      thumb.appendChild(img);
+      thumb.appendChild(badge);
+      thumb.appendChild(removeBtn);
+      grid.appendChild(thumb);
+    });
+
     previewContainer.appendChild(grid);
+  },
+
+  removeSelectedProductImage(index) {
+    if (index >= 0 && index < this.selectedProductImages.length) {
+      this.selectedProductImages.splice(index, 1);
+      this.renderProductImagesPreview();
+    }
   },
 
   async submitAddProduct(e) {
@@ -1536,20 +1855,18 @@ const App = {
     const stock = parseInt(document.getElementById('prod-stock').value) || 1;
     const material = document.getElementById('prod-material').value.trim();
     const description = document.getElementById('prod-desc').value.trim();
-    const imagesInput = document.getElementById('prod-images');
-    const files = imagesInput ? imagesInput.files : null;
 
     if (!name || !description || isNaN(price) || price <= 0 || !category) {
       ToastManager.show('Por favor, preencha todos os campos obrigatórios do produto.', 'error');
       return;
     }
 
-    if (!files || files.length === 0) {
+    if (!this.selectedProductImages || this.selectedProductImages.length === 0) {
       ToastManager.show('É obrigatório incluir pelo menos 1 foto do produto.', 'error');
       return;
     }
 
-    if (files.length > 5) {
+    if (this.selectedProductImages.length > 5) {
       ToastManager.show('Você pode anexar no máximo 5 fotos por produto.', 'error');
       return;
     }
@@ -1568,13 +1885,14 @@ const App = {
     formData.append('material', material);
     formData.append('description', description);
 
-    for (let i = 0; i < files.length; i++) {
-      formData.append('images[]', files[i]);
+    for (let i = 0; i < this.selectedProductImages.length; i++) {
+      formData.append('images[]', this.selectedProductImages[i]);
     }
 
     try {
       const res = await SellerManager.addProduct(formData);
       if (res.success) {
+        this.selectedProductImages = [];
         ToastManager.show(res.message || 'Produto cadastrado com sucesso no marketplace!', 'success', 5000);
         this.productsCache = null;
         this.navigateTo('seller');
@@ -1595,14 +1913,376 @@ const App = {
   },
 
   // ----------------------------------------------------
-  // TELA 12: CHAT DE ATENDIMENTO
+  // TELA 22: EDITAR PRODUTO (ÁREA DO VENDEDOR)
   // ----------------------------------------------------
-  async openChatWithUser(receiverId, productId = null) {
-    if (!AuthManager.currentUser) {
+  async renderEditProductScreen(container) {
+    const user = AuthManager.currentUser;
+    if (!user) {
       this.showLoginModal();
       return;
     }
+
+    if (!this.selectedProductId) {
+      container.innerHTML = `
+        <div class="text-center py-12">
+          <p class="text-gray-500 mb-4">Nenhum produto selecionado para edição.</p>
+          <button type="button" onclick="App.navigateTo('seller')" class="btn-primary text-xs py-2 px-4 cursor-pointer">Voltar para Área do Vendedor</button>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = `<div class="max-w-2xl mx-auto py-12 text-center text-gray-500">Carregando dados do anúncio...</div>`;
+
+    try {
+      const res = await fetch(`api/products.php?action=detail&id=${this.selectedProductId}`);
+      const data = await res.json();
+
+      if (!data.success || !data.product) {
+        container.innerHTML = `<div class="text-center py-12 text-red-500">Erro ao carregar produto para edição.</div>`;
+        return;
+      }
+
+      const p = data.product;
+      if (parseInt(p.seller_id) !== parseInt(user.id)) {
+        ToastManager.show('Você não tem permissão para editar este anúncio.', 'error');
+        this.navigateTo('seller');
+        return;
+      }
+
+      this.editExistingImages = (data.images || []).map(img => ({ ...img }));
+      this.editRemovedImageIds = [];
+      this.editNewImages = [];
+
+      container.innerHTML = `
+        <div class="max-w-2xl mx-auto animate-fade-in">
+          <button type="button" onclick="App.navigateTo('seller')" class="text-sm text-teal-600 font-semibold hover:underline mb-4 block cursor-pointer">← Voltar para Área do Vendedor</button>
+          <div class="flex items-center justify-between mb-6">
+            <h1 class="text-2xl font-extrabold">Editar Produto Sustentável</h1>
+            <span class="text-xs bg-teal-50 dark:bg-teal-950 text-teal-700 dark:text-teal-300 font-mono px-2 py-1 rounded border border-teal-200 dark:border-teal-800">ID #${p.id}</span>
+          </div>
+
+          <form onsubmit="App.submitEditProduct(event, ${p.id})" class="space-y-4 p-6 rounded-3xl border dark:border-gray-800 bg-white dark:bg-gray-800 shadow-sm">
+            <div>
+              <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Nome do Produto *</label>
+              <input type="text" id="edit-prod-name" required value="${(p.name || '').replace(/"/g, '&quot;')}" class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 text-sm">
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Preço (R$) *</label>
+                <input type="number" step="0.01" id="edit-prod-price" required value="${parseFloat(p.price).toFixed(2)}" class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Categoria *</label>
+                <select id="edit-prod-category" required class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 text-sm">
+                  <option value="Utilidades" ${p.category === 'Utilidades' ? 'selected' : ''}>Utilidades</option>
+                  <option value="Moda & Acessórios" ${p.category === 'Moda & Acessórios' ? 'selected' : ''}>Moda & Acessórios</option>
+                  <option value="Móveis & Decoração" ${p.category === 'Móveis & Decoração' ? 'selected' : ''}>Móveis & Decoração</option>
+                  <option value="Eletrônicos Eco" ${p.category === 'Eletrônicos Eco' ? 'selected' : ''}>Eletrônicos Eco</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Condição do Produto *</label>
+                <select id="edit-prod-condition" required class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 text-sm">
+                  <option value="used" ${p.product_condition === 'used' ? 'selected' : ''}>Usado (Reutilizável)</option>
+                  <option value="restored" ${p.product_condition === 'restored' ? 'selected' : ''}>Restaurado / Upcycled</option>
+                  <option value="new" ${p.product_condition === 'new' ? 'selected' : ''}>Novo (Ecológico)</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Estoque Disponível *</label>
+                <input type="number" id="edit-prod-stock" value="${p.stock}" required class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 text-sm">
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Material Sustentável / Atributos Ecológicos</label>
+              <input type="text" id="edit-prod-material" value="${(p.material || '').replace(/"/g, '&quot;')}" placeholder="Ex: Aço Inox / Algodão Orgânico" class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 text-sm">
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Descrição Detalhada & Impacto Ecológico *</label>
+              <textarea id="edit-prod-desc" rows="4" required class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 text-sm">${p.description || ''}</textarea>
+            </div>
+
+            <!-- GESTÃO DE FOTOS -->
+            <div class="border-t dark:border-gray-700 pt-4 space-y-4">
+              <h3 class="font-bold text-sm">Fotos do Produto (1 a 5 fotos)</h3>
+              
+              <!-- FOTOS ATUAIS -->
+              <div>
+                <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2">Fotos Atuais no Anúncio</label>
+                <div id="edit-existing-images" class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                  <!-- renderEditImagesPreview() -->
+                </div>
+              </div>
+
+              <!-- ADICIONAR NOVAS FOTOS -->
+              <div>
+                <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Adicionar Mais Fotos</label>
+                <input type="file" id="edit-prod-images-input" multiple accept="image/png,image/jpeg,image/jpg,image/webp" onchange="App.handleEditNewImageSelect(event)" class="w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100 cursor-pointer">
+                <p class="text-[11px] text-gray-400 mt-1">Selecione fotos adicionais. O anúncio pode ter até 5 fotos no total.</p>
+                <div id="edit-new-images-preview" class="hidden mt-3 p-3 bg-gray-50 dark:bg-gray-700/40 rounded-2xl border dark:border-gray-700"></div>
+              </div>
+            </div>
+
+            <div class="flex gap-3 pt-4 border-t dark:border-gray-700">
+              <button type="button" onclick="App.navigateTo('seller')" class="btn-outline flex-1 py-2.5 text-sm cursor-pointer">Cancelar</button>
+              <button type="submit" id="btn-edit-prod-submit" class="btn-primary flex-1 py-2.5 text-sm cursor-pointer">Salvar Alterações</button>
+            </div>
+          </form>
+        </div>
+      `;
+
+      // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+      if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+      }
+
+      this.renderEditImagesPreview();
+
+    } catch (e) {
+      container.innerHTML = `<div class="text-center py-12 text-red-500">Erro de comunicação com o servidor.</div>`;
+    }
+  },
+
+  renderEditImagesPreview() {
+    const existingContainer = document.getElementById('edit-existing-images');
+    if (!existingContainer) return;
+
+    const visibleExisting = this.editExistingImages.filter(img => !this.editRemovedImageIds.includes(img.id));
+
+    if (visibleExisting.length === 0) {
+      existingContainer.innerHTML = `<div class="col-span-full text-xs text-amber-500 font-semibold p-2 bg-amber-50 dark:bg-amber-950/40 rounded-xl border border-amber-200">Todas as fotos antigas foram marcadas para remoção. Adicione pelo menos 1 nova foto abaixo.</div>`;
+    } else {
+      existingContainer.innerHTML = visibleExisting.map((img, idx) => `
+        <div class="relative aspect-square rounded-xl overflow-hidden border-2 ${idx === 0 && this.editNewImages.length === 0 ? 'border-teal-500 ring-2 ring-teal-300' : 'border-gray-200 dark:border-gray-700'} shadow-sm bg-gray-100 dark:bg-gray-800">
+          <img src="${img.image_url}" class="w-full h-full object-cover">
+          <span class="absolute bottom-0 inset-x-0 ${idx === 0 ? 'bg-teal-600' : 'bg-black/60'} text-white text-[9px] font-bold text-center py-0.5 pointer-events-none">
+            ${idx === 0 ? 'Principal' : `#${idx + 1}`}
+          </span>
+          <button type="button" onclick="App.removeEditExistingImage(${img.id})" title="Remover esta foto" class="absolute top-1 right-1 bg-red-500 hover:bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-black shadow cursor-pointer transition">
+            ✕
+          </button>
+        </div>
+      `).join('');
+
+      // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+      if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+      }
+    }
+
+    this.renderEditNewImagesPreview();
+  },
+
+  removeEditExistingImage(id) {
+    const totalRemaining = (this.editExistingImages.length - this.editRemovedImageIds.length - 1) + this.editNewImages.length;
+    if (totalRemaining < 1) {
+      ToastManager.show('O produto precisa ter pelo menos 1 foto. Adicione uma nova foto antes de remover esta.', 'warning');
+      return;
+    }
+    this.editRemovedImageIds.push(id);
+    this.renderEditImagesPreview();
+  },
+
+  handleEditNewImageSelect(e) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+
+    for (const file of files) {
+      const activeTotal = (this.editExistingImages.length - this.editRemovedImageIds.length) + this.editNewImages.length;
+      if (activeTotal >= 5) {
+        ToastManager.show('O limite total é de 5 fotos por produto!', 'warning');
+        break;
+      }
+      if (!file.type.match(/^image\/(jpeg|jpg|png|webp)$/i)) {
+        ToastManager.show(`Formato não suportado: ${file.name}. Use JPG, PNG ou WEBP.`, 'error');
+        continue;
+      }
+      this.editNewImages.push(file);
+    }
+
+    e.target.value = '';
+    this.renderEditNewImagesPreview();
+  },
+
+  renderEditNewImagesPreview() {
+    const newContainer = document.getElementById('edit-new-images-preview');
+    if (!newContainer) return;
+
+    if (this.editNewImages.length === 0) {
+      newContainer.classList.add('hidden');
+      newContainer.innerHTML = '';
+      return;
+    }
+
+    newContainer.classList.remove('hidden');
+    newContainer.innerHTML = `
+      <div class="text-xs font-bold text-teal-700 dark:text-teal-300 mb-2">
+        Novas fotos selecionadas (${this.editNewImages.length}):
+      </div>
+      <div class="grid grid-cols-2 sm:grid-cols-5 gap-3" id="edit-new-grid"></div>
+    `;
+
+    const grid = document.getElementById('edit-new-grid');
+    this.editNewImages.forEach((file, i) => {
+      const thumb = document.createElement('div');
+      thumb.className = 'relative aspect-square rounded-xl overflow-hidden border-2 border-emerald-400 shadow-sm bg-gray-100 dark:bg-gray-800';
+      thumb.innerHTML = `
+        <img src="${URL.createObjectURL(file)}" class="w-full h-full object-cover">
+        <span class="absolute bottom-0 inset-x-0 bg-emerald-600 text-white text-[9px] font-bold text-center py-0.5 pointer-events-none">Nova</span>
+        <button type="button" onclick="App.removeEditNewImage(${i})" title="Remover nova foto" class="absolute top-1 right-1 bg-red-500 hover:bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-black shadow cursor-pointer transition">
+          ✕
+        </button>
+      `;
+      // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+      if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+      }
+      grid.appendChild(thumb);
+    });
+  },
+
+  removeEditNewImage(idx) {
+    this.editNewImages.splice(idx, 1);
+    this.renderEditNewImagesPreview();
+  },
+
+  async submitEditProduct(e, productId) {
+    e.preventDefault();
+    const btn = document.getElementById('btn-edit-prod-submit');
+
+    const totalRemaining = (this.editExistingImages.length - this.editRemovedImageIds.length) + this.editNewImages.length;
+    if (totalRemaining < 1) {
+      ToastManager.show('É obrigatório que o produto possua pelo menos 1 foto.', 'error');
+      return;
+    }
+
+    const name = document.getElementById('edit-prod-name').value.trim();
+    const price = parseFloat(document.getElementById('edit-prod-price').value);
+    const category = document.getElementById('edit-prod-category').value;
+    const condition = document.getElementById('edit-prod-condition').value;
+    const stock = parseInt(document.getElementById('edit-prod-stock').value) || 0;
+    const material = document.getElementById('edit-prod-material').value.trim();
+    const description = document.getElementById('edit-prod-desc').value.trim();
+
+    if (!name || !description || isNaN(price) || price <= 0 || !category) {
+      ToastManager.show('Preencha todos os campos obrigatórios do produto.', 'error');
+      return;
+    }
+
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = 'Salvando alterações... ⏳';
+    }
+
+    const formData = new FormData();
+    formData.append('id', productId);
+    formData.append('name', name);
+    formData.append('price', price);
+    formData.append('category', category);
+    formData.append('product_condition', condition);
+    formData.append('stock', stock);
+    formData.append('material', material);
+    formData.append('description', description);
+
+    for (const remId of this.editRemovedImageIds) {
+      formData.append('removed_image_ids[]', remId);
+    }
+
+    for (const file of this.editNewImages) {
+      formData.append('images[]', file);
+    }
+
+    try {
+      const res = await SellerManager.updateProduct(formData);
+      if (res.success) {
+        ToastManager.show(res.message || 'Produto atualizado com sucesso!', 'success', 4000);
+        this.productsCache = null;
+        this.navigateTo('seller');
+      } else {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = 'Salvar Alterações';
+        }
+        ToastManager.show(res.error || 'Erro ao atualizar produto.', 'error');
+      }
+    } catch (err) {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = 'Salvar Alterações';
+      }
+      ToastManager.show('Erro de comunicação ao salvar produto.', 'error');
+    }
+  },
+
+  // ----------------------------------------------------
+  // TELA 12: CHAT DE ATENDIMENTO E NEGOCIAÇÃO
+  // ----------------------------------------------------
+  async openChatWithUser(receiverId, productId = null) {
+    if (!AuthManager.currentUser) {
+      ToastManager.show('Faça login para conversar pelo chat.', 'info');
+      this.showLoginModal();
+      return;
+    }
+    receiverId = parseInt(receiverId, 10);
+    if (parseInt(AuthManager.currentUser.id, 10) === receiverId) {
+      ToastManager.show('Você não pode conversar consigo mesmo.', 'info');
+      return;
+    }
     this.navigateTo('chat', { withUserId: receiverId, productId: productId });
+  },
+
+  async openSupportChat() {
+    if (!AuthManager.currentUser) {
+      ToastManager.show('Faça login para conversar com o suporte.', 'info');
+      this.showLoginModal();
+      return;
+    }
+
+    if (AuthManager.currentUser.email === 'tccdssuporte@gmail.com') {
+      ToastManager.show('Você está logado na conta de Suporte. Selecione uma conversa na lista para atender.', 'info');
+      return;
+    }
+
+    ToastManager.show('Conectando ao Suporte Re-Store...', 'info');
+
+    try {
+      const res = await ChatManager.getSupportUser();
+      if (res && res.success && res.support_user && res.support_user.id) {
+        const supportId = parseInt(res.support_user.id, 10);
+        if (parseInt(AuthManager.currentUser.id, 10) === supportId) {
+          ToastManager.show('Você é o operador da conta de suporte.', 'info');
+          return;
+        }
+        if (this.currentScreen !== 'chat') {
+          this.navigateTo('chat', { withUserId: supportId });
+        } else {
+          await this.selectChatPartner(supportId);
+        }
+      } else {
+        ToastManager.show('Não foi possível conectar ao suporte agora. Tente novamente em instantes.', 'error');
+      }
+    } catch (err) {
+      console.error('Erro ao abrir chat de suporte:', err);
+      ToastManager.show('Falha de conexão com a central de suporte.', 'error');
+    }
+  },
+
+  formatChatTime(dateStr) {
+    if (!dateStr) return '';
+    try {
+      const d = new Date(dateStr.replace(' ', 'T'));
+      if (isNaN(d.getTime())) return dateStr;
+      return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return '';
+    }
   },
 
   async renderChatScreen(container) {
@@ -1612,118 +2292,508 @@ const App = {
       return;
     }
 
+    const targetPartnerId = this.chatParams?.withUserId ? parseInt(this.chatParams.withUserId, 10) : null;
+    const targetProductId = this.chatParams?.productId ? parseInt(this.chatParams.productId, 10) : null;
+
     container.innerHTML = `
-      <div class="h-[70vh] rounded-3xl border dark:border-gray-800 bg-white dark:bg-gray-800 flex overflow-hidden shadow-lg animate-fade-in">
-        <div id="chat-sidebar" class="w-1/3 border-r dark:border-gray-800 p-4 space-y-3 overflow-y-auto">
-          <h2 class="font-bold text-base mb-3">Mensagens</h2>
-          <div id="chat-convs-list" class="space-y-2">Carregando conversas...</div>
+      <div class="h-[78vh] min-h-[520px] rounded-3xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800 flex overflow-hidden shadow-xl animate-fade-in relative">
+        <!-- BARRA LATERAL: LISTA DE CONVERSAS -->
+        <div id="chat-sidebar" class="w-full md:w-80 lg:w-96 md:shrink-0 border-r border-gray-200 dark:border-gray-800 flex flex-col bg-gray-50/50 dark:bg-gray-900/30 overflow-hidden">
+          <div class="p-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <h2 class="font-extrabold text-base text-gray-900 dark:text-white">Mensagens</h2>
+              <span id="chat-sidebar-badge" class="hidden bg-teal-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">0</span>
+            </div>
+            <button type="button" onclick="App.refreshConversationsList()" title="Atualizar conversas" class="text-gray-400 hover:text-teal-600 transition p-1.5 rounded-lg cursor-pointer">
+              <i data-lucide="rotate-cw" class="w-4 h-4"></i>
+            </button>
+          </div>
+
+          <!-- BOTÃO DESTACADO: SUPORTE OFICIAL RE-STORE -->
+          <div class="p-3 pb-2 border-b border-gray-100 dark:border-gray-800/80">
+            <button 
+              type="button" 
+              onclick="App.openSupportChat()" 
+              class="w-full p-2.5 rounded-2xl bg-linear-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white flex items-center justify-between shadow-xs transition-all duration-200 cursor-pointer group"
+              title="Falar diretamente com a equipe de suporte"
+            >
+              <div class="flex items-center gap-2.5">
+                <div class="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white shrink-0 group-hover:scale-110 transition-transform">
+                  <i data-lucide="headphones" class="w-4 h-4 pointer-events-none"></i>
+                </div>
+                <div class="text-left">
+                  <div class="font-bold text-xs flex items-center gap-1.5">
+                    <span>Falar com o Suporte</span>
+                    <span class="text-[9px] bg-white/25 px-1.5 py-0.5 rounded-full font-bold">Oficial</span>
+                  </div>
+                  <div class="text-[10px] text-teal-100">Atendimento e dúvidas do Re-Store</div>
+                </div>
+              </div>
+              <i data-lucide="chevron-right" class="w-4 h-4 text-white/80 group-hover:translate-x-0.5 transition-transform pointer-events-none"></i>
+            </button>
+          </div>
+
+          <div id="chat-convs-list" class="flex-1 overflow-y-auto p-3 space-y-2">
+            <div class="text-center py-8 text-xs text-gray-400">Carregando conversas...</div>
+          </div>
         </div>
-        <div id="chat-window" class="w-2/3 flex flex-col justify-between p-4 bg-gray-50/50 dark:bg-gray-900/50">
-          <div class="text-center my-auto text-gray-400 text-sm">Selecione uma conversa para iniciar o bate-papo</div>
+
+        <!-- JANELA PRINCIPAL DO CHAT -->
+        <div id="chat-window" class="hidden md:flex flex-1 min-w-0 flex-col justify-between bg-white dark:bg-gray-900 relative h-full overflow-hidden">
+          <div class="text-center my-auto p-6 space-y-3 text-gray-400">
+            <div class="w-16 h-16 rounded-full bg-teal-50 dark:bg-teal-950/50 flex items-center justify-center mx-auto text-teal-600 dark:text-teal-400 mb-1">
+              <i data-lucide="messages-square" class="w-8 h-8"></i>
+            </div>
+            <div class="font-bold text-sm text-gray-700 dark:text-gray-200">Central de Mensagens Re-Store</div>
+            <div class="text-xs text-gray-400 max-w-xs mx-auto">Selecione uma conversa ao lado para responder ou tire suas dúvidas diretamente com nossa equipe.</div>
+            <div class="pt-2">
+              <button 
+                type="button" 
+                onclick="App.openSupportChat()" 
+                class="btn-primary text-xs py-2.5 px-4 rounded-xl inline-flex items-center gap-2 cursor-pointer shadow-sm"
+              >
+                <i data-lucide="headphones" class="w-4 h-4"></i>
+                <span>Falar com o Suporte</span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     `;
 
-    const convsRes = await ChatManager.getConversations();
-    const convsList = document.getElementById('chat-convs-list');
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
 
-    if (convsRes.success && convsRes.conversations.length > 0) {
-      convsList.innerHTML = convsRes.conversations.map(c => `
-        <div onclick="App.selectChatPartner(${c.user.id})" class="p-3 rounded-2xl border dark:border-gray-800 bg-white dark:bg-gray-800 cursor-pointer hover:border-teal-500 transition">
-          <div class="font-bold text-xs text-gray-900 dark:text-white line-clamp-1">${c.user.name}</div>
-          <div class="text-[11px] text-gray-500 line-clamp-1 mt-0.5">${c.last_message ? c.last_message.message : ''}</div>
-        </div>
-      `).join('');
-    } else {
-      convsList.innerHTML = `<div class="text-xs text-gray-400">Nenhuma conversa encontrada.</div>`;
+    // Carrega lista lateral de conversas
+    await this.refreshConversationsList(targetPartnerId);
+
+    // Se o usuário entrou direcionado para conversar com um vendedor/usuário específico
+    if (targetPartnerId) {
+      await this.selectChatPartner(targetPartnerId, targetProductId);
     }
   },
 
-  async selectChatPartner(partnerId) {
+  async selectChatPartner(partnerId, productId = null) {
+    partnerId = parseInt(partnerId, 10);
+    ChatManager.stopPolling();
+
+    // Em mobile, oculta lista lateral e exibe a janela de mensagens sem conflito de classes
+    const sidebar = document.getElementById('chat-sidebar');
     const win = document.getElementById('chat-window');
-    win.innerHTML = `<div class="text-center my-auto text-gray-400">Carregando mensagens...</div>`;
-
-    const res = await ChatManager.getMessages(partnerId);
-    if (!res.success) return;
-
-    const partner = res.partner;
-    const msgs = res.messages;
+    if (sidebar && win) {
+      sidebar.classList.remove('flex');
+      sidebar.classList.add('hidden');
+      win.classList.remove('hidden');
+      win.classList.add('flex');
+    }
 
     win.innerHTML = `
-      <div class="p-3 border-b dark:border-gray-800 flex items-center justify-between bg-white dark:bg-gray-800 rounded-xl mb-3">
-        <div class="flex items-center gap-2">
-          <div class="font-bold text-sm">${partner.name}</div>
-          <span class="text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 px-2 py-0.5 rounded-full font-bold">🟢 Disponível agora</span>
+      <div class="text-center my-auto p-8 text-gray-400 space-y-2">
+        <div class="animate-spin inline-block w-6 h-6 border-2 border-teal-500 border-t-transparent rounded-full"></div>
+        <div class="text-xs">Carregando mensagens...</div>
+      </div>
+    `;
+
+    const res = await ChatManager.getMessages(partnerId, productId);
+    if (!res.success) {
+      win.innerHTML = `
+        <div class="p-6 text-center my-auto space-y-3">
+          <div class="text-sm text-red-500">${res.error || 'Não foi possível carregar a conversa.'}</div>
+          <button type="button" onclick="App.toggleMobileChatList(true)" class="btn-outline text-xs py-1.5 px-3">Voltar às Conversas</button>
+        </div>
+      `;
+      return;
+    }
+
+    const partner = res.partner;
+    const msgs = res.messages || [];
+    const product = res.product;
+    const currentUserId = AuthManager.currentUser ? parseInt(AuthManager.currentUser.id, 10) : 0;
+    const partnerAvatar = partner.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(partner.name)}&background=0d9488&color=fff&size=80`;
+
+    win.innerHTML = `
+      <!-- CABEÇALHO DO CHAT -->
+      <div class="p-3.5 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between bg-white dark:bg-gray-800 z-10 shadow-xs">
+        <div class="flex items-center gap-3">
+          <button type="button" onclick="App.toggleMobileChatList(true)" class="md:hidden p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 cursor-pointer" title="Voltar para lista">
+            <i data-lucide="arrow-left" class="w-5 h-5"></i>
+          </button>
+          <img src="${partnerAvatar}" class="w-10 h-10 rounded-full object-cover border border-teal-500/30" alt="${this.escapeHtml(partner.name)}">
+          <div>
+            <div class="font-bold text-sm text-gray-900 dark:text-white flex items-center gap-1.5">
+              ${this.escapeHtml(partner.name)}
+              ${partner.is_verified_business ? '<span class="text-teal-500 text-xs font-bold" title="Vendedor Verificado">✓</span>' : ''}
+            </div>
+            <div class="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+              <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              ${partner.business_name ? this.escapeHtml(partner.business_name) : 'Disponível no Re-Store'}
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-1">
+          <button type="button" onclick="App.refreshActiveChat(${partnerId}, ${product ? product.id : (productId || 'null')})" title="Recarregar conversa" class="p-2 text-gray-400 hover:text-teal-600 transition rounded-lg cursor-pointer">
+            <i data-lucide="rotate-cw" class="w-4 h-4"></i>
+          </button>
         </div>
       </div>
 
-      <div id="chat-msgs-body" class="flex-1 overflow-y-auto space-y-3 pr-2 mb-3">
-        ${msgs.map(m => {
-          const isMe = m.sender_id === AuthManager.currentUser.id;
-          return `
-            <div class="flex ${isMe ? 'justify-end' : 'justify-start'} group">
-              <div class="relative max-w-xs px-4 py-2 rounded-2xl text-sm ${isMe ? 'bg-teal-600 text-white rounded-br-none' : 'bg-white dark:bg-gray-800 border dark:border-gray-700 text-gray-800 dark:text-gray-200 rounded-bl-none'}">
-                ${m.message}
-                ${isMe ? `
-                  <button type="button" onclick="App.deleteChatMessage(${m.id}, ${partnerId})" title="Apagar Mensagem" class="opacity-0 group-hover:opacity-100 absolute -left-6 top-2 text-gray-400 hover:text-red-500 text-xs cursor-pointer">
-                    🗑️
-                  </button>
-                ` : ''}
-              </div>
+      <!-- CARD DO PRODUTO EM NEGOCIAÇÃO (SE HOUVER) -->
+      ${product ? `
+        <div class="p-2.5 mx-4 mt-3 bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800/60 rounded-2xl flex items-center justify-between">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <img src="${product.image_url || 'https://images.unsplash.com/photo-1544816155-12df9643f363?w=100'}" class="w-9 h-9 rounded-xl object-cover shrink-0 border border-teal-200 dark:border-teal-700">
+            <div class="min-w-0">
+              <div class="text-[10px] text-teal-800 dark:text-teal-300 font-bold uppercase tracking-wider">Negociando Produto</div>
+              <div class="font-bold text-xs text-gray-900 dark:text-white truncate">${this.escapeHtml(product.name)}</div>
+              <div class="text-xs font-extrabold text-teal-600 dark:text-teal-400">R$ ${parseFloat(product.price).toFixed(2).replace('.', ',')}</div>
             </div>
-          `;
-        }).join('')}
+          </div>
+          <button type="button" onclick="App.navigateTo('product-detail', { productId: ${product.id} })" class="text-xs font-bold text-teal-700 dark:text-teal-300 hover:underline px-2 py-1 shrink-0 cursor-pointer">
+            Ver Anúncio →
+          </button>
+        </div>
+      ` : ''}
+
+      <!-- CORPO DE MENSAGENS -->
+      <div id="chat-msgs-body" class="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 space-y-3 min-h-0 w-full">
+        ${msgs.length === 0 ? `
+          <div id="chat-empty-intro" class="text-center py-12 space-y-2 text-gray-400">
+            <div class="text-3xl">💬</div>
+            <div class="font-bold text-xs text-gray-700 dark:text-gray-300">Inicie uma conversa com ${this.escapeHtml(partner.name)}!</div>
+            <div class="text-[11px] text-gray-400 max-w-xs mx-auto">Tire dúvidas sobre o produto, combine formas de entrega ou faça sua proposta.</div>
+          </div>
+        ` : ''}
+
+        ${msgs.map(m => this.renderMessageBubbleHTML(m, currentUserId, partnerId)).join('')}
       </div>
 
-      <div class="flex gap-2 overflow-x-auto no-scrollbar mb-2 pb-1">
-        ${[
-          'O produto ainda está disponível?',
+      <!-- SUGESTÕES RÁPIDAS -->
+      <div class="px-4 py-1.5 border-t border-gray-100 dark:border-gray-800/80 bg-gray-50/50 dark:bg-gray-900/30 flex gap-2 overflow-x-auto no-scrollbar">
+        ${(partner.name.toLowerCase().includes('suporte') || (partner.business_name && partner.business_name.toLowerCase().includes('suporte')) ? [
+          'Como funciona o sistema de pontos e cupons?',
+          'Preciso de ajuda com um pedido meu',
+          'Como me tornar um vendedor verificado (PJ)?',
+          'Gostaria de tirar uma dúvida geral'
+        ] : [
+          'Olá, o produto ainda está disponível?',
           'Qual o valor do frete?',
-          'Aceita proposta de valor?'
-        ].map(q => `
-          <button type="button" onclick="document.getElementById('chat-input-text').value='${q}'" class="text-[11px] font-medium bg-white dark:bg-gray-800 border dark:border-gray-700 px-3 py-1 rounded-full whitespace-nowrap hover:border-teal-500 transition text-gray-600 dark:text-gray-300 cursor-pointer">
-            ${q}
+          'Aceita negociar o valor?',
+          'Pode me enviar mais fotos/detalhes?'
+        ]).map(q => `
+          <button type="button" onclick="App.applyQuickQuestion('${this.escapeHtml(q)}')" class="text-[11px] font-medium bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-1 rounded-full whitespace-nowrap hover:border-teal-500 hover:text-teal-600 dark:hover:text-teal-400 transition text-gray-600 dark:text-gray-300 cursor-pointer shadow-2xs">
+            ${this.escapeHtml(q)}
           </button>
         `).join('')}
       </div>
 
-      <form onsubmit="App.sendChatMessage(event, ${partnerId})" class="flex gap-2">
-        <input type="text" id="chat-input-text" required placeholder="Digite sua mensagem..." class="flex-1 px-4 py-2.5 border rounded-xl dark:bg-gray-700 dark:border-gray-600 text-sm">
-        <button type="submit" class="btn-primary text-xs py-2 px-4 cursor-pointer">Enviar</button>
+      <!-- FORMULÁRIO DE ENVIO -->
+      <form onsubmit="App.sendChatMessage(event, ${partnerId}, ${product ? product.id : (productId || 'null')})" class="p-3 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800 flex items-center gap-2">
+        <input 
+          type="text" 
+          id="chat-input-text" 
+          autocomplete="off" 
+          required 
+          placeholder="Digite sua mensagem aqui..." 
+          class="flex-1 px-4 py-2.5 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-2xl focus:outline-none focus:ring-2 focus:ring-teal-500 transition text-gray-900 dark:text-white"
+        >
+        <button type="submit" id="chat-send-btn" class="btn-primary text-xs py-2.5 px-5 rounded-2xl flex items-center gap-1.5 font-bold cursor-pointer shrink-0">
+          <span>Enviar</span>
+          <i data-lucide="send" class="w-3.5 h-3.5"></i>
+        </button>
       </form>
     `;
 
-    const body = document.getElementById('chat-msgs-body');
-    if (body) body.scrollTop = body.scrollHeight;
-  },
-
-  async sendChatMessage(e, partnerId) {
-    e.preventDefault();
-    const input = document.getElementById('chat-input-text');
-    const text = input.value.trim();
-    if (!text) {
-      ToastManager.show('Digite uma mensagem válida antes de enviar.', 'error');
-      return;
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
     }
 
+    this.scrollChatToBottom();
+
+    // Ativa polling delta inteligente a cada 2.5 segundos
+    ChatManager.startPolling(newMessages => {
+      this.appendIncomingChatMessages(newMessages, partnerId);
+    });
+
+    // Atualiza contadores visuais do cabeçalho
+    this.updateHeaderUI();
+  },
+
+  renderMessageBubbleHTML(m, currentUserId, partnerId) {
+    const isMe = parseInt(m.sender_id, 10) === currentUserId;
+    const timeFormatted = this.formatChatTime(m.created_at);
+    const bubbleId = `chat-msg-${m.id}`;
+
+    return `
+      <div id="${bubbleId}" class="flex w-full ${isMe ? 'justify-end' : 'justify-start'} group animate-fade-in">
+        <div class="relative max-w-[85%] sm:max-w-md px-4 py-2.5 rounded-2xl text-sm shadow-xs break-words overflow-hidden ${
+          isMe 
+            ? 'bg-teal-600 text-white rounded-br-xs' 
+            : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 rounded-bl-xs'
+        }">
+          <div class="break-words leading-relaxed whitespace-pre-wrap">${this.escapeHtml(m.message)}</div>
+          <div class="flex items-center justify-end gap-1.5 mt-1 text-[10px] ${isMe ? 'text-teal-100/90' : 'text-gray-400'}">
+            <span>${timeFormatted}</span>
+            ${isMe ? `<span class="msg-status font-bold">${m.is_read ? '✓✓' : '✓'}</span>` : ''}
+            ${isMe ? `
+              <button 
+                type="button" 
+                onclick="App.deleteChatMessage(${m.id}, ${partnerId})" 
+                title="Apagar mensagem" 
+                class="msg-delete-btn opacity-0 group-hover:opacity-100 hover:text-red-300 ml-1 transition cursor-pointer text-xs"
+              >
+                🗑️
+              </button>
+            ` : ''}
+          </div>
+        </div>
+      </div>
+    `;
+  },
+
+  appendIncomingChatMessages(newMessages, partnerId) {
+    if (!Array.isArray(newMessages) || newMessages.length === 0) return;
+    const body = document.getElementById('chat-msgs-body');
+    if (!body) return;
+
+    const intro = document.getElementById('chat-empty-intro');
+    if (intro) intro.remove();
+
+    const currentUserId = AuthManager.currentUser ? parseInt(AuthManager.currentUser.id, 10) : 0;
+    let appendedCount = 0;
+
+    newMessages.forEach(m => {
+      if (document.getElementById(`chat-msg-${m.id}`)) return;
+
+      const tempHolder = document.createElement('div');
+      tempHolder.innerHTML = this.renderMessageBubbleHTML(m, currentUserId, partnerId);
+      if (tempHolder.firstElementChild) {
+        body.appendChild(tempHolder.firstElementChild);
+        appendedCount++;
+      }
+    });
+
+    if (appendedCount > 0) {
+      this.scrollChatToBottom();
+      this.refreshConversationsList(partnerId);
+    }
+  },
+
+  async sendChatMessage(e, partnerId, productId = null) {
+    e.preventDefault();
+    const input = document.getElementById('chat-input-text');
+    if (!input) return;
+    const text = input.value.trim();
+    if (!text) return;
+
     input.value = '';
-    await ChatManager.sendMessage(partnerId, text);
-    this.selectChatPartner(partnerId);
+    input.focus();
+
+    const intro = document.getElementById('chat-empty-intro');
+    if (intro) intro.remove();
+
+    const body = document.getElementById('chat-msgs-body');
+    const tempId = 'temp_' + Date.now();
+    const nowTime = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+    // Inserção otimista instantânea na tela
+    if (body) {
+      const tempHolder = document.createElement('div');
+      tempHolder.innerHTML = `
+        <div id="chat-msg-${tempId}" class="flex w-full justify-end group animate-fade-in">
+          <div class="relative max-w-[85%] sm:max-w-md px-4 py-2.5 rounded-2xl text-sm shadow-xs break-words overflow-hidden bg-teal-600 text-white rounded-br-xs">
+            <div class="break-words leading-relaxed whitespace-pre-wrap">${this.escapeHtml(text)}</div>
+            <div class="flex items-center justify-end gap-1.5 mt-1 text-[10px] text-teal-100/90">
+              <span>${nowTime}</span>
+              <span class="msg-status">Enviando...</span>
+            </div>
+          </div>
+        </div>
+      `;
+      if (tempHolder.firstElementChild) {
+        body.appendChild(tempHolder.firstElementChild);
+        this.scrollChatToBottom();
+      }
+    }
+
+    try {
+      const res = await ChatManager.sendMessage(partnerId, text, productId);
+      if (res.success && res.message) {
+        const sent = res.message;
+        if (parseInt(sent.id, 10) > ChatManager.lastMessageId) {
+          ChatManager.lastMessageId = parseInt(sent.id, 10);
+        }
+
+        const tempEl = document.getElementById(`chat-msg-${tempId}`);
+        if (tempEl) {
+          tempEl.id = `chat-msg-${sent.id}`;
+          const statusEl = tempEl.querySelector('.msg-status');
+          if (statusEl) statusEl.innerHTML = '✓';
+
+          const timeContainer = tempEl.querySelector('.text-\\[10px\\]');
+          if (timeContainer) {
+            const delBtn = document.createElement('button');
+            delBtn.type = 'button';
+            delBtn.setAttribute('onclick', `App.deleteChatMessage(${sent.id}, ${partnerId})`);
+            delBtn.title = 'Apagar mensagem';
+            delBtn.className = 'msg-delete-btn opacity-0 group-hover:opacity-100 hover:text-red-300 ml-1 transition cursor-pointer text-xs';
+            delBtn.innerText = '🗑️';
+            timeContainer.appendChild(delBtn);
+          }
+        }
+
+        this.refreshConversationsList(partnerId);
+      } else {
+        ToastManager.show(res.error || 'Não foi possível enviar a mensagem.', 'error');
+        const tempEl = document.getElementById(`chat-msg-${tempId}`);
+        if (tempEl) {
+          const statusEl = tempEl.querySelector('.msg-status');
+          if (statusEl) statusEl.innerHTML = '⚠️ Não enviada';
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      ToastManager.show('Erro de conexão ao enviar mensagem.', 'error');
+    }
   },
 
   async deleteChatMessage(msgId, partnerId) {
-    if (confirm('Deseja apagar esta mensagem enviada?')) {
-      const res = await fetch('api/chat.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'delete_message', message_id: msgId })
-      });
-      const data = await res.json();
-      if (data.success) {
-        ToastManager.show('Mensagem apagada', 'info');
-        this.selectChatPartner(partnerId);
+    if (!confirm('Deseja apagar esta mensagem enviada?')) return;
+
+    const res = await ChatManager.deleteMessage(msgId);
+    if (res.success) {
+      const el = document.getElementById(`chat-msg-${msgId}`);
+      if (el) {
+        el.style.opacity = '0';
+        el.style.transform = 'scale(0.95)';
+        el.style.transition = 'all 0.2s ease';
+        setTimeout(() => el.remove(), 200);
+      }
+      ToastManager.show('Mensagem apagada com sucesso.', 'info');
+      this.refreshConversationsList(partnerId);
+    } else {
+      ToastManager.show(res.error || 'Erro ao apagar mensagem.', 'error');
+    }
+  },
+
+  async refreshConversationsList(activePartnerId = null) {
+    const convsList = document.getElementById('chat-convs-list');
+    if (!convsList) return;
+
+    const convsRes = await ChatManager.getConversations();
+    if (!convsRes.success) {
+      convsList.innerHTML = `<div class="text-xs text-red-400 p-2">Erro ao carregar conversas.</div>`;
+      return;
+    }
+
+    const convs = convsRes.conversations || [];
+    let totalUnread = 0;
+    convs.forEach(c => totalUnread += (c.unread_count || 0));
+
+    const sideBadge = document.getElementById('chat-sidebar-badge');
+    if (sideBadge) {
+      if (totalUnread > 0) {
+        sideBadge.innerText = totalUnread;
+        sideBadge.classList.remove('hidden');
+      } else {
+        sideBadge.classList.add('hidden');
       }
     }
+
+    if (convs.length === 0) {
+      convsList.innerHTML = `
+        <div class="text-center py-10 px-3 text-gray-400 space-y-2">
+          <i data-lucide="message-square-dashed" class="w-8 h-8 mx-auto text-gray-300 dark:text-gray-600"></i>
+          <div class="text-xs font-bold text-gray-600 dark:text-gray-300">Nenhuma conversa ainda</div>
+          <div class="text-[11px] text-gray-400">Clique em "Chat" na página de qualquer anúncio para conversar com o vendedor.</div>
+        </div>
+      `;
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+      return;
+    }
+
+    convsList.innerHTML = convs.map(c => {
+      const isActive = activePartnerId && parseInt(c.user.id, 10) === parseInt(activePartnerId, 10);
+      const avatar = c.user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(c.user.name)}&background=0d9488&color=fff&size=60`;
+      const lastMsgText = c.last_message ? this.escapeHtml(c.last_message.message) : 'Iniciou a conversa';
+      const time = c.last_message ? this.formatChatTime(c.last_message.created_at) : '';
+
+      return `
+        <div 
+          onclick="App.selectChatPartner(${c.user.id})" 
+          class="p-3 rounded-2xl border transition cursor-pointer flex items-center gap-3 ${
+            isActive 
+              ? 'border-teal-500 bg-teal-50/60 dark:bg-teal-950/40 shadow-xs' 
+              : 'border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800/80 hover:border-teal-300 dark:hover:border-teal-700'
+          }"
+        >
+          <div class="relative shrink-0">
+            <img src="${avatar}" class="w-10 h-10 rounded-full object-cover border border-gray-200 dark:border-gray-700" alt="${this.escapeHtml(c.user.name)}">
+            ${c.unread_count > 0 ? `
+              <span class="absolute -top-1 -right-1 bg-amber-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+                ${c.unread_count}
+              </span>
+            ` : ''}
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center justify-between gap-1 mb-0.5">
+              <div class="font-bold text-xs text-gray-900 dark:text-white truncate">
+                ${this.escapeHtml(c.user.name)}
+              </div>
+              <span class="text-[10px] text-gray-400 shrink-0">${time}</span>
+            </div>
+            <div class="text-[11px] text-gray-500 dark:text-gray-400 truncate ${c.unread_count > 0 ? 'font-bold text-gray-900 dark:text-white' : ''}">
+              ${lastMsgText}
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
+  },
+
+  toggleMobileChatList(showList) {
+    const sidebar = document.getElementById('chat-sidebar');
+    const win = document.getElementById('chat-window');
+    if (!sidebar || !win) return;
+
+    if (showList) {
+      ChatManager.stopPolling();
+      sidebar.classList.remove('hidden');
+      sidebar.classList.add('flex');
+      win.classList.remove('flex');
+      win.classList.add('hidden');
+      this.refreshConversationsList();
+    } else {
+      sidebar.classList.remove('flex');
+      sidebar.classList.add('hidden');
+      win.classList.remove('hidden');
+      win.classList.add('flex');
+    }
+  },
+
+  scrollChatToBottom() {
+    const body = document.getElementById('chat-msgs-body');
+    if (body) {
+      body.scrollTo({ top: body.scrollHeight, behavior: 'smooth' });
+    }
+  },
+
+  applyQuickQuestion(questionText) {
+    const input = document.getElementById('chat-input-text');
+    if (input) {
+      input.value = questionText;
+      input.focus();
+    }
+  },
+
+  async refreshActiveChat(partnerId, productId = null) {
+    ToastManager.show('Atualizando conversa...', 'info');
+    await this.selectChatPartner(partnerId, productId);
   },
 
   // ----------------------------------------------------
@@ -1883,8 +2953,30 @@ const App = {
             </details>
           </div>
         </div>
+
+        <!-- CARD DE ATENDIMENTO DIRETO COM SUPORTE -->
+        <div class="p-6 rounded-3xl border border-teal-200 dark:border-teal-900 bg-linear-to-r from-teal-50/80 to-emerald-50/80 dark:from-teal-950/30 dark:to-emerald-950/30 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div class="flex items-center gap-3.5">
+            <div class="w-12 h-12 rounded-2xl bg-teal-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <i data-lucide="headphones" class="w-6 h-6"></i>
+            </div>
+            <div>
+              <h3 class="font-extrabold text-sm text-gray-900 dark:text-white">Ainda precisa de ajuda?</h3>
+              <p class="text-xs text-gray-600 dark:text-gray-300">Nossa equipe de atendimento oficial está disponível para tirar dúvidas pelo chat.</p>
+            </div>
+          </div>
+          <button type="button" onclick="App.openSupportChat()" class="btn-primary text-xs py-2.5 px-5 rounded-2xl inline-flex items-center gap-2 cursor-pointer shadow-xs shrink-0 font-bold">
+            <i data-lucide="message-circle" class="w-4 h-4"></i>
+            <span>Falar com o Suporte</span>
+          </button>
+        </div>
       </div>
     `;
+
+    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
   },
 
   // ----------------------------------------------------
@@ -1950,6 +3042,11 @@ const App = {
         </div>
       </div>
     `;
+
+    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
   },
 
   showLoginModal() {
@@ -1994,10 +3091,13 @@ const App = {
           <button type="submit" id="btn-login-submit" class="btn-primary w-full py-3 text-sm cursor-pointer">Entrar</button>
         </form>
 
-        <div class="mt-4 pt-4 border-t dark:border-gray-700 text-center">
-          <button type="button" onclick="ToastManager.show('Login com Google Simulado com sucesso!', 'success'); App.submitGoogleLoginSimulated();" class="w-full py-2.5 border dark:border-gray-600 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-700 transition cursor-pointer">
-            <span>🌐</span> Entrar com o Google (Simulado)
-          </button>
+        <div class="mt-4 pt-3 border-t dark:border-gray-700">
+          <div class="relative flex py-2 items-center">
+            <div class="flex-grow border-t border-gray-200 dark:border-gray-700"></div>
+            <span class="flex-shrink mx-3 text-gray-400 text-xs uppercase font-medium">Ou acesse com</span>
+            <div class="flex-grow border-t border-gray-200 dark:border-gray-700"></div>
+          </div>
+          <div id="google-login-btn-container" class="w-full flex justify-center mt-1 min-h-[44px]"></div>
         </div>
 
         <details class="mt-4 p-3 bg-gray-50 dark:bg-gray-700/40 rounded-xl border dark:border-gray-700 text-xs text-gray-600 dark:text-gray-300">
@@ -2010,38 +3110,180 @@ const App = {
         </div>
       </div>
     `;
+
+    this.renderGoogleSignInButton('google-login-btn-container');
+
+    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
   },
 
   async submitLogin(e) {
     e.preventDefault();
+
     const btn = document.getElementById('btn-login-submit');
     if (btn) btn.innerHTML = 'Entrando...';
 
     const email = document.getElementById('login-email').value;
     const pass = document.getElementById('login-password').value;
+
     const res = await AuthManager.login(email, pass);
 
     if (res.success) {
       ToastManager.show('Login realizado com sucesso!', 'success');
+
       document.getElementById('auth-modal').remove();
+
       this.updateHeaderUI();
-      this.renderCurrentScreen();
+
+      if (this.redirectAfterLogin) {
+        const dest = this.redirectAfterLogin;
+        this.redirectAfterLogin = null;
+
+        this.navigateTo(dest.screen, dest.params);
+      } else {
+        this.renderCurrentScreen();
+      }
+
+      // IMPORTANTE: carregar os ícones depois de atualizar a interface
+      if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+      }
+
     } else {
       if (btn) btn.innerHTML = 'Entrar';
+
       ToastManager.show(res.error, 'error');
     }
   },
 
-  async submitGoogleLoginSimulated() {
-    const res = await AuthManager.login('lucas@ecostore.com', '123456');
-    if (res.success) {
-      document.getElementById('auth-modal').remove();
-      this.updateHeaderUI();
-      this.renderCurrentScreen();
+  renderGoogleSignInButton(containerId) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    const initAndRender = () => {
+      if (typeof google !== 'undefined' && google.accounts && google.accounts.id) {
+        try {
+          google.accounts.id.initialize({
+            client_id: this.googleClientId,
+            callback: (res) => this.handleGoogleCredentialResponse(res),
+            auto_select: false,
+            cancel_on_tap_outside: true
+          });
+
+          const isDark = document.documentElement.classList.contains('dark');
+
+          google.accounts.id.renderButton(container, {
+            theme: isDark ? 'filled_black' : 'outline',
+            size: 'large',
+            type: 'standard',
+            shape: 'pill',
+            text: 'continue_with',
+            logo_alignment: 'left',
+            width: 320
+          });
+        } catch (err) {
+          console.warn('Erro ao renderizar botão do Google:', err);
+          this.renderGoogleFallbackButton(container);
+        }
+      } else {
+        this.renderGoogleFallbackButton(container);
+      }
+    };
+
+    if (typeof google === 'undefined' || !google.accounts) {
+      setTimeout(initAndRender, 350);
+    } else {
+      initAndRender();
     }
   },
 
-  showRegisterModal() {
+  renderGoogleFallbackButton(container) {
+    if (!container) return;
+    container.innerHTML = `
+      <button type="button" onclick="App.triggerGoogleLoginPrompt()" class="w-full py-2.5 px-4 border border-gray-300 dark:border-gray-600 rounded-full text-xs font-semibold text-gray-700 dark:text-gray-200 flex items-center justify-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-700 transition cursor-pointer shadow-sm">
+        <svg class="w-4 h-4" viewBox="0 0 24 24">
+          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+        </svg>
+        <span>Continuar com o Google</span>
+      </button>
+    `;
+  },
+
+  triggerGoogleLoginPrompt() {
+    if (typeof google !== 'undefined' && google.accounts && google.accounts.id) {
+      google.accounts.id.initialize({
+        client_id: this.googleClientId,
+        callback: (res) => this.handleGoogleCredentialResponse(res)
+      });
+      google.accounts.id.prompt((notification) => {
+        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+          ToastManager.show('Abra o pop-up do Google ou clique novamente.', 'info');
+        }
+      });
+    } else {
+      ToastManager.show('Carregando biblioteca do Google. Aguarde um instante...', 'info');
+    }
+  },
+
+  async handleGoogleCredentialResponse(response) {
+    if (!response || !response.credential) {
+      ToastManager.show('Falha ao obter credencial do Google.', 'error');
+      return;
+    }
+
+    ToastManager.show('Autenticando via Google...', 'info');
+
+    try {
+      const res = await AuthManager.loginWithGoogle(response.credential);
+
+      if (res.success) {
+        ToastManager.show(res.message || 'Login com Google realizado com sucesso!', 'success');
+
+        const modal = document.getElementById('auth-modal');
+        if (modal) modal.remove();
+
+        this.updateHeaderUI();
+
+        if (this.redirectAfterLogin) {
+          const dest = this.redirectAfterLogin;
+          this.redirectAfterLogin = null;
+          this.navigateTo(dest.screen, dest.params);
+        } else {
+          this.renderCurrentScreen();
+        }
+
+        if (typeof lucide !== 'undefined') {
+          lucide.createIcons();
+        }
+      } else {
+        ToastManager.show(res.error || 'Erro na autenticação do Google.', 'error');
+      }
+    } catch (err) {
+      console.error('Erro ao conectar com Google:', err);
+      ToastManager.show('Erro de conexão ao processar login Google.', 'error');
+    }
+  },
+
+  submitGoogleLoginSimulated() {
+    this.triggerGoogleLoginPrompt();
+  },
+
+  escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  },
+
+  showRegisterModal(preserveData = null) {
     let modal = document.getElementById('auth-modal');
     if (!modal) {
       modal = document.createElement('div');
@@ -2049,20 +3291,31 @@ const App = {
       modal.className = 'fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in';
       document.body.appendChild(modal);
     }
+
+    const saved = preserveData || this.pendingRegistration || {};
+    const nameVal = saved.name || '';
+    const emailVal = saved.email || '';
+    const phoneVal = saved.phone || '';
+    const passVal = saved.pass || '';
+    const roleVal = saved.selectedRole || this.selectedRole || 'buyer';
+    const bizNameVal = saved.businessName || '';
+    const cnpjVal = saved.cnpj || '';
+
     modal.innerHTML = `
       <div class="bg-white dark:bg-gray-800 rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl relative max-h-[90vh] overflow-y-auto">
         <button type="button" onclick="document.getElementById('auth-modal').remove()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold cursor-pointer">✕</button>
 
         <span class="inline-block bg-emerald-100 text-emerald-800 text-[11px] font-bold px-2.5 py-0.5 rounded-full mb-2">🎁 Bônus de 500 Pontos Verdes</span>
-        <h2 class="text-2xl font-bold mb-3 text-gray-900 dark:text-white">Criar Nova Conta</h2>
+        <h2 class="text-2xl font-bold mb-1 text-gray-900 dark:text-white">Criar Nova Conta</h2>
+        <p class="text-xs text-gray-500 mb-3">Preencha seus dados para validar seu e-mail e receber seus pontos.</p>
 
         <div class="grid grid-cols-2 gap-3 mb-4">
-          <button type="button" onclick="App.setRole('buyer')" id="role-btn-buyer" class="p-3 border-2 border-teal-500 bg-teal-50 dark:bg-teal-950/40 rounded-2xl text-center cursor-pointer">
+          <button type="button" onclick="App.setRole('buyer')" id="role-btn-buyer" class="${roleVal === 'buyer' ? 'p-3 border-2 border-teal-500 bg-teal-50 dark:bg-teal-950/40 rounded-2xl text-center cursor-pointer' : 'p-3 border-2 border-gray-200 dark:border-gray-700 rounded-2xl text-center cursor-pointer'}">
             <span class="text-2xl block pointer-events-none">🛍️</span>
             <div class="font-bold text-xs mt-1 pointer-events-none">Comprador</div>
             <div class="text-[10px] text-gray-500 pointer-events-none">Compre e ganhe pontos</div>
           </button>
-          <button type="button" onclick="App.setRole('seller')" id="role-btn-seller" class="p-3 border-2 border-gray-200 dark:border-gray-700 rounded-2xl text-center cursor-pointer">
+          <button type="button" onclick="App.setRole('seller')" id="role-btn-seller" class="${roleVal === 'seller' ? 'p-3 border-2 border-teal-500 bg-teal-50 dark:bg-teal-950/40 rounded-2xl text-center cursor-pointer' : 'p-3 border-2 border-gray-200 dark:border-gray-700 rounded-2xl text-center cursor-pointer'}">
             <span class="text-2xl block pointer-events-none">🏪</span>
             <div class="font-bold text-xs mt-1 pointer-events-none">Vendedor</div>
             <div class="text-[10px] text-gray-500 pointer-events-none">Anuncie produtos eco</div>
@@ -2072,34 +3325,37 @@ const App = {
         <form onsubmit="App.submitRegister(event)" class="space-y-3">
           <div>
             <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Nome Completo *</label>
-            <input type="text" id="reg-name" required placeholder="Seu Nome Completo" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 dark:border-gray-600 text-sm">
+            <input type="text" id="reg-name" required value="${this.escapeHtml(nameVal)}" placeholder="Seu Nome Completo" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 dark:border-gray-600 text-sm">
           </div>
           <div>
             <div class="flex justify-between items-center mb-1">
               <label class="block text-xs font-bold text-gray-700 dark:text-gray-300">E-mail *</label>
-              <span id="reg-email-check" class="text-xs text-emerald-500 font-bold hidden">✓ Formato Correto</span>
+              <span id="reg-email-check" class="text-xs text-emerald-500 font-bold ${emailVal ? '' : 'hidden'}">✓ Formato Correto</span>
             </div>
-            <input type="email" id="reg-email" oninput="App.validateEmailInput(this)" required placeholder="seu@email.com" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 dark:border-gray-600 text-sm">
+            <input type="email" id="reg-email" oninput="App.validateEmailInput(this)" required value="${this.escapeHtml(emailVal)}" placeholder="seu@email.com" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 dark:border-gray-600 text-sm">
+            <div class="text-[10px] text-teal-700 dark:text-teal-400 mt-1 flex items-center gap-1 font-medium">
+              <span>📧</span> <span>Enviaremos um código de 6 dígitos para validar este e-mail.</span>
+            </div>
           </div>
           <div>
             <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Telefone / WhatsApp *</label>
-            <input type="text" id="reg-phone" required placeholder="(11) 99999-9999" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 dark:border-gray-600 text-sm">
+            <input type="text" id="reg-phone" required value="${this.escapeHtml(phoneVal)}" placeholder="(11) 99999-9999" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 dark:border-gray-600 text-sm">
           </div>
 
-          <div id="seller-extra-fields" class="hidden space-y-3 p-3 bg-teal-50 dark:bg-teal-950/40 rounded-xl border border-teal-200 dark:border-teal-900">
+          <div id="seller-extra-fields" class="${roleVal === 'seller' ? '' : 'hidden'} space-y-3 p-3 bg-teal-50 dark:bg-teal-950/40 rounded-xl border border-teal-200 dark:border-teal-900">
             <div>
               <label class="block text-xs font-bold text-teal-800 dark:text-teal-300 mb-1">Nome da Loja *</label>
-              <input type="text" id="reg-business-name" placeholder="Ex: EcoStore Brasil" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 text-sm">
+              <input type="text" id="reg-business-name" value="${this.escapeHtml(bizNameVal)}" placeholder="Ex: EcoStore Brasil" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 text-sm">
             </div>
             <div>
               <label class="block text-xs font-bold text-teal-800 dark:text-teal-300 mb-1">CNPJ da Empresa *</label>
-              <input type="text" id="reg-cnpj" placeholder="00.000.000/0001-00" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 text-sm font-mono">
+              <input type="text" id="reg-cnpj" value="${this.escapeHtml(cnpjVal)}" placeholder="00.000.000/0001-00" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 text-sm font-mono">
             </div>
           </div>
 
           <div>
             <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Senha (mínimo 6 caracteres) *</label>
-            <input type="password" id="reg-password" oninput="App.checkPasswordStrength(this.value)" required minlength="6" placeholder="••••••••" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 dark:border-gray-600 text-sm">
+            <input type="password" id="reg-password" oninput="App.checkPasswordStrength(this.value)" required minlength="6" value="${this.escapeHtml(passVal)}" placeholder="••••••••" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 dark:border-gray-600 text-sm">
             <div class="mt-1 flex items-center gap-2">
               <div class="flex-1 bg-gray-200 dark:bg-gray-700 h-1.5 rounded-full overflow-hidden">
                 <div id="pass-strength-bar" class="h-full w-0 transition-all duration-300 bg-red-500"></div>
@@ -2107,10 +3363,36 @@ const App = {
               <span id="pass-strength-text" class="text-[10px] font-semibold text-gray-400">---</span>
             </div>
           </div>
-          <button type="submit" id="btn-reg-submit" class="btn-primary w-full py-2.5 text-sm mt-2 cursor-pointer">Criar Conta e Ganhar +500 pts</button>
+          <button type="submit" id="btn-reg-submit" class="btn-primary w-full py-2.5 text-sm mt-2 cursor-pointer flex items-center justify-center gap-2">
+            <span>Continuar e Validar E-mail →</span>
+          </button>
         </form>
+
+        <div class="mt-4 pt-3 border-t dark:border-gray-700">
+          <div class="relative flex py-1.5 items-center">
+            <div class="flex-grow border-t border-gray-200 dark:border-gray-700"></div>
+            <span class="flex-shrink mx-3 text-gray-400 text-xs uppercase font-medium">Ou cadastre-se com</span>
+            <div class="flex-grow border-t border-gray-200 dark:border-gray-700"></div>
+          </div>
+          <div id="google-register-btn-container" class="w-full flex justify-center mt-1 min-h-[44px]"></div>
+        </div>
+
+        <div class="mt-3 text-center text-xs text-gray-500">
+          Já tem conta? <button type="button" onclick="App.showLoginModal()" class="text-teal-600 font-bold hover:underline cursor-pointer">Fazer Login</button>
+        </div>
       </div>
     `;
+
+    this.selectedRole = roleVal;
+    if (passVal) {
+      this.checkPasswordStrength(passVal);
+    }
+
+    this.renderGoogleSignInButton('google-register-btn-container');
+
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
   },
 
   setRole(role) {
@@ -2212,35 +3494,283 @@ const App = {
     e.preventDefault();
     const btn = document.getElementById('btn-reg-submit');
 
-    const name = document.getElementById('reg-name').value;
-    const email = document.getElementById('reg-email').value;
-    const phone = document.getElementById('reg-phone').value;
+    const name = document.getElementById('reg-name').value.trim();
+    const email = document.getElementById('reg-email').value.trim();
+    const phone = document.getElementById('reg-phone').value.trim();
     const pass = document.getElementById('reg-password').value;
     const isVerifiedBusiness = this.selectedRole === 'seller' ? 1 : 0;
-    const businessName = document.getElementById('reg-business-name') ? document.getElementById('reg-business-name').value : '';
-    const cnpj = document.getElementById('reg-cnpj') ? document.getElementById('reg-cnpj').value : '';
+    const businessName = document.getElementById('reg-business-name') ? document.getElementById('reg-business-name').value.trim() : '';
+    const cnpj = document.getElementById('reg-cnpj') ? document.getElementById('reg-cnpj').value.trim() : '';
+
+    if (!name || !email || !pass) {
+      ToastManager.show('Preencha todos os campos obrigatórios.', 'error');
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      ToastManager.show('Por favor, informe um endereço de e-mail válido.', 'error');
+      return;
+    }
+
+    if (pass.length < 6) {
+      ToastManager.show('A senha deve conter no mínimo 6 caracteres.', 'error');
+      return;
+    }
 
     if (!this.isValidPhone(phone)) {
       ToastManager.show('Por favor, informe um número de telefone válido (DDD + 8 ou 9 dígitos). Ex: (11) 99999-9999', 'error');
       return;
     }
 
-    if ((isVerifiedBusiness || cnpj.trim() !== '') && !this.isValidCNPJ(cnpj)) {
+    if ((isVerifiedBusiness || cnpj !== '') && !this.isValidCNPJ(cnpj)) {
       ToastManager.show('Por favor, informe um CNPJ válido com 14 dígitos. Ex: 00.000.000/0001-00', 'error');
       return;
     }
 
-    if (btn) btn.innerHTML = 'Criando conta...';
+    // Armazena dados temporariamente para concluir após confirmação do e-mail
+    this.pendingRegistration = {
+      name,
+      email,
+      phone,
+      pass,
+      selectedRole: this.selectedRole,
+      isVerifiedBusiness,
+      businessName,
+      cnpj
+    };
 
-    const res = await AuthManager.register(name, email, pass, phone);
-    if (res.success) {
-      ToastManager.show(res.message, 'success', 4000);
-      document.getElementById('auth-modal').remove();
-      this.updateHeaderUI();
-      this.renderCurrentScreen();
-    } else {
-      if (btn) btn.innerHTML = 'Criar Conta e Ganhar +500 pts';
-      ToastManager.show(res.error, 'error');
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = `
+        <span class="inline-block animate-spin mr-2">⏳</span>
+        <span>Enviando código de verificação...</span>
+      `;
+    }
+
+    try {
+      const res = await AuthManager.sendRegisterCode(name, email);
+      if (res.success) {
+        ToastManager.show(res.message, 'success', 5000);
+        this.renderRegisterVerifyStep(document.getElementById('auth-modal'), email);
+      } else {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = 'Continuar e Validar E-mail →';
+        }
+        ToastManager.show(res.error || 'Erro ao enviar código de verificação.', 'error');
+      }
+    } catch (err) {
+      console.error('Erro ao solicitar código de cadastro:', err);
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = 'Continuar e Validar E-mail →';
+      }
+      ToastManager.show('Erro de conexão ao enviar código. Tente novamente.', 'error');
+    }
+  },
+
+  renderRegisterVerifyStep(modal, email) {
+    if (!modal) return;
+
+    modal.innerHTML = `
+      <div class="bg-white dark:bg-gray-800 rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl relative animate-fade-in">
+        <button type="button" onclick="document.getElementById('auth-modal').remove()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold cursor-pointer">✕</button>
+
+        <!-- Barra de Progresso do Cadastro -->
+        <div class="flex items-center gap-2 mb-6">
+          <div class="flex-1 h-2 bg-teal-600 rounded-full"></div>
+          <div class="flex-1 h-2 bg-teal-600 rounded-full"></div>
+        </div>
+
+        <div class="text-center mb-5">
+          <div class="w-14 h-14 bg-teal-100 dark:bg-teal-900/50 text-teal-600 dark:text-teal-400 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-inner">
+            <i data-lucide="mail-check" class="w-7 h-7"></i>
+          </div>
+          <span class="inline-block bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300 text-[11px] font-bold px-2.5 py-0.5 rounded-full mb-1">
+            🔒 Validação Obrigatória
+          </span>
+          <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Confirme seu E-mail</h2>
+          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 max-w-xs mx-auto">
+            Para ativar sua conta e liberar <strong>+500 Pontos Verdes</strong>, digite o código de 6 dígitos enviado para:
+          </p>
+          <div class="mt-2 inline-block px-3 py-1 bg-gray-100 dark:bg-gray-700/60 rounded-full font-mono text-xs font-semibold text-teal-700 dark:text-teal-300">
+            ${this.escapeHtml(email)}
+          </div>
+        </div>
+
+        <form onsubmit="App.submitRegisterVerification(event)" class="space-y-4">
+          <div>
+            <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1 text-center">
+              Código de Verificação de 6 dígitos
+            </label>
+            <input 
+              type="text" 
+              id="reg-verify-code" 
+              required 
+              maxlength="6" 
+              placeholder="000000" 
+              autocomplete="one-time-code"
+              class="w-full text-center font-mono tracking-[0.4em] text-2xl py-3 border-2 border-teal-200 dark:border-teal-800 rounded-2xl dark:bg-gray-700 dark:text-white focus:outline-none focus:border-teal-500 focus:ring-4 focus:ring-teal-500/20 transition"
+            >
+          </div>
+
+          <button 
+            type="submit" 
+            id="btn-reg-verify-submit" 
+            class="btn-primary w-full py-3 text-sm cursor-pointer shadow-lg shadow-teal-600/20"
+          >
+            Confirmar e Criar Conta 🎉
+          </button>
+
+          <div class="space-y-2 pt-2 text-center text-xs">
+            <div>
+              <button 
+                type="button" 
+                id="btn-reg-resend" 
+                onclick="App.resendRegisterCode()" 
+                class="text-teal-600 dark:text-teal-400 font-semibold hover:underline cursor-pointer"
+              >
+                Não recebeu o código? Reenviar
+              </button>
+            </div>
+            <div>
+              <button 
+                type="button" 
+                onclick="App.showRegisterModal()" 
+                class="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:underline cursor-pointer"
+              >
+                ← Corrigir dados ou alterar e-mail
+              </button>
+            </div>
+          </div>
+        </form>
+
+        <div class="mt-4 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-xl text-[11px] text-amber-800 dark:text-amber-300 flex items-start gap-2">
+          <span>💡</span>
+          <span>Dica: Caso não encontre em sua caixa de entrada, verifique também as pastas de <strong>Spam</strong> ou <strong>Lixo Eletrônico</strong>.</span>
+        </div>
+      </div>
+    `;
+
+    setTimeout(() => {
+      const codeInput = document.getElementById('reg-verify-code');
+      if (codeInput) codeInput.focus();
+    }, 150);
+
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
+  },
+
+  async submitRegisterVerification(e) {
+    e.preventDefault();
+    if (!this.pendingRegistration) {
+      ToastManager.show('Sessão de cadastro expirada. Preencha seus dados novamente.', 'error');
+      this.showRegisterModal();
+      return;
+    }
+
+    const codeInput = document.getElementById('reg-verify-code');
+    const code = codeInput ? codeInput.value.trim() : '';
+
+    if (!code || code.length < 6) {
+      ToastManager.show('Digite o código completo de 6 dígitos.', 'error');
+      if (codeInput) codeInput.focus();
+      return;
+    }
+
+    const btn = document.getElementById('btn-reg-verify-submit');
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = `
+        <span class="inline-block animate-spin mr-2">⏳</span>
+        <span>Validando e criando conta...</span>
+      `;
+    }
+
+    const { name, email, pass, phone, isVerifiedBusiness, businessName, cnpj } = this.pendingRegistration;
+
+    try {
+      const res = await AuthManager.register(name, email, pass, phone, code, {
+        is_verified_business: isVerifiedBusiness,
+        business_name: businessName,
+        cnpj: cnpj
+      });
+
+      if (res.success) {
+        this.pendingRegistration = null;
+        ToastManager.show(res.message, 'success', 5000);
+
+        const modal = document.getElementById('auth-modal');
+        if (modal) modal.remove();
+
+        this.updateHeaderUI();
+
+        if (this.redirectAfterLogin) {
+          const dest = this.redirectAfterLogin;
+          this.redirectAfterLogin = null;
+          this.navigateTo(dest.screen, dest.params);
+        } else {
+          this.renderCurrentScreen();
+        }
+
+        if (typeof lucide !== 'undefined') {
+          lucide.createIcons();
+        }
+      } else {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = 'Confirmar e Criar Conta 🎉';
+        }
+        ToastManager.show(res.error || 'Código incorreto ou expirado.', 'error');
+        if (codeInput) {
+          codeInput.select();
+          codeInput.focus();
+        }
+      }
+    } catch (err) {
+      console.error('Erro na criação de conta:', err);
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = 'Confirmar e Criar Conta 🎉';
+      }
+      ToastManager.show('Erro de conexão ao validar código. Tente novamente.', 'error');
+    }
+  },
+
+  async resendRegisterCode() {
+    if (!this.pendingRegistration || !this.pendingRegistration.email) {
+      ToastManager.show('Dados não encontrados. Preencha o cadastro novamente.', 'error');
+      this.showRegisterModal();
+      return;
+    }
+
+    const btn = document.getElementById('btn-reg-resend');
+    if (btn) {
+      btn.disabled = true;
+      btn.innerText = 'Reenviando código...';
+    }
+
+    try {
+      const res = await AuthManager.sendRegisterCode(
+        this.pendingRegistration.name,
+        this.pendingRegistration.email
+      );
+
+      if (res.success) {
+        ToastManager.show('Novo código enviado! Verifique seu e-mail.', 'success');
+      } else {
+        ToastManager.show(res.error || 'Erro ao reenviar código.', 'error');
+      }
+    } catch (e) {
+      ToastManager.show('Erro ao reenviar código de verificação.', 'error');
+    } finally {
+      if (btn) {
+        setTimeout(() => {
+          btn.disabled = false;
+          btn.innerText = 'Não recebeu o código? Reenviar';
+        }, 5000);
+      }
     }
   },
 
@@ -2323,6 +3853,11 @@ const App = {
         </form>
       </div>
     `;
+
+    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
   },
 
   async submitForgotStep1(e) {
@@ -2354,17 +3889,26 @@ const App = {
         </div>
 
         <h2 class="text-xl font-bold mb-1">Etapa 2: Digite o Código</h2>
-        <p class="text-xs text-gray-500 mb-4">Insira o código de 6 dígitos (Use <strong>123456</strong> para testes).</p>
+        <p class="text-xs text-gray-500 mb-4">Insira o código de 6 dígitos enviado para a sua caixa de entrada.</p>
 
         <form onsubmit="App.submitForgotStep2(event)" class="space-y-4">
           <div>
             <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Código de 6 dígitos</label>
-            <input type="text" id="forgot-code" required maxlength="6" value="123456" class="w-full text-center font-mono tracking-widest text-lg px-4 py-2.5 border rounded-xl dark:bg-gray-700 dark:border-gray-600">
+            <input type="text" id="forgot-code" required maxlength="6" placeholder="000000" class="w-full text-center font-mono tracking-widest text-lg px-4 py-2.5 border rounded-xl dark:bg-gray-700 dark:border-gray-600 focus:ring-2 focus:ring-teal-500">
           </div>
-          <button type="submit" class="btn-primary w-full py-3 text-sm cursor-pointer">Validar Código</button>
+          <button type="submit" id="btn-verify-code-submit" class="btn-primary w-full py-3 text-sm cursor-pointer">Validar Código</button>
+
+          <div class="text-center pt-1">
+            <button type="button" onclick="App.showForgotPasswordModal()" class="text-xs text-teal-600 font-semibold hover:underline cursor-pointer">Não recebeu? Tentar reenviar ou alterar e-mail</button>
+          </div>
         </form>
       </div>
     `;
+
+    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
   },
 
   async submitForgotStep2(e) {
@@ -2413,6 +3957,11 @@ const App = {
         </form>
       </div>
     `;
+
+    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
   },
 
   async submitForgotStep3(e) {
@@ -2461,6 +4010,11 @@ const App = {
       </div>
     `;
 
+    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
+
     try {
       const res = await fetch('api/favorites.php?action=list');
       const data = await res.json();
@@ -2478,6 +4032,11 @@ const App = {
             <button type="button" onclick="App.navigateTo('search')" class="btn-primary text-xs py-2 px-6 cursor-pointer">Ver Vitrine de Produtos</button>
           </div>
         `;
+
+        // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+        if (typeof lucide !== 'undefined') {
+          lucide.createIcons();
+        }
       }
     } catch (e) {
       console.error(e);
@@ -2580,6 +4139,11 @@ const App = {
       </div>
     `;
 
+    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
+
     this.applySearchFilter();
   },
 
@@ -2660,7 +4224,13 @@ const App = {
 
   addToCartAndCheckout(productId) {
     this.addToCartDirect(productId);
-    this.navigateTo('cart');
+    if (!AuthManager.currentUser) {
+      this.redirectAfterLogin = { screen: 'checkout', params: {} };
+      ToastManager.show('Faça login para prosseguir para a finalização da compra.', 'info');
+      this.showLoginModal();
+      return;
+    }
+    this.navigateTo('checkout');
   },
 
   updateCartQty(id, qty) {
@@ -2675,6 +4245,12 @@ const App = {
   },
 
   async voteReviewHelpful(reviewId, btnElement) {
+    if (!AuthManager.currentUser) {
+      ToastManager.show('Faça login para avaliar feedbacks de produtos.', 'info');
+      this.showLoginModal();
+      return;
+    }
+
     const res = await fetch('api/reviews.php', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2685,6 +4261,8 @@ const App = {
       ToastManager.show('Obrigado pelo seu feedback!', 'success');
       btnElement.disabled = true;
       btnElement.classList.add('text-teal-600');
+    } else {
+      ToastManager.show(data.error || 'Erro ao votar no feedback.', 'error');
     }
   },
 
@@ -2734,17 +4312,17 @@ const App = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'delete_account' })
       })
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) {
-          ToastManager.show(data.message, 'info');
-          AuthManager.currentUser = null;
-          this.updateHeaderUI();
-          this.navigateTo('home');
-        } else {
-          ToastManager.show(data.error, 'error');
-        }
-      });
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            ToastManager.show(data.message, 'info');
+            AuthManager.currentUser = null;
+            this.updateHeaderUI();
+            this.navigateTo('home');
+          } else {
+            ToastManager.show(data.error, 'error');
+          }
+        });
     }
   },
 
