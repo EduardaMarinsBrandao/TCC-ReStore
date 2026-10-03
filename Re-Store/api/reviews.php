@@ -64,7 +64,11 @@ if ($method === 'POST' && $action === 'create') {
 
     $userId = $_SESSION['user_id'];
     $productId = (int)($data['product_id'] ?? 0);
-    $orderId = $orderIdInput > 0 ? $orderIdInput : null; // Define NULL caso não haja um pedido vinculado
+    
+    // CORREÇÃO AQUI: Captura o order_id dos dados recebidos antes de validar
+    $orderIdInput = (int)($data['order_id'] ?? 0);
+    $orderId = $orderIdInput > 0 ? $orderIdInput : null;
+    
     $rating = (int)($data['rating'] ?? 5);
     $comment = trim($data['comment'] ?? '');
 
@@ -84,8 +88,8 @@ if ($method === 'POST' && $action === 'create') {
         $calcStmt->execute([$productId]);
         $stat = $calcStmt->fetch();
 
-        $avgRating = round((float)$stat['avg_rating'], 1);
-        $totalReviews = (int)$stat['cnt'];
+        $avgRating = round((float)($stat['avg_rating'] ?? 0), 1);
+        $totalReviews = (int)($stat['cnt'] ?? 0);
 
         $db->prepare("UPDATE products SET rating = ?, total_reviews = ? WHERE id = ?")->execute([$avgRating, $totalReviews, $productId]);
 

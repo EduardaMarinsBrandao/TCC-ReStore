@@ -13,48 +13,47 @@ const App = {
   currentChatView: 'sidebar', // 'sidebar' ou 'chat'
 
   submitReview: function(serviceId, formElement) {
-  // 1. Captura os dados digitados no formulário
-  const formData = new FormData(formElement);
-  const comment = formData.get('comment'); // Certifique-se de que o <textarea> tem name="comment"
-  const rating = formData.get('rating');   // Certifique-se de que os inputs da nota têm name="rating"
+    const formData = new FormData(formElement);
+    const comment = formData.get('comment');
+    const rating = formData.get('rating');
 
-  // Validação simples do lado do cliente
-  if (!comment) {
-    alert("Por favor, escreva um comentário antes de enviar.");
-    return;
-  }
+    if (!comment) {
+      if (typeof ToastManager !== 'undefined') {
+        ToastManager.show("Por favor, escreva um comentário antes de enviar.", "warning");
+      } else {
+        alert("Por favor, escreva um comentário antes de enviar.");
+      }
+      return;
+    }
 
-  // 2. Envio dos dados para a API/Backend
-  fetch('/api/reviews', {
-    method: 'POST',
-    headers: { 
-      'Content-Type': 'application/json' 
-    },
-    body: JSON.stringify({
-      serviceId: serviceId,
-      rating: rating,
-      comment: comment
+    fetch('api/reviews.php?action=create', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json' 
+      },
+      body: JSON.stringify({
+        product_id: serviceId,
+        rating: rating,
+        comment: comment
+      })
     })
-  })
-  .then(response => {
-    if (!response.ok) {
-      throw new Error('Erro ao salvar a avaliação.');
-    }
-    return response.json();
-  })
-  .then(data => {
-    // Limpa o formulário após enviar com sucesso
-    formElement.reset();
-    
-    // Recarrega a lista de avaliações ou atualiza a tela se necessário
-    if (typeof App.loadReviews === 'function') {
-      App.loadReviews(serviceId);
-    }
-  })
-  .catch(error => {
-    console.error("Erro no envio:", error);
-  });
-}
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        if (typeof ToastManager !== 'undefined') {
+          ToastManager.show("Avaliação enviada com sucesso!", "success");
+        }
+        formElement.reset();
+        // Recarrega os detalhes do produto para exibir a nova avaliação
+        App.renderCurrentScreen();
+      } else {
+        alert(data.error || "Erro ao enviar avaliação.");
+      }
+    })
+    .catch(error => {
+      console.error("Erro no envio:", error);
+    });
+  },
 
   async init() {
     await AuthManager.checkAuth();
