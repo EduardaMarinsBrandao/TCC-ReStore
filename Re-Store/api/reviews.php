@@ -41,52 +41,30 @@ if ($method === 'GET' && $action === 'list') {
 // --- EDITAR AVALIAÇÃO ---
 if ($method === 'POST' && $action === 'update') {
     if (!isset($_SESSION['user_id'])) {
-        echo json_encode(['success' => false, 'error' => 'Sessão expirada.']);
+        echo json_encode(['success' => false, 'error' => 'Usuário não autenticado.']);
         exit;
     }
 
-    $userId = $_SESSION['user_id'];
+    $userId = (int)$_SESSION['user_id'];
     $reviewId = (int)($data['review_id'] ?? 0);
     $rating = (int)($data['rating'] ?? 5);
     $comment = trim($data['comment'] ?? '');
 
-    if ($reviewId <= 0 || $rating < 1 || $rating > 5) {
-        echo json_encode(['success' => false, 'error' => 'Dados inválidos.']);
+    if ($reviewId <= 0) {
+        echo json_encode(['success' => false, 'error' => 'ID de avaliação inválido.']);
         exit;
     }
 
-    // Verifica se a avaliação pertence ao usuário logado
-    $stmt = $db->prepare("SELECT product_id FROM reviews WHERE id = ? AND user_id = ?");
-    $stmt->execute([$reviewId, $userId]);
-    $review = $stmt->fetch();
+    // Atualiza apenas se a avaliação pertencer ao usuário logado
+    $stmt = $db->prepare("UPDATE reviews SET rating = ?, comment = ? WHERE id = ? AND user_id = ?");
+    $result = $stmt->execute([$rating, $comment, $reviewId, $userId]);
 
-    if (!$review) {
-        echo json_encode(['success' => false, 'error' => 'Avaliação não encontrada ou sem permissão.']);
-        exit;
+    if ($result) {
+        echo json_encode(['success' => true]);
+    } else {
+        echo json_encode(['success' => false, 'error' => 'Não foi possível atualizar a avaliação.']);
     }
-
-    $productId = $review['product_id'];
-
-    $db->beginTransaction();
-    try {
-        $db->prepare("UPDATE reviews SET rating = ?, comment = ? WHERE id = ? AND user_id = ?")
-           ->execute([$rating, $comment, $reviewId, $userId]);
-
-        // Recalcula a média do produto
-        $calcStmt = $db->prepare("SELECT AVG(rating) as avg_rating FROM reviews WHERE product_id = ?");
-        $calcStmt->execute([$productId]);
-        $avgRating = round((float)($calcStmt->fetch()['avg_rating'] ?? 0), 1);
-
-        $db->prepare("UPDATE products SET rating = ? WHERE id = ?")->execute([$avgRating, $productId]);
-
-        $db->commit();
-        echo json_encode(['success' => true, 'message' => 'Avaliação atualizada com sucesso!']);
-        exit;
-    } catch (Exception $e) {
-        $db->rollBack();
-        echo json_encode(['success' => false, 'error' => 'Erro ao editar: ' . $e->getMessage()]);
-        exit;
-    }
+    exit;
 }
 
 // --- EXCLUIR AVALIAÇÃO ---

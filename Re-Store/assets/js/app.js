@@ -57,33 +57,35 @@ const App = {
 
   // Botão de Voto Útil (+1)
     voteReviewHelpful: function(reviewId, btnElement) {
-    fetch('api/reviews.php?action=vote_helpful', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ review_id: reviewId })
-    })
-    .then(res => res.json())
-    .then(data => {
-      if (data.success) {
-        const countSpan = btnElement.querySelector('.helpful-count');
-        if (countSpan) {
-          countSpan.innerText = data.new_count;
-        }
-
-        // Alterna o estilo visual de acordo com o estado do like
-        if (data.voted) {
-          btnElement.classList.add('text-teal-600', 'font-bold');
-          btnElement.classList.remove('text-gray-500');
-        } else {
-          btnElement.classList.remove('text-teal-600', 'font-bold');
-          btnElement.classList.add('text-gray-500');
-        }
-      } else {
-        alert(data.error || 'Erro ao votar.');
+  fetch('api/reviews.php?action=vote_helpful', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ review_id: reviewId })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.success) {
+      // Procura o elemento do número dentro do botão
+      const countSpan = btnElement.querySelector('.helpful-count');
+      if (countSpan) {
+        // Atualiza o texto imediatamente com o valor retornado do backend
+        countSpan.innerText = data.new_count;
       }
-    })
-    .catch(err => console.error(err));
-  },
+
+      // Alterna as cores para o usuário ver na hora se curtiu ou descurtiu
+      if (data.voted) {
+        btnElement.classList.add('text-teal-600', 'font-bold');
+        btnElement.classList.remove('text-gray-500');
+      } else {
+        btnElement.classList.remove('text-teal-600', 'font-bold');
+        btnElement.classList.add('text-gray-500');
+      }
+    } else {
+      alert(data.error || 'Erro ao votar.');
+    }
+  })
+  .catch(err => console.error('Erro na requisição:', err));
+},
 
   // Excluir Avaliação
   deleteReview: function(reviewId) {
@@ -105,38 +107,57 @@ const App = {
     .catch(err => console.error(err));
   },
 
-  // Alternar modo de edição visual no card da avaliação
-  toggleEditReview: function(reviewId) {
-    const card = document.getElementById(`review-card-${reviewId}`);
-    if (!card) return;
-    const displayBox = card.querySelector('.review-display');
-    const editForm = card.querySelector('.review-edit-form');
+  // Função para abrir e fechar o formulário de edição
+toggleEditReview: function(reviewId) {
+  const card = document.getElementById(`review-card-${reviewId}`);
+  if (!card) return;
 
+  const displayBox = card.querySelector('.review-display');
+  const editForm = card.querySelector('.review-edit-form');
+
+  if (displayBox && editForm) {
     displayBox.classList.toggle('hidden');
     editForm.classList.toggle('hidden');
-  },
+    
+    // Garante que o formulário use flexbox quando estiver visível
+    if (!editForm.classList.contains('hidden')) {
+      editForm.classList.add('flex');
+    } else {
+      editForm.classList.remove('flex');
+    }
+  }
+},
 
-  // Enviar edição do formulário
-  submitReviewEdit: function(reviewId, formElement) {
-    const formData = new FormData(formElement);
-    const comment = formData.get('comment');
-    const rating = formData.get('rating');
+// Função para enviar as alterações da edição para o servidor
+submitReviewEdit: function(reviewId, formElement) {
+  const formData = new FormData(formElement);
+  const rating = formData.get('rating');
+  const comment = formData.get('comment');
 
-    fetch('api/reviews.php?action=update', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ review_id: reviewId, rating: rating, comment: comment })
+  fetch('api/reviews.php?action=update', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      review_id: reviewId,
+      rating: rating,
+      comment: comment
     })
-    .then(res => res.json())
-    .then(data => {
-      if (data.success) {
-        App.renderCurrentScreen();
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.success) {
+      // Recarrega as avaliações do produto para exibir as informações atualizadas
+      if (typeof App.loadReviews === 'function') {
+        App.loadReviews();
       } else {
-        alert(data.error || 'Erro ao atualizar.');
+        location.reload();
       }
-    })
-    .catch(err => console.error(err));
-  },
+    } else {
+      alert(data.error || 'Erro ao atualizar a avaliação.');
+    }
+  })
+  .catch(err => console.error('Erro ao atualizar:', err));
+}
 
   async init() {
     await AuthManager.checkAuth();
