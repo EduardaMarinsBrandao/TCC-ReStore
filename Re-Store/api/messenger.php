@@ -38,6 +38,36 @@ if ($method === 'GET' && $action === 'unread_count') {
 }
 
 // ----------------------------------------------------
+// 0.1 LOCALIZAR CONTA OFICIAL DE SUPORTE
+// ----------------------------------------------------
+if ($method === 'GET' && ($action === 'get_support_user' || $action === 'support_user')) {
+    $supportEmail = 'tccdssuporte@gmail.com';
+    $stmt = $db->prepare("SELECT id, name, avatar, is_verified_business, business_name FROM users WHERE email = ? LIMIT 1");
+    $stmt->execute([$supportEmail]);
+    $supportUser = $stmt->fetch();
+
+    if (!$supportUser) {
+        // Fallback: se ainda não foi registrada no banco de dados local, cria/provisiona a conta
+        $tempPass = password_hash('Suporte@ReStore2026', PASSWORD_DEFAULT);
+        $insStmt = $db->prepare("INSERT INTO users (email, name, password_hash, avatar, is_verified_business, business_name) VALUES (?, ?, ?, ?, 1, ?)");
+        $insStmt->execute([
+            $supportEmail,
+            'Suporte Re-Store',
+            $tempPass,
+            'https://ui-avatars.com/api/?name=Suporte+ReStore&background=0d9488&color=fff&size=128',
+            'Central de Atendimento Oficial'
+        ]);
+        $newId = (int)$db->lastInsertId();
+        $stmt = $db->prepare("SELECT id, name, avatar, is_verified_business, business_name FROM users WHERE id = ?");
+        $stmt->execute([$newId]);
+        $supportUser = $stmt->fetch();
+    }
+
+    echo json_encode(['success' => true, 'support_user' => $supportUser]);
+    exit;
+}
+
+// ----------------------------------------------------
 // 1. LISTAR CONVERSAS DO USUÁRIO
 // ----------------------------------------------------
 if ($method === 'GET' && ($action === 'conversations' || $action === 'list_conversations')) {

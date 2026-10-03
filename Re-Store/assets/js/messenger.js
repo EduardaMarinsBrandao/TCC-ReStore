@@ -94,6 +94,16 @@ const MessengerManager = {
     }
   },
 
+  async getSupportUser() {
+    try {
+      const res = await fetch('api/messenger.php?action=get_support_user');
+      return await res.json();
+    } catch (e) {
+      console.error('Erro ao buscar usuário de suporte:', e);
+      return { success: false };
+    }
+  },
+
   startPolling(onNewMessagesCallback) {
     this.stopPolling();
     this.pollTimer = setInterval(async () => {

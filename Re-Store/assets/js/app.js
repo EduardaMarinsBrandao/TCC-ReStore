@@ -2238,6 +2238,38 @@ const App = {
     this.navigateTo('chat', { withUserId: receiverId, productId: productId });
   },
 
+  async openSupportChat() {
+    if (!AuthManager.currentUser) {
+      ToastManager.show('Faça login para conversar com o suporte.', 'info');
+      this.showLoginModal();
+      return;
+    }
+
+    if (AuthManager.currentUser.email === 'tccdssuporte@gmail.com') {
+      ToastManager.show('Você está logado na conta de Suporte. Selecione uma conversa na lista para atender.', 'info');
+      return;
+    }
+
+    ToastManager.show('Conectando ao Suporte Re-Store...', 'info');
+
+    try {
+      const res = await ChatManager.getSupportUser();
+      if (res && res.success && res.support_user && res.support_user.id) {
+        const supportId = parseInt(res.support_user.id, 10);
+        if (parseInt(AuthManager.currentUser.id, 10) === supportId) {
+          ToastManager.show('Você é o operador da conta de suporte.', 'info');
+          return;
+        }
+        await this.selectChatPartner(supportId);
+      } else {
+        ToastManager.show('Não foi possível conectar ao suporte agora. Tente novamente em instantes.', 'error');
+      }
+    } catch (err) {
+      console.error('Erro ao abrir chat de suporte:', err);
+      ToastManager.show('Falha de conexão com a central de suporte.', 'error');
+    }
+  },
+
   formatChatTime(dateStr) {
     if (!dateStr) return '';
     try {
@@ -2272,6 +2304,31 @@ const App = {
               <i data-lucide="rotate-cw" class="w-4 h-4"></i>
             </button>
           </div>
+
+          <!-- BOTÃO DESTACADO: SUPORTE OFICIAL RE-STORE -->
+          <div class="p-3 pb-2 border-b border-gray-100 dark:border-gray-800/80">
+            <button 
+              type="button" 
+              onclick="App.openSupportChat()" 
+              class="w-full p-2.5 rounded-2xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white flex items-center justify-between shadow-xs transition-all duration-200 cursor-pointer group"
+              title="Falar diretamente com a equipe de suporte"
+            >
+              <div class="flex items-center gap-2.5">
+                <div class="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white shrink-0 group-hover:scale-110 transition-transform">
+                  <i data-lucide="headphones" class="w-4 h-4 pointer-events-none"></i>
+                </div>
+                <div class="text-left">
+                  <div class="font-bold text-xs flex items-center gap-1.5">
+                    <span>Falar com o Suporte</span>
+                    <span class="text-[9px] bg-white/25 px-1.5 py-0.5 rounded-full font-bold">Oficial</span>
+                  </div>
+                  <div class="text-[10px] text-teal-100">Atendimento e dúvidas do Re-Store</div>
+                </div>
+              </div>
+              <i data-lucide="chevron-right" class="w-4 h-4 text-white/80 group-hover:translate-x-0.5 transition-transform pointer-events-none"></i>
+            </button>
+          </div>
+
           <div id="chat-convs-list" class="flex-1 overflow-y-auto p-3 space-y-2">
             <div class="text-center py-8 text-xs text-gray-400">Carregando conversas...</div>
           </div>
@@ -2279,10 +2336,22 @@ const App = {
 
         <!-- JANELA PRINCIPAL DO CHAT -->
         <div id="chat-window" class="hidden md:flex flex-1 flex-col justify-between bg-white dark:bg-gray-900 relative">
-          <div class="text-center my-auto p-6 space-y-2 text-gray-400">
-            <i data-lucide="messages-square" class="w-12 h-12 mx-auto text-gray-300 dark:text-gray-600 mb-2"></i>
-            <div class="font-bold text-sm text-gray-600 dark:text-gray-300">Nenhuma conversa selecionada</div>
-            <div class="text-xs text-gray-400 max-w-xs mx-auto">Selecione uma conversa ao lado ou clique em "Chat" na página de qualquer anúncio para falar com o vendedor.</div>
+          <div class="text-center my-auto p-6 space-y-3 text-gray-400">
+            <div class="w-16 h-16 rounded-full bg-teal-50 dark:bg-teal-950/50 flex items-center justify-center mx-auto text-teal-600 dark:text-teal-400 mb-1">
+              <i data-lucide="messages-square" class="w-8 h-8"></i>
+            </div>
+            <div class="font-bold text-sm text-gray-700 dark:text-gray-200">Central de Mensagens Re-Store</div>
+            <div class="text-xs text-gray-400 max-w-xs mx-auto">Selecione uma conversa ao lado para responder ou tire suas dúvidas diretamente com nossa equipe.</div>
+            <div class="pt-2">
+              <button 
+                type="button" 
+                onclick="App.openSupportChat()" 
+                class="btn-primary text-xs py-2.5 px-4 rounded-xl inline-flex items-center gap-2 cursor-pointer shadow-sm"
+              >
+                <i data-lucide="headphones" class="w-4 h-4"></i>
+                <span>Falar com o Suporte</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -2398,12 +2467,17 @@ const App = {
 
       <!-- SUGESTÕES RÁPIDAS -->
       <div class="px-4 py-1.5 border-t border-gray-100 dark:border-gray-800/80 bg-gray-50/50 dark:bg-gray-900/30 flex gap-2 overflow-x-auto no-scrollbar">
-        ${[
+        ${(partner.name.toLowerCase().includes('suporte') || (partner.business_name && partner.business_name.toLowerCase().includes('suporte')) ? [
+          'Como funciona o sistema de pontos e cupons?',
+          'Preciso de ajuda com um pedido meu',
+          'Como me tornar um vendedor verificado (PJ)?',
+          'Gostaria de tirar uma dúvida geral'
+        ] : [
           'Olá, o produto ainda está disponível?',
           'Qual o valor do frete?',
           'Aceita negociar o valor?',
           'Pode me enviar mais fotos/detalhes?'
-        ].map(q => `
+        ]).map(q => `
           <button type="button" onclick="App.applyQuickQuestion('${this.escapeHtml(q)}')" class="text-[11px] font-medium bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-1 rounded-full whitespace-nowrap hover:border-teal-500 hover:text-teal-600 dark:hover:text-teal-400 transition text-gray-600 dark:text-gray-300 cursor-pointer shadow-2xs">
             ${this.escapeHtml(q)}
           </button>
@@ -2872,6 +2946,23 @@ const App = {
               </p>
             </details>
           </div>
+        </div>
+
+        <!-- CARD DE ATENDIMENTO DIRETO COM SUPORTE -->
+        <div class="p-6 rounded-3xl border border-teal-200 dark:border-teal-900 bg-linear-to-r from-teal-50/80 to-emerald-50/80 dark:from-teal-950/30 dark:to-emerald-950/30 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div class="flex items-center gap-3.5">
+            <div class="w-12 h-12 rounded-2xl bg-teal-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <i data-lucide="headphones" class="w-6 h-6"></i>
+            </div>
+            <div>
+              <h3 class="font-extrabold text-sm text-gray-900 dark:text-white">Ainda precisa de ajuda?</h3>
+              <p class="text-xs text-gray-600 dark:text-gray-300">Nossa equipe de atendimento oficial está disponível para tirar dúvidas pelo chat.</p>
+            </div>
+          </div>
+          <button type="button" onclick="App.openSupportChat()" class="btn-primary text-xs py-2.5 px-5 rounded-2xl inline-flex items-center gap-2 cursor-pointer shadow-xs shrink-0 font-bold">
+            <i data-lucide="message-circle" class="w-4 h-4"></i>
+            <span>Falar com o Suporte</span>
+          </button>
         </div>
       </div>
     `;
