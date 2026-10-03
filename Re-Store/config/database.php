@@ -1,18 +1,29 @@
 <?php
 // config/database.php
 
-define('DB_HOST', getenv('DB_HOST') ?: 'sql204.infinityfree.com');
-define('DB_NAME', getenv('DB_NAME') ?: 'if0_42831392_restore');
-define('DB_USER', getenv('DB_USER') ?: 'if0_42831392');
-define('DB_PASS', getenv('DB_PASS') !== false ? getenv('DB_PASS') : 'CaEdEyFeLaLe');
-define('DB_DRIVER', getenv('DB_DRIVER') ?: 'auto');
-
-// Carrega credenciais locais (se existirem) ou de variáveis de ambiente
+// Carrega credenciais locais (se existirem)
 if (file_exists(__DIR__ . '/credentials.local.php')) {
     require_once __DIR__ . '/credentials.local.php';
 }
-if (!defined('GOOGLE_CLIENT_ID') || empty(GOOGLE_CLIENT_ID)) {
-    define('GOOGLE_CLIENT_ID', getenv('GOOGLE_CLIENT_ID') ?: '147889418852-7as919egt4ten74alk2mod9oecgbslqv.apps.googleusercontent.com');
+
+if (!defined('DB_HOST')) {
+    define('DB_HOST', getenv('DB_HOST') ?: '127.0.0.1');
+}
+if (!defined('DB_NAME')) {
+    define('DB_NAME', getenv('DB_NAME') ?: 'restore_db');
+}
+if (!defined('DB_USER')) {
+    define('DB_USER', getenv('DB_USER') ?: 'root');
+}
+if (!defined('DB_PASS')) {
+    define('DB_PASS', getenv('DB_PASS') !== false ? getenv('DB_PASS') : '');
+}
+if (!defined('DB_DRIVER')) {
+    define('DB_DRIVER', getenv('DB_DRIVER') ?: 'auto');
+}
+
+if (!defined('GOOGLE_CLIENT_ID')) {
+    define('GOOGLE_CLIENT_ID', getenv('GOOGLE_CLIENT_ID') ?: '');
 }
 if (!defined('GOOGLE_CLIENT_SECRET')) {
     define('GOOGLE_CLIENT_SECRET', getenv('GOOGLE_CLIENT_SECRET') ?: '');
