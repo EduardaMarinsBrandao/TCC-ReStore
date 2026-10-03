@@ -97,10 +97,11 @@ const MessengerManager = {
   async getSupportUser() {
     try {
       const res = await fetch('api/messenger.php?action=get_support_user');
-      return await res.json();
+      const data = await res.json();
+      return data;
     } catch (e) {
       console.error('Erro ao buscar usuário de suporte:', e);
-      return { success: false };
+      return { success: false, error: 'Falha de conexão com a central de suporte.' };
     }
   },
 
