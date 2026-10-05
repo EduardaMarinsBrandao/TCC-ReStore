@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS reviews (
     id INT AUTO_INCREMENT PRIMARY KEY,
     product_id INT NOT NULL,
     user_id INT NOT NULL,
-    order_id INT NOT NULL,
+    order_id INT NULL, -- alterado para NULL para permitir avaliações sem compra
     rating INT NOT NULL CHECK (rating BETWEEN 1 AND 5),
     comment TEXT,
     helpful_count INT DEFAULT 0,
@@ -106,7 +106,7 @@ CREATE TABLE IF NOT EXISTS reviews (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (order_id) REFERENCES orders(id)
+    FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL
 );
 
 -- Tabela: messages
@@ -157,5 +157,16 @@ CREATE TABLE IF NOT EXISTS discounts (
     is_used TINYINT(1) DEFAULT 0,
     expires_at TIMESTAMP NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Tabela: review_votes
+CREATE TABLE IF NOT EXISTS review_votes (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    review_id INT NOT NULL,
+    user_id INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT unique_user_review UNIQUE (review_id, user_id),
+    FOREIGN KEY (review_id) REFERENCES reviews(id) ON DELETE CASCADE,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );

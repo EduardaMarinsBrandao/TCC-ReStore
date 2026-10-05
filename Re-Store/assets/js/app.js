@@ -12,6 +12,154 @@ const App = {
   currentChatPartnerId: null,
   currentChatView: 'sidebar', // 'sidebar' ou 'chat'
 
+  submitReview: function(serviceId, formElement) {
+    const formData = new FormData(formElement);
+    const comment = formData.get('comment');
+    const rating = formData.get('rating');
+
+    if (!comment) {
+      if (typeof ToastManager !== 'undefined') {
+        ToastManager.show("Por favor, escreva um comentário antes de enviar.", "warning");
+      } else {
+        alert("Por favor, escreva um comentário antes de enviar.");
+      }
+      return;
+    }
+
+    fetch('api/reviews.php?action=create', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json' 
+      },
+      body: JSON.stringify({
+        product_id: serviceId,
+        rating: rating,
+        comment: comment
+      })
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        if (typeof ToastManager !== 'undefined') {
+          ToastManager.show("Avaliação enviada com sucesso!", "success");
+        }
+        formElement.reset();
+        // Recarrega os detalhes do produto para exibir a nova avaliação
+        App.renderCurrentScreen();
+      } else {
+        alert(data.error || "Erro ao enviar avaliação.");
+      }
+    })
+    .catch(error => {
+      console.error("Erro no envio:", error);
+    });
+  },
+
+  // Botão de Voto Útil (+1)
+    voteReviewHelpful: function(reviewId, btnElement) {
+  fetch('api/reviews.php?action=vote_helpful', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ review_id: reviewId })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.success) {
+      // Procura o elemento do número dentro do botão
+      const countSpan = btnElement.querySelector('.helpful-count');
+      if (countSpan) {
+        // Atualiza o texto imediatamente com o valor retornado do backend
+        countSpan.innerText = data.new_count;
+      }
+
+      // Alterna as cores para o usuário ver na hora se curtiu ou descurtiu
+      if (data.voted) {
+        btnElement.classList.add('text-teal-600', 'font-bold');
+        btnElement.classList.remove('text-gray-500');
+      } else {
+        btnElement.classList.remove('text-teal-600', 'font-bold');
+        btnElement.classList.add('text-gray-500');
+      }
+    } else {
+      alert(data.error || 'Erro ao votar.');
+    }
+  })
+  .catch(err => console.error('Erro na requisição:', err));
+},
+
+  // Excluir Avaliação
+  deleteReview: function(reviewId) {
+    if (!confirm('Tem certeza que deseja excluir sua avaliação?')) return;
+
+    fetch('api/reviews.php?action=delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ review_id: reviewId })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        App.renderCurrentScreen();
+      } else {
+        alert(data.error || 'Erro ao excluir.');
+      }
+    })
+    .catch(err => console.error(err));
+  },
+
+  // Função para abrir e fechar o formulário de edição
+toggleEditReview: function(reviewId) {
+  const card = document.getElementById(`review-card-${reviewId}`);
+  if (!card) return;
+
+  const displayBox = card.querySelector('.review-display');
+  const editForm = card.querySelector('.review-edit-form');
+
+  if (displayBox && editForm) {
+    displayBox.classList.toggle('hidden');
+    
+    // Alterna a exibição do formulário garantindo o layout flex e largura total
+    if (editForm.classList.contains('hidden')) {
+      editForm.classList.remove('hidden');
+      editForm.classList.add('flex', 'flex-col', 'w-full');
+    } else {
+      editForm.classList.add('hidden');
+      editForm.classList.remove('flex', 'flex-col', 'w-full');
+    }
+  }
+},
+
+// Função para enviar as alterações da edição para o servidor
+submitReviewEdit: function(reviewId, formElement) {
+  const formData = new FormData(formElement);
+  const rating = formData.get('rating');
+  const comment = formData.get('comment');
+
+  fetch('api/reviews.php?action=update', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      review_id: reviewId,
+      rating: rating,
+      comment: comment
+    })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.success) {
+      // Recarrega as avaliações do produto para exibir as informações atualizadas
+      if (typeof App.loadReviews === 'function') {
+        App.loadReviews();
+      } else {
+        location.reload();
+      }
+    } else {
+      alert(data.error || 'Erro ao atualizar a avaliação.');
+    }
+  })
+  .catch(err => console.error('Erro ao atualizar:', err));
+},
+
   async init() {
     await AuthManager.checkAuth();
     await this.loadFavoriteIds();
@@ -640,39 +788,155 @@ const App = {
               <span class="text-sm font-normal text-gray-500">(${reviews.length})</span>
             </h2>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-              ${reviews.length > 0 ? reviews.map(r => `
-                <div class="p-4 rounded-xl border dark:border-gray-800 bg-white dark:bg-gray-800 flex flex-col justify-between">
-                  <div>
-                    <div class="flex items-center justify-between mb-2">
-                      <div class="flex items-center gap-2">
-                        <img src="${r.user_avatar || 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100'}" class="w-7 h-7 rounded-full object-cover">
-                        <span class="font-semibold text-sm">${r.user_name}</span>
-                      </div>
-                      <div class="text-amber-400 text-sm">
-                        ${'★'.repeat(r.rating)}${'☆'.repeat(5 - r.rating)}
-                      </div>
-                    </div>
-                    <p class="text-sm text-gray-600 dark:text-gray-300 mb-3">${r.comment || 'Sem comentário.'}</p>
+            <!-- FORMULÁRIO DE NOVA AVALIAÇÃO -->
+            ${user ? `
+              <div class="mb-8 p-4 bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 shadow-sm">
+                <h3 class="text-sm font-bold text-gray-900 dark:text-white mb-3">Deixar uma Avaliação</h3>
+                <form onsubmit="event.preventDefault(); App.submitReview(${p.id}, this);">
+                  
+                  <!-- Seleção de Estrelas -->
+                  <div class="flex items-center gap-2 mb-3">
+                    <label class="text-xs text-gray-500 font-semibold">Sua Nota:</label>
+                    <select name="rating" class="p-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-xs font-bold text-amber-500 focus:ring-2 focus:ring-teal-500 outline-none">
+                      <option value="5">★★★★★ (5/5)</option>
+                      <option value="4">★★★★☆ (4/5)</option>
+                      <option value="3">★★★☆☆ (3/5)</option>
+                      <option value="2">★★☆☆☆ (2/5)</option>
+                      <option value="1">★☆☆☆☆ (1/5)</option>
+                    </select>
                   </div>
-                  <div class="flex items-center justify-between pt-2 border-t dark:border-gray-700">
-                    <span class="text-[11px] text-gray-400">${r.created_at || 'Recente'}</span>
-                    <button 
-                      type="button" 
-                      onclick="App.voteReviewHelpful(${r.id}, this)" 
-                      class="text-xs text-gray-500 hover:text-teal-600 flex items-center gap-1 font-semibold cursor-pointer"
-                    >
-                      <i data-lucide="thumbs-up" class="w-4 h-4 pointer-events-none"></i>
-                      <span>Útil (${r.helpful_count || 0})</span>
-                    </button>
 
+                  <!-- Campo de Comentário -->
+                  <div class="mb-3">
+                    <textarea 
+                      name="comment" 
+                      rows="3" 
+                      placeholder="O que achou deste produto?" 
+                      class="w-full p-3 text-xs rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                      required
+                    ></textarea>
                   </div>
-                </div>
-              `).join('') : '<div class="text-gray-500 text-sm">Seja o primeiro a avaliar este produto após a compra!</div>'}
+
+                  <button 
+                    type="submit" 
+                    class="btn-primary text-xs py-2 px-4 cursor-pointer inline-flex items-center gap-1.5 font-bold"
+                  >
+                    <i data-lucide="send" class="w-3.5 h-3.5 pointer-events-none"></i>
+                    <span>Enviar Avaliação</span>
+                  </button>
+                </form>
+              </div>
+            ` : `
+              <div class="mb-6 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl border dark:border-gray-800 text-xs text-gray-500">
+                Faça <button type="button" onclick="App.navigateTo('login')" class="text-teal-600 font-bold hover:underline">login</button> para poder avaliar este produto.
+              </div>
+            `}
+
+            <!-- LISTA DE AVALIAÇÕES -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+              ${reviews.length > 0 ? reviews.map(r => {
+  // Verifica se o usuário logado é o autor desta avaliação
+  const isMyReview = (typeof AuthManager !== 'undefined' && AuthManager.currentUser) 
+    ? parseInt(AuthManager.currentUser.id) === parseInt(r.user_id) 
+    : false;
+
+  return `
+    <div id="review-card-${r.id}" class="p-4 rounded-xl border dark:border-gray-800 bg-white dark:bg-gray-800 flex flex-col justify-between">
+      
+      <!-- MODO DE EXIBIÇÃO NORMAL -->
+      <div class="review-display flex flex-col justify-between h-full">
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center gap-2">
+              <img src="${r.user_avatar || 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100'}" class="w-7 h-7 rounded-full object-cover">
+              <span class="font-semibold text-sm">${r.user_name}</span>
+            </div>
+            <div class="text-amber-400 text-sm">
+              ${'★'.repeat(r.rating)}${'☆'.repeat(5 - r.rating)}
+            </div>
+          </div>
+          <p class="text-sm text-gray-600 dark:text-gray-300 mb-3">${r.comment || 'Sem comentário.'}</p>
+        </div>
+
+        <div class="flex items-center justify-between pt-2 border-t dark:border-gray-700">
+  <span class="text-[11px] text-gray-400">${r.created_at || 'Recente'}</span>
+  
+  <div class="flex items-center gap-3">
+    <!-- Botão Útil (Joia com classe dinâmica de cor) -->
+    <button 
+      type="button" 
+      onclick="App.voteReviewHelpful(${r.id}, this)" 
+      class="text-xs ${r.user_voted ? 'text-teal-600 font-bold' : 'text-gray-500'} hover:text-teal-600 flex items-center gap-1 font-semibold cursor-pointer"
+    >
+      <i data-lucide="thumbs-up" class="w-4 h-4 pointer-events-none"></i>
+      <span>Útil (<span class="helpful-count">${r.helpful_count || 0}</span>)</span>
+    </button>
+
+    <!-- Ações de Editar/Excluir (apenas para o autor) -->
+    ${isMyReview ? `
+      <button 
+        type="button" 
+        onclick="App.toggleEditReview(${r.id})" 
+        class="text-xs text-teal-600 hover:underline cursor-pointer font-medium"
+      >
+        Editar
+      </button>
+      <button 
+        type="button" 
+        onclick="App.deleteReview(${r.id})" 
+        class="text-xs text-red-500 hover:underline cursor-pointer font-medium"
+      >
+        Excluir
+      </button>
+    ` : ''}
+  </div>
+</div>
+
+      <!-- MODO DE EDIÇÃO (OCULTO POR PADRÃO) -->
+${isMyReview ? `
+  <form class="review-edit-form hidden flex-col gap-3 w-full p-1" onsubmit="event.preventDefault(); App.submitReviewEdit(${r.id}, this);">
+    <div class="flex items-center justify-between">
+      <span class="text-xs font-semibold text-gray-700 dark:text-gray-200">Editar Avaliação</span>
+      <select name="rating" class="p-1 text-xs border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-amber-500 font-bold rounded">
+        <option value="5" ${r.rating == 5 ? 'selected' : ''}>★★★★★ (5)</option>
+        <option value="4" ${r.rating == 4 ? 'selected' : ''}>★★★★☆ (4)</option>
+        <option value="3" ${r.rating == 3 ? 'selected' : ''}>★★★☆☆ (3)</option>
+        <option value="2" ${r.rating == 2 ? 'selected' : ''}>★★☆☆☆ (2)</option>
+        <option value="1" ${r.rating == 1 ? 'selected' : ''}>★☆☆☆☆ (1)</option>
+      </select>
+    </div>
+    
+    <textarea 
+      name="comment" 
+      rows="3" 
+      class="w-full p-2 text-xs rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-teal-500"
+    >${r.comment || ''}</textarea>
+    
+    <div class="flex justify-end gap-2">
+      <button 
+        type="button" 
+        onclick="App.toggleEditReview(${r.id})" 
+        class="px-3 py-1.5 text-xs border rounded-lg text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
+      >
+        Cancelar
+      </button>
+      <button 
+        type="submit" 
+        class="px-3 py-1.5 text-xs bg-teal-600 hover:bg-teal-700 text-white font-medium rounded-lg cursor-pointer"
+      >
+        Salvar
+      </button>
+    </div>
+  </form>
+` : ''}
+
+    </div>
+  `;
+}).join('') : '<div class="text-gray-500 text-sm col-span-2">Ainda não há avaliações para este produto. Seja o primeiro a avaliar acima!</div>'}
             </div>
           </section>
         </div>
-      `;
+      `;            
 
       // IMPORTANTE: renderizar os ícones adicionados dinamicamente
       if (typeof lucide !== 'undefined') {

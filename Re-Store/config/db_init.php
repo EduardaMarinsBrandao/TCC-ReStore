@@ -199,7 +199,16 @@ function initializeDatabase() {
                 expires_at DATETIME NULL,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-            )"
+            )",
+            "CREATE TABLE IF NOT EXISTS review_votes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            review_id INT NOT NULL,
+            user_id INT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT unique_user_review UNIQUE (review_id, user_id),
+            FOREIGN KEY (review_id) REFERENCES reviews(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )"
         ];
         foreach ($queries as $q) {
             $db->exec($q);

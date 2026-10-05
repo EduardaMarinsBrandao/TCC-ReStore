@@ -90,15 +90,15 @@ html.dark .border-gray-200, html.dark .border-gray-100 {
 /* ----------------------------------------------------
    FILTROS CSS DE DALTONISMO (ACCESSIBILITY)
 ---------------------------------------------------- */
-html.colorblind-protanopia {
+html.colorblind-protanopia, body.colorblind-protanopia {
   filter: url('#protanopia-filter') !important;
 }
 
-html.colorblind-deuteranopia {
+html.colorblind-deuteranopia, body.colorblind-deuteranopia {
   filter: url('#deuteranopia-filter') !important;
 }
 
-html.colorblind-tritanopia {
+html.colorblind-tritanopia, body.colorblind-tritanopia {
   filter: url('#tritanopia-filter') !important;
 }
 
@@ -106,6 +106,10 @@ html.colorblind-tritanopia {
 :focus-visible {
   outline: 3px solid var(--color-primary) !important;
   outline-offset: 2px !important;
+}
+
+html.dark :focus-visible {
+  outline-color: #38BDF8 !important; /* Sky 400 para melhor contraste em fundo escuro */
 }
 
 /* ----------------------------------------------------
@@ -353,5 +357,3 @@ html.dark .chat-bubble-other {
 html.dark .chat-body-bg {
   background-color: rgba(17, 24, 39, 0.55);
 }
-
-
