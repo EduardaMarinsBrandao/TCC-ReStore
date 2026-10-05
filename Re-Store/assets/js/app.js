@@ -169,6 +169,27 @@ submitReviewEdit: function(reviewId, formElement) {
     this.setupGlobalShortcuts();
   },
 
+  async refreshNotifBadge() {
+    const badge = document.getElementById('notif-badge');
+    const user = AuthManager.currentUser;
+    if (!badge || !user) return;
+    try {
+      const res = await fetch('api/notifications.php');
+      const data = await res.json();
+      const list = (data.success && data.notifications) || [];
+      const seen = localStorage.getItem('notif_seen_' + user.id) || '';
+      const unseen = list.filter(n => String(n.time) > seen).length;
+      if (unseen > 0) {
+        badge.innerText = unseen > 9 ? '9+' : unseen;
+        badge.style.display = 'flex';
+      } else {
+        badge.style.display = 'none';
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  },
+
   async loadFavoriteIds() {
     if (!AuthManager.currentUser) {
       this.favoriteIds = [];
@@ -191,7 +212,8 @@ submitReviewEdit: function(reviewId, formElement) {
     const notifBadge = document.getElementById('notif-badge');
 
     if (notifBadge) {
-      notifBadge.style.display = user ? 'flex' : 'none';
+      notifBadge.style.display = 'none';
+      if (user) this.refreshNotifBadge();
     }
 
     if (user && window.ChatManager) {
@@ -1519,21 +1541,8 @@ ${isMyReview ? `
 
         <div class="p-6 rounded-3xl border dark:border-gray-800 bg-white dark:bg-gray-800 space-y-4 shadow-sm">
           <h2 class="font-bold text-base mb-3">Últimos Alertas</h2>
-          <div class="space-y-3">
-            <div class="p-3 bg-teal-50 dark:bg-teal-950/40 border border-teal-200 rounded-2xl flex items-start gap-3">
-              <span class="text-xl">🎁</span>
-              <div>
-                <div class="font-bold text-xs text-teal-800 dark:text-teal-300">Bônus de Boas-Vindas Re-Store</div>
-                <div class="text-[11px] text-teal-700 dark:text-teal-400">Você ganhou +500 Pontos Verdes ao criar sua conta!</div>
-              </div>
-            </div>
-            <div class="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 rounded-2xl flex items-start gap-3">
-              <span class="text-xl">📦</span>
-              <div>
-                <div class="font-bold text-xs text-emerald-800 dark:text-emerald-300">Atualização de Pedido</div>
-                <div class="text-[11px] text-emerald-700 dark:text-emerald-400">Seu pedido foi confirmado e o vendedor já está preparando a entrega.</div>
-              </div>
-            </div>
+          <div id="notif-list" class="space-y-3">
+            <div class="skeleton-box h-14 w-full"></div>
           </div>
         </div>
 
@@ -1560,6 +1569,46 @@ ${isMyReview ? `
     // IMPORTANTE: renderizar os ícones adicionados dinamicamente
     if (typeof lucide !== 'undefined') {
       lucide.createIcons();
+    }
+
+    this.loadNotificationsList();
+  },
+
+  async loadNotificationsList() {
+    const list = document.getElementById('notif-list');
+    const user = AuthManager.currentUser;
+    if (!list || !user) return;
+    const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    try {
+      const res = await fetch('api/notifications.php');
+      const data = await res.json();
+      const items = (data.success && data.notifications) || [];
+
+      if (items.length === 0) {
+        list.innerHTML = `<div class="text-center text-xs text-gray-500 py-6">Você não tem notificações no momento.</div>`;
+        return;
+      }
+
+      const styles = {
+        success: 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 text-emerald-800 dark:text-emerald-300',
+        info: 'bg-teal-50 dark:bg-teal-950/40 border-teal-200 text-teal-800 dark:text-teal-300',
+        chat: 'bg-blue-50 dark:bg-blue-950/40 border-blue-200 text-blue-800 dark:text-blue-300'
+      };
+      list.innerHTML = items.map(n => `
+        <div class="p-3 border rounded-2xl ${styles[n.type] || styles.info}">
+          <div class="font-bold text-xs">${esc(n.title)}</div>
+          <div class="text-[11px] opacity-90">${esc(n.message)}</div>
+          <div class="text-[10px] opacity-60 mt-1">${esc(n.time)}</div>
+        </div>
+      `).join('');
+
+      // Marca como vistas e zera o contador do sino
+      const latest = items.reduce((m, n) => String(n.time) > m ? String(n.time) : m, '');
+      localStorage.setItem('notif_seen_' + user.id, latest);
+      const badge = document.getElementById('notif-badge');
+      if (badge) badge.style.display = 'none';
+    } catch (e) {
+      list.innerHTML = `<div class="text-center text-xs text-red-500 py-6">Erro ao carregar notificações.</div>`;
     }
   },
 

@@ -151,9 +151,10 @@ $assetVersion = file_exists(__DIR__ . '/assets/js/app.js') ? filemtime(__DIR__ .
 
             <span 
               id="notif-badge" 
-              class="absolute -top-1 -right-1 bg-amber-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center pointer-events-none"
+              style="display:none"
+              class="absolute -top-1 -right-1 bg-amber-500 text-white text-[10px] font-bold min-w-4 h-4 px-0.5 rounded-full flex items-center justify-center pointer-events-none"
             >
-              2
+              0
             </span>
           </button>
 
