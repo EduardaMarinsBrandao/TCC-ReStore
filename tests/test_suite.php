@@ -35,16 +35,18 @@ function runTest($name, $callback) {
     }
 }
 
-function callApiIsolated($endpointRelPath, $params = [], $method = 'GET') {
+function callApiIsolated($endpointRelPath, $params = [], $method = 'GET', $session = []) {
     global $testDbFile;
     $endpointFull = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'Re-Store' . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, ltrim($endpointRelPath, '/'));
     
     $queryStr = http_build_query($params);
+    $sessionCode = !empty($session) ? '@session_start(); $_SESSION = ' . var_export($session, true) . '; ' : '';
     $script = 'putenv("DB_DRIVER=sqlite"); ' .
               'putenv("SQLITE_PATH=' . addslashes($testDbFile) . '"); ' .
               '$_SERVER["REQUEST_METHOD"] = "' . $method . '"; ' .
               'parse_str("' . addslashes($queryStr) . '", $_GET); ' .
               'parse_str("' . addslashes($queryStr) . '", $_POST); ' .
+              $sessionCode .
               'require "' . addslashes($endpointFull) . '";';
 
     $descriptors = [
@@ -115,7 +117,7 @@ runTest('Conexão e inicialização do esquema de banco de dados (SQLite)', func
         throw new Exception("Falha ao obter conexão com o banco de dados");
     }
 
-    $requiredTables = ['users', 'products', 'product_images', 'orders', 'order_items', 'reviews', 'messages', 'favorites', 'points_history', 'discounts'];
+    $requiredTables = ['users', 'products', 'product_images', 'orders', 'order_items', 'reviews', 'review_images', 'messages', 'favorites', 'points_history', 'discounts'];
     $stmt = $db->query("SELECT name FROM sqlite_master WHERE type='table'");
     $existingTables = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
@@ -261,6 +263,213 @@ runTest('API: Geração de código de validação de e-mail para cadastro', func
     if (empty($jsonNew['success'])) {
         throw new Exception("API falhou ao gerar código de cadastro: " . ($jsonNew['error'] ?? 'desconhecido'));
     }
+    return true;
+});
+
+// --------------------------------------------------------------------------
+// 10. Teste: Bloqueio de Avaliação sem Compra Comprovada
+// --------------------------------------------------------------------------
+runTest('API: Bloqueio de avaliação sem compra comprovada (compra verificada obrigatória)', function() {
+    // Usuário 2 não comprou o produto 1 inicialmente
+    $outEligibility = callApiIsolated('api/reviews.php', [
+        'action' => 'check_eligibility',
+        'product_id' => 1
+    ], 'GET', ['user_id' => 2]);
+    $jsonEligibility = json_decode($outEligibility, true);
+
+    if (empty($jsonEligibility['success']) || !isset($jsonEligibility['can_review'])) {
+        throw new Exception("Falha ao checar elegibilidade: " . $outEligibility);
+    }
+    if ($jsonEligibility['can_review'] !== false || $jsonEligibility['reason'] !== 'not_purchased') {
+        throw new Exception("Usuário sem compra foi considerado elegível para avaliar indevidamente");
+    }
+
+    // Tentar criar avaliação sem ter comprado deve retornar erro
+    $outCreate = callApiIsolated('api/reviews.php', [
+        'action' => 'create',
+        'product_id' => 1,
+        'rating' => 5,
+        'comment' => 'Tentativa de avaliar sem comprar'
+    ], 'POST', ['user_id' => 2]);
+    $jsonCreate = json_decode($outCreate, true);
+
+    if (!empty($jsonCreate['success'])) {
+        throw new Exception("API permitiu criar avaliação sem compra comprovada!");
+    }
+    if (empty($jsonCreate['error'])) {
+        throw new Exception("API não retornou mensagem de erro ao barrar avaliação sem compra");
+    }
+
+    return true;
+});
+
+// --------------------------------------------------------------------------
+// 11. Teste: Criação de Avaliação após Compra Confirmada e Fotos
+// --------------------------------------------------------------------------
+runTest('API: Criação de avaliação após compra confirmada e fotos de avaliação', function() {
+    $db = getDbConnection();
+
+    // 1. Simular uma compra confirmada do produto 1 pelo usuário 2
+    $orderNumber = 'PED-TEST-' . uniqid();
+    $db->prepare("INSERT INTO orders (buyer_id, order_number, total, points_earned, payment_method, shipping_address, shipping_city, shipping_state, status) 
+                  VALUES (2, ?, 79.90, 80, 'pix', 'Rua Teste, 100', 'São Paulo', 'SP', 'confirmed')")
+       ->execute([$orderNumber]);
+    $orderId = (int)$db->lastInsertId();
+
+    $db->prepare("INSERT INTO order_items (order_id, product_id, seller_id, quantity, price, points) 
+                  VALUES (?, 1, 1, 1, 79.90, 80)")
+       ->execute([$orderId]);
+
+    // 2. Agora o usuário deve estar elegível
+    $outEligibility = callApiIsolated('api/reviews.php', [
+        'action' => 'check_eligibility',
+        'product_id' => 1
+    ], 'GET', ['user_id' => 2]);
+    $jsonElig = json_decode($outEligibility, true);
+    if (empty($jsonElig['can_review'])) {
+        throw new Exception("Usuário com compra confirmada não foi considerado apto a avaliar: " . ($jsonElig['error'] ?? 'desconhecido'));
+    }
+
+    // 3. Criar a avaliação
+    $outCreate = callApiIsolated('api/reviews.php', [
+        'action' => 'create',
+        'product_id' => 1,
+        'rating' => 5,
+        'comment' => 'Garrafa térmica excelente, super bem embalada e sustentável!'
+    ], 'POST', ['user_id' => 2]);
+    $jsonCreate = json_decode($outCreate, true);
+
+    if (empty($jsonCreate['success'])) {
+        throw new Exception("Falha ao criar avaliação para comprador verificado: " . ($jsonCreate['error'] ?? 'erro'));
+    }
+
+    $reviewId = (int)($jsonCreate['review_id'] ?? 0);
+    if ($reviewId <= 0) {
+        $chk = $db->query("SELECT id FROM reviews WHERE product_id = 1 AND user_id = 2")->fetch();
+        $reviewId = (int)($chk['id'] ?? 0);
+    }
+    if ($reviewId <= 0) {
+        throw new Exception("ID da avaliação criada não foi localizado");
+    }
+
+    // 4. Testar persistência de fotos associadas à avaliação
+    $testImgUrl = 'uploads/reviews/rev_' . $reviewId . '_test.webp';
+    $db->prepare("INSERT INTO review_images (review_id, image_url) VALUES (?, ?)")
+       ->execute([$reviewId, $testImgUrl]);
+
+    $imgCheck = $db->prepare("SELECT COUNT(*) as cnt FROM review_images WHERE review_id = ?");
+    $imgCheck->execute([$reviewId]);
+    if ((int)$imgCheck->fetch()['cnt'] < 1) {
+        throw new Exception("Foto não foi persistida na tabela review_images");
+    }
+
+    // 5. Testar consulta via api/products.php
+    $outDetail = callApiIsolated('api/products.php', [
+        'action' => 'detail',
+        'id' => 1
+    ], 'GET', ['user_id' => 2]);
+    $jsonDetail = json_decode($outDetail, true);
+
+    if (empty($jsonDetail['success'])) {
+        throw new Exception("Falha ao carregar detalhes do produto via API: " . ($jsonDetail['error'] ?? ''));
+    }
+    if (empty($jsonDetail['user_review'])) {
+        throw new Exception("Detalhes do produto não retornaram user_review para o autor");
+    }
+    if (empty($jsonDetail['user_review']['images'])) {
+        throw new Exception("Avaliação do usuário não retornou a lista de fotos anexadas");
+    }
+
+    return true;
+});
+
+// --------------------------------------------------------------------------
+// 12. Teste: Edição de Avaliação, Alteração de Nota e Recálculo da Média
+// --------------------------------------------------------------------------
+runTest('API: Edição de avaliação existente, alteração de nota e recálculo da média do produto', function() {
+    $db = getDbConnection();
+    $rev = $db->query("SELECT id, product_id, rating FROM reviews WHERE user_id = 2 ORDER BY id DESC LIMIT 1")->fetch();
+    if (!$rev) {
+        throw new Exception("Avaliação para teste de edição não encontrada");
+    }
+    $reviewId = (int)$rev['id'];
+    $productId = (int)$rev['product_id'];
+
+    // Editar a avaliação para nota 4 e novo comentário
+    $outUpdate = callApiIsolated('api/reviews.php', [
+        'action' => 'update',
+        'review_id' => $reviewId,
+        'rating' => 4,
+        'comment' => 'Comentário atualizado após alguns dias de uso: nota 4!'
+    ], 'POST', ['user_id' => 2]);
+    $jsonUpdate = json_decode($outUpdate, true);
+
+    if (empty($jsonUpdate['success'])) {
+        throw new Exception("Falha ao atualizar avaliação via API: " . ($jsonUpdate['error'] ?? ''));
+    }
+
+    // Verificar se no banco a avaliação foi atualizada
+    $chkStmt = $db->prepare("SELECT rating, comment FROM reviews WHERE id = ?");
+    $chkStmt->execute([$reviewId]);
+    $updated = $chkStmt->fetch();
+    if ((int)$updated['rating'] !== 4 || strpos($updated['comment'], 'Comentário atualizado') === false) {
+        throw new Exception("Dados da avaliação no banco não conferem com a edição enviada");
+    }
+
+    // Verificar se a média do produto foi recalculada
+    $prod = $db->query("SELECT rating, total_reviews FROM products WHERE id = {$productId}")->fetch();
+    if ($prod['rating'] <= 0 || $prod['total_reviews'] <= 0) {
+        throw new Exception("Média ou total de avaliações do produto inválidos após atualização");
+    }
+
+    return true;
+});
+
+// --------------------------------------------------------------------------
+// 13. Teste: Minhas Avaliações e Exclusão com Recálculo
+// --------------------------------------------------------------------------
+runTest('API: Listagem de avaliações do usuário ("Minhas Avaliações") e exclusão com recálculo', function() {
+    $db = getDbConnection();
+
+    // 1. Listar avaliações do usuário 2
+    $outList = callApiIsolated('api/reviews.php', [
+        'action' => 'list',
+        'user_id' => 2
+    ], 'GET', ['user_id' => 2]);
+    $jsonList = json_decode($outList, true);
+
+    if (empty($jsonList['success']) || !is_array($jsonList['reviews'])) {
+        throw new Exception("Falha ao listar avaliações do usuário: " . ($jsonList['error'] ?? ''));
+    }
+    if (count($jsonList['reviews']) === 0) {
+        throw new Exception("Nenhuma avaliação retornada na listagem do usuário");
+    }
+
+    $firstReview = $jsonList['reviews'][0];
+    if (empty($firstReview['product_name'])) {
+        throw new Exception("Avaliação não incluiu o nome do produto avaliado");
+    }
+    $reviewId = (int)$firstReview['id'];
+    $productId = (int)$firstReview['product_id'];
+
+    // 2. Excluir a avaliação
+    $outDelete = callApiIsolated('api/reviews.php', [
+        'action' => 'delete',
+        'review_id' => $reviewId
+    ], 'POST', ['user_id' => 2]);
+    $jsonDelete = json_decode($outDelete, true);
+
+    if (empty($jsonDelete['success'])) {
+        throw new Exception("Falha ao excluir avaliação: " . ($jsonDelete['error'] ?? ''));
+    }
+
+    // 3. Confirmar remoção no banco e de fotos associadas
+    $chkRev = $db->query("SELECT COUNT(*) as cnt FROM reviews WHERE id = {$reviewId}")->fetch()['cnt'];
+    $chkImgs = $db->query("SELECT COUNT(*) as cnt FROM review_images WHERE review_id = {$reviewId}")->fetch()['cnt'];
+    if ((int)$chkRev !== 0 || (int)$chkImgs !== 0) {
+        throw new Exception("Avaliação ou fotos não foram removidas do banco de dados");
+    }
+
     return true;
 });
 

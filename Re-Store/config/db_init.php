@@ -14,10 +14,28 @@ function initializeDatabase() {
         try { $db->exec("ALTER TABLE orders ADD COLUMN coupon_code TEXT NULL"); } catch (Exception $e) {}
         try { $db->exec("ALTER TABLE orders ADD COLUMN discount_amount REAL DEFAULT 0.0"); } catch (Exception $e) {}
         try { $db->exec("ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 1"); } catch (Exception $e) {}
+        try {
+            $db->exec("CREATE TABLE IF NOT EXISTS review_images (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                review_id INTEGER NOT NULL,
+                image_url TEXT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (review_id) REFERENCES reviews(id) ON DELETE CASCADE
+            )");
+        } catch (Exception $e) {}
     } else {
         try { $db->exec("ALTER TABLE orders ADD COLUMN coupon_code VARCHAR(50) NULL"); } catch (Exception $e) {}
         try { $db->exec("ALTER TABLE orders ADD COLUMN discount_amount DECIMAL(10,2) DEFAULT 0.00"); } catch (Exception $e) {}
         try { $db->exec("ALTER TABLE users ADD COLUMN email_verified TINYINT(1) DEFAULT 1"); } catch (Exception $e) {}
+        try {
+            $db->exec("CREATE TABLE IF NOT EXISTS review_images (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                review_id INT NOT NULL,
+                image_url VARCHAR(255) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (review_id) REFERENCES reviews(id) ON DELETE CASCADE
+            )");
+        } catch (Exception $e) {}
     }
 
     // Verifica se as tabelas principais já existem no banco conectado
@@ -208,6 +226,13 @@ function initializeDatabase() {
             CONSTRAINT unique_user_review UNIQUE (review_id, user_id),
             FOREIGN KEY (review_id) REFERENCES reviews(id) ON DELETE CASCADE,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )",
+            "CREATE TABLE IF NOT EXISTS review_images (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            review_id INTEGER NOT NULL,
+            image_url TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (review_id) REFERENCES reviews(id) ON DELETE CASCADE
         )"
         ];
         foreach ($queries as $q) {

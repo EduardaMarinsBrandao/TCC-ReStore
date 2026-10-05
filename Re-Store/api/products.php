@@ -1,7 +1,11 @@
 <?php
 // api/products.php
-header('Content-Type: application/json; charset=utf-8');
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+if (!headers_sent()) {
+    header('Content-Type: application/json; charset=utf-8');
+}
 
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/db_init.php';
@@ -102,7 +106,9 @@ if ($method === 'GET' && $action === 'detail') {
     }
 
     // Incrementa contagem de visualizações
-    $db->prepare("UPDATE products SET views = views + 1 WHERE id = ?")->execute([$id]);
+    try {
+        $db->prepare("UPDATE products SET views = views + 1 WHERE id = ?")->execute([$id]);
+    } catch (Exception $e) {}
 
     $stmt = $db->prepare("SELECT p.*, u.name as seller_name, u.email as seller_email, u.avatar as seller_avatar, u.phone as seller_phone, u.city as seller_city, u.state as seller_state, u.is_verified_business, u.business_name 
                           FROM products p 
@@ -125,14 +131,62 @@ if ($method === 'GET' && $action === 'detail') {
         $images = [['id' => 0, 'image_url' => 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=600', 'is_primary' => 1]];
     }
 
-    // Buscar avaliações do produto
-    $revStmt = $db->prepare("SELECT r.*, u.name as user_name, u.avatar as user_avatar 
+    $currentUserId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 0;
+
+    // Buscar avaliações do produto com fotos e status de voto
+    $revStmt = $db->prepare("SELECT r.*, u.name as user_name, u.avatar as user_avatar,
+                            EXISTS(SELECT 1 FROM review_votes rv WHERE rv.review_id = r.id AND rv.user_id = ?) as user_voted
                             FROM reviews r 
                             JOIN users u ON r.user_id = u.id 
                             WHERE r.product_id = ? 
                             ORDER BY r.id DESC");
-    $revStmt->execute([$id]);
+    $revStmt->execute([$currentUserId, $id]);
     $reviews = $revStmt->fetchAll();
+
+    foreach ($reviews as &$rev) {
+        $imgStmt = $db->prepare("SELECT id, image_url FROM review_images WHERE review_id = ? ORDER BY id ASC");
+        $imgStmt->execute([$rev['id']]);
+        $rev['images'] = $imgStmt->fetchAll();
+        $rev['is_verified_purchase'] = !empty($rev['order_id']);
+    }
+    unset($rev);
+
+    // Verificar elegibilidade de avaliação do usuário logado
+    $isSeller = ($currentUserId > 0 && $currentUserId === (int)$product['seller_id']);
+    $purchased = false;
+    $userOrderId = null;
+    $userReview = null;
+
+    if ($currentUserId > 0) {
+        // Verificar se comprou o produto
+        if (!$isSeller) {
+            $ordStmt = $db->prepare("
+                SELECT o.id 
+                FROM orders o 
+                JOIN order_items oi ON oi.order_id = o.id 
+                WHERE o.buyer_id = ? AND oi.product_id = ? AND o.status != 'cancelled'
+                ORDER BY o.id DESC 
+                LIMIT 1
+            ");
+            $ordStmt->execute([$currentUserId, $id]);
+            $orderRow = $ordStmt->fetch();
+            if ($orderRow) {
+                $purchased = true;
+                $userOrderId = (int)$orderRow['id'];
+            }
+        }
+
+        // Verificar se já possui avaliação neste produto
+        $myRevStmt = $db->prepare("SELECT * FROM reviews WHERE product_id = ? AND user_id = ? LIMIT 1");
+        $myRevStmt->execute([$id, $currentUserId]);
+        $userReview = $myRevStmt->fetch();
+        if ($userReview) {
+            $myImgStmt = $db->prepare("SELECT id, image_url FROM review_images WHERE review_id = ? ORDER BY id ASC");
+            $myImgStmt->execute([$userReview['id']]);
+            $userReview['images'] = $myImgStmt->fetchAll();
+            $userReview['is_verified_purchase'] = !empty($userReview['order_id']);
+        }
+    }
 
     // Sincronizar pontos com a regra 1 pt por R$ 1,00
     $product['points'] = max(1, (int)round((float)$product['price'] * BUYER_POINTS_PER_REAL));
@@ -141,7 +195,12 @@ if ($method === 'GET' && $action === 'detail') {
         'success' => true,
         'product' => $product,
         'images' => $images,
-        'reviews' => $reviews
+        'reviews' => $reviews,
+        'user_can_review' => ($currentUserId > 0 && !$isSeller && $purchased && !$userReview),
+        'user_has_purchased' => $purchased,
+        'user_is_seller' => $isSeller,
+        'user_review' => $userReview,
+        'user_order_id' => $userOrderId
     ]);
     exit;
 }
