@@ -11,12 +11,13 @@ on:
 
 concurrency:
   group: production-deploy
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   deploy:
     name: "Deploy para Hospedagem (FTP/FTPS)"
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: 📥 Checkout do Repositório
         uses: actions/checkout@v4
@@ -77,10 +78,13 @@ jobs:
           server-dir: ${{ secrets.FTP_SERVER_DIR || '/htdocs/' }}
           local-dir: Re-Store/
           dangerous-clean-slate: false
-          log-level: verbose
+          timeout: 180000
+          log-level: standard
           exclude: |
             **/.git*
             **/.git*/**
             **/tests/**
             **/*.sqlite*
             **/*.log
+            **/uploads/**
+            database.sql
