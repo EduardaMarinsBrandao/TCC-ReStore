@@ -6,7 +6,6 @@ on:
       - main
     paths:
       - 'Re-Store/**'
-      - '.github/workflows/cd.yml'
   workflow_dispatch:
 
 concurrency:
@@ -79,7 +78,7 @@ jobs:
           local-dir: Re-Store/
           dangerous-clean-slate: false
           timeout: 180000
-          log-level: standard
+          log-level: minimal
           exclude: |
             **/.git*
             **/.git*/**
