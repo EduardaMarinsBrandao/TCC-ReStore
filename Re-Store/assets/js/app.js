@@ -849,12 +849,19 @@ const App = {
           <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
             <!-- GALERIA DE IMAGENS -->
             <div>
-              <div class="aspect-square bg-gray-100 dark:bg-gray-800 rounded-2xl overflow-hidden mb-4 border dark:border-gray-800 shadow-sm">
-                <img id="main-product-img" src="${images[0].image_url}" class="w-full h-full object-cover" alt="${p.name}">
+              <div class="aspect-square product-image-container rounded-2xl overflow-hidden mb-4 shadow-md relative group">
+                <img id="main-product-img" src="${images[0].image_url}" class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.02] cursor-pointer" alt="${(p.name || '').replace(/"/g, '&quot;')}" onclick="App.openImageModal(this.src, '${(p.name || '').replace(/'/g, "\\'")}')" title="Clique para ampliar a foto do produto">
+                <div class="absolute bottom-2 right-2 px-2.5 py-1 rounded-lg bg-black/60 text-white text-[11px] font-medium backdrop-blur flex items-center gap-1 opacity-0 group-hover:opacity-100 transition pointer-events-none">
+                  <span>🔍 Ampliar</span>
+                </div>
               </div>
-              <div class="flex gap-3 overflow-x-auto no-scrollbar">
+              <div class="flex gap-3 overflow-x-auto no-scrollbar pb-1">
                 ${images.map((img, idx) => `
-                  <button type="button" onclick="document.getElementById('main-product-img').src='${img.image_url}'" class="w-16 h-16 rounded-lg overflow-hidden border-2 border-transparent hover:border-teal-500 transition cursor-pointer">
+                  <button type="button" 
+                    onclick="document.getElementById('main-product-img').src='${img.image_url}'; document.querySelectorAll('.product-thumb-item').forEach(b => b.classList.remove('active')); this.classList.add('active');" 
+                    class="product-thumb-item w-16 h-16 rounded-xl overflow-hidden cursor-pointer flex-shrink-0 shadow-sm ${idx === 0 ? 'active' : ''}"
+                    title="Foto ${idx + 1}"
+                  >
                     <img src="${img.image_url}" class="w-full h-full object-cover" alt="Thumb ${idx}">
                   </button>
                 `).join('')}

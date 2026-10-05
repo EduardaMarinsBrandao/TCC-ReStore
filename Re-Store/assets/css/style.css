@@ -192,6 +192,47 @@ html.dark .card-restore {
   box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08);
 }
 
+/* Contorno e Moldura Destacada da Imagem do Produto */
+.product-image-container {
+  border: 2px solid var(--border-light);
+  border-radius: 1rem;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
+  background-color: #F9FAFB;
+  overflow: hidden;
+  position: relative;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+html.dark .product-image-container {
+  border: 2px solid #374151; /* Borda nítida de alto contraste no modo escuro */
+  background-color: #1F2937;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.product-image-container:hover {
+  border-color: var(--color-primary);
+  box-shadow: 0 6px 20px rgba(20, 184, 166, 0.18);
+}
+
+.product-thumb-item {
+  border: 2px solid var(--border-light);
+  border-radius: 0.75rem;
+  overflow: hidden;
+  transition: all 0.2s ease;
+  background-color: #F9FAFB;
+}
+
+html.dark .product-thumb-item {
+  border-color: #374151;
+  background-color: #1F2937;
+}
+
+.product-thumb-item.active,
+.product-thumb-item:hover {
+  border-color: var(--color-primary) !important;
+  box-shadow: 0 0 0 2px rgba(20, 184, 166, 0.35);
+}
+
 /* Badges de Pontos e Condição */
 .badge-points {
   background: linear-gradient(135deg, #10B981, #059669);
