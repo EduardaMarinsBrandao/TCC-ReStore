@@ -21,188 +21,230 @@ $action = $_GET['action'] ?? $_POST['action'] ?? 'list';
 // 1. LISTAR PRODUTOS (COM FILTROS)
 // ----------------------------------------------------
 if ($method === 'GET' && $action === 'list') {
-    $search = trim($_GET['search'] ?? '');
-    $category = trim($_GET['category'] ?? '');
-    $condition = trim($_GET['condition'] ?? '');
-    $minPrice = isset($_GET['min_price']) && $_GET['min_price'] !== '' ? (float)$_GET['min_price'] : null;
-    $maxPrice = isset($_GET['max_price']) && $_GET['max_price'] !== '' ? (float)$_GET['max_price'] : null;
-    $sellerId = isset($_GET['seller_id']) ? (int)$_GET['seller_id'] : null;
-    $location = trim($_GET['location'] ?? '');
+    try {
+        $search = trim($_GET['search'] ?? '');
+        $category = trim($_GET['category'] ?? '');
+        $condition = trim($_GET['condition'] ?? '');
+        $minPrice = isset($_GET['min_price']) && $_GET['min_price'] !== '' ? (float)$_GET['min_price'] : null;
+        $maxPrice = isset($_GET['max_price']) && $_GET['max_price'] !== '' ? (float)$_GET['max_price'] : null;
+        $sellerId = isset($_GET['seller_id']) ? (int)$_GET['seller_id'] : null;
+        $location = trim($_GET['location'] ?? '');
 
-    $sql = "SELECT p.*, u.name as seller_name, u.avatar as seller_avatar, u.is_verified_business, u.business_name 
-            FROM products p 
-            JOIN users u ON p.seller_id = u.id 
-            WHERE p.status = 'active'";
-    $params = [];
+        $sql = "SELECT p.*, COALESCE(u.name, 'Vendedor Sustentável') as seller_name, u.avatar as seller_avatar, COALESCE(u.is_verified_business, 0) as is_verified_business, u.business_name 
+                FROM products p 
+                LEFT JOIN users u ON p.seller_id = u.id 
+                WHERE p.status = 'active'";
+        $params = [];
 
-    if (!empty($location)) {
-        $sql .= " AND (p.location LIKE ? OR u.city LIKE ? OR u.state LIKE ?)";
-        $locTerm = "%{$location}%";
-        $params[] = $locTerm;
-        $params[] = $locTerm;
-        $params[] = $locTerm;
+        if (!empty($location)) {
+            $sql .= " AND (p.location LIKE ? OR u.city LIKE ? OR u.state LIKE ?)";
+            $locTerm = "%{$location}%";
+            $params[] = $locTerm;
+            $params[] = $locTerm;
+            $params[] = $locTerm;
+        }
+
+        if (!empty($search)) {
+            $sql .= " AND (p.name LIKE ? OR p.description LIKE ? OR p.material LIKE ?)";
+            $searchTerm = "%{$search}%";
+            $params[] = $searchTerm;
+            $params[] = $searchTerm;
+            $params[] = $searchTerm;
+        }
+
+        if (!empty($category)) {
+            $sql .= " AND p.category = ?";
+            $params[] = $category;
+        }
+
+        if (!empty($condition)) {
+            $sql .= " AND p.product_condition = ?";
+            $params[] = $condition;
+        }
+
+        if ($minPrice !== null) {
+            $sql .= " AND p.price >= ?";
+            $params[] = $minPrice;
+        }
+
+        if ($maxPrice !== null) {
+            $sql .= " AND p.price <= ?";
+            $params[] = $maxPrice;
+        }
+
+        if ($sellerId !== null) {
+            $sql .= " AND p.seller_id = ?";
+            $params[] = $sellerId;
+        }
+
+        $sql .= " ORDER BY p.id DESC";
+
+        $stmt = $db->prepare($sql);
+        $stmt->execute($params);
+        $products = $stmt->fetchAll();
+
+        // Carregar imagem principal e sincronizar pontos (1 pt por R$ 1,00)
+        foreach ($products as &$prod) {
+            $imgStmt = $db->prepare("SELECT image_url FROM product_images WHERE product_id = ? ORDER BY is_primary DESC, id ASC LIMIT 1");
+            $imgStmt->execute([$prod['id']]);
+            $primaryImg = $imgStmt->fetch();
+            $prod['primary_image'] = $primaryImg ? $primaryImg['image_url'] : 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=600';
+            $prod['points'] = max(1, (int)round((float)$prod['price'] * BUYER_POINTS_PER_REAL));
+        }
+        unset($prod);
+
+        echo json_encode(['success' => true, 'products' => $products]);
+        exit;
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'error' => 'Erro ao carregar lista de produtos: ' . $e->getMessage()]);
+        exit;
     }
-
-    if (!empty($search)) {
-        $sql .= " AND (p.name LIKE ? OR p.description LIKE ? OR p.material LIKE ?)";
-        $searchTerm = "%{$search}%";
-        $params[] = $searchTerm;
-        $params[] = $searchTerm;
-        $params[] = $searchTerm;
-    }
-
-    if (!empty($category)) {
-        $sql .= " AND p.category = ?";
-        $params[] = $category;
-    }
-
-    if (!empty($condition)) {
-        $sql .= " AND p.product_condition = ?";
-        $params[] = $condition;
-    }
-
-    if ($minPrice !== null) {
-        $sql .= " AND p.price >= ?";
-        $params[] = $minPrice;
-    }
-
-    if ($maxPrice !== null) {
-        $sql .= " AND p.price <= ?";
-        $params[] = $maxPrice;
-    }
-
-    if ($sellerId !== null) {
-        $sql .= " AND p.seller_id = ?";
-        $params[] = $sellerId;
-    }
-
-    $sql .= " ORDER BY p.id DESC";
-
-    $stmt = $db->prepare($sql);
-    $stmt->execute($params);
-    $products = $stmt->fetchAll();
-
-    // Carregar imagem principal e sincronizar pontos (1 pt por R$ 1,00)
-    foreach ($products as &$prod) {
-        $imgStmt = $db->prepare("SELECT image_url FROM product_images WHERE product_id = ? ORDER BY is_primary DESC, id ASC LIMIT 1");
-        $imgStmt->execute([$prod['id']]);
-        $primaryImg = $imgStmt->fetch();
-        $prod['primary_image'] = $primaryImg ? $primaryImg['image_url'] : 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=600';
-        $prod['points'] = max(1, (int)round((float)$prod['price'] * BUYER_POINTS_PER_REAL));
-    }
-
-    echo json_encode(['success' => true, 'products' => $products]);
-    exit;
 }
 
 // ----------------------------------------------------
 // 2. DETALHES DO PRODUTO
 // ----------------------------------------------------
 if ($method === 'GET' && $action === 'detail') {
-    $id = (int)($_GET['id'] ?? 0);
-    if ($id <= 0) {
-        echo json_encode(['success' => false, 'error' => 'ID do produto inválido.']);
-        exit;
-    }
-
-    // Incrementa contagem de visualizações
     try {
-        $db->prepare("UPDATE products SET views = views + 1 WHERE id = ?")->execute([$id]);
-    } catch (Exception $e) {}
+        $id = (int)($_GET['id'] ?? 0);
+        if ($id <= 0) {
+            echo json_encode(['success' => false, 'error' => 'ID do produto inválido.']);
+            exit;
+        }
 
-    $stmt = $db->prepare("SELECT p.*, u.name as seller_name, u.email as seller_email, u.avatar as seller_avatar, u.phone as seller_phone, u.city as seller_city, u.state as seller_state, u.is_verified_business, u.business_name 
-                          FROM products p 
-                          JOIN users u ON p.seller_id = u.id 
-                          WHERE p.id = ?");
-    $stmt->execute([$id]);
-    $product = $stmt->fetch();
+        // Incrementa contagem de visualizações
+        try {
+            $db->prepare("UPDATE products SET views = views + 1 WHERE id = ?")->execute([$id]);
+        } catch (Exception $e) {}
 
-    if (!$product) {
-        echo json_encode(['success' => false, 'error' => 'Produto não encontrado.']);
-        exit;
-    }
+        $stmt = $db->prepare("SELECT p.*, COALESCE(u.name, 'Vendedor Sustentável') as seller_name, u.email as seller_email, u.avatar as seller_avatar, u.phone as seller_phone, u.city as seller_city, u.state as seller_state, COALESCE(u.is_verified_business, 0) as is_verified_business, u.business_name 
+                              FROM products p 
+                              LEFT JOIN users u ON p.seller_id = u.id 
+                              WHERE p.id = ?");
+        $stmt->execute([$id]);
+        $product = $stmt->fetch();
 
-    // Buscar todas as imagens do produto
-    $imgStmt = $db->prepare("SELECT id, image_url, is_primary FROM product_images WHERE product_id = ? ORDER BY is_primary DESC, id ASC");
-    $imgStmt->execute([$id]);
-    $images = $imgStmt->fetchAll();
+        if (!$product) {
+            echo json_encode(['success' => false, 'error' => 'Produto não encontrado.']);
+            exit;
+        }
 
-    if (empty($images)) {
-        $images = [['id' => 0, 'image_url' => 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=600', 'is_primary' => 1]];
-    }
+        // Buscar todas as imagens do produto
+        $imgStmt = $db->prepare("SELECT id, image_url, is_primary FROM product_images WHERE product_id = ? ORDER BY is_primary DESC, id ASC");
+        $imgStmt->execute([$id]);
+        $images = $imgStmt->fetchAll();
 
-    $currentUserId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 0;
+        if (empty($images)) {
+            $images = [['id' => 0, 'image_url' => 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=600', 'is_primary' => 1]];
+        }
 
-    // Buscar avaliações do produto com fotos e status de voto
-    $revStmt = $db->prepare("SELECT r.*, u.name as user_name, u.avatar as user_avatar,
-                            EXISTS(SELECT 1 FROM review_votes rv WHERE rv.review_id = r.id AND rv.user_id = ?) as user_voted
-                            FROM reviews r 
-                            JOIN users u ON r.user_id = u.id 
-                            WHERE r.product_id = ? 
-                            ORDER BY r.id DESC");
-    $revStmt->execute([$currentUserId, $id]);
-    $reviews = $revStmt->fetchAll();
+        $currentUserId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 0;
 
-    foreach ($reviews as &$rev) {
-        $imgStmt = $db->prepare("SELECT id, image_url FROM review_images WHERE review_id = ? ORDER BY id ASC");
-        $imgStmt->execute([$rev['id']]);
-        $rev['images'] = $imgStmt->fetchAll();
-        $rev['is_verified_purchase'] = !empty($rev['order_id']);
-    }
-    unset($rev);
+        // Buscar avaliações do produto com fotos e status de voto (com fallback resiliente)
+        $reviews = [];
+        try {
+            $revStmt = $db->prepare("SELECT r.*, COALESCE(u.name, 'Usuário') as user_name, u.avatar as user_avatar,
+                                    EXISTS(SELECT 1 FROM review_votes rv WHERE rv.review_id = r.id AND rv.user_id = ?) as user_voted
+                                    FROM reviews r 
+                                    LEFT JOIN users u ON r.user_id = u.id 
+                                    WHERE r.product_id = ? 
+                                    ORDER BY r.id DESC");
+            $revStmt->execute([$currentUserId, $id]);
+            $reviews = $revStmt->fetchAll();
 
-    // Verificar elegibilidade de avaliação do usuário logado
-    $isSeller = ($currentUserId > 0 && $currentUserId === (int)$product['seller_id']);
-    $purchased = false;
-    $userOrderId = null;
-    $userReview = null;
-
-    if ($currentUserId > 0) {
-        // Verificar se comprou o produto
-        if (!$isSeller) {
-            $ordStmt = $db->prepare("
-                SELECT o.id 
-                FROM orders o 
-                JOIN order_items oi ON oi.order_id = o.id 
-                WHERE o.buyer_id = ? AND oi.product_id = ? AND o.status != 'cancelled'
-                ORDER BY o.id DESC 
-                LIMIT 1
-            ");
-            $ordStmt->execute([$currentUserId, $id]);
-            $orderRow = $ordStmt->fetch();
-            if ($orderRow) {
-                $purchased = true;
-                $userOrderId = (int)$orderRow['id'];
+            foreach ($reviews as &$rev) {
+                $rev['images'] = [];
+                try {
+                    $imgStmt = $db->prepare("SELECT id, image_url FROM review_images WHERE review_id = ? ORDER BY id ASC");
+                    $imgStmt->execute([$rev['id']]);
+                    $rev['images'] = $imgStmt->fetchAll();
+                } catch (Exception $e) {}
+                $rev['is_verified_purchase'] = !empty($rev['order_id']);
+            }
+            unset($rev);
+        } catch (Exception $e) {
+            // Fallback resiliente caso review_votes ainda não exista no banco conectado
+            try {
+                $revStmt = $db->prepare("SELECT r.*, COALESCE(u.name, 'Usuário') as user_name, u.avatar as user_avatar, 0 as user_voted
+                                        FROM reviews r 
+                                        LEFT JOIN users u ON r.user_id = u.id 
+                                        WHERE r.product_id = ? 
+                                        ORDER BY r.id DESC");
+                $revStmt->execute([$id]);
+                $reviews = $revStmt->fetchAll();
+                foreach ($reviews as &$rev) {
+                    $rev['images'] = [];
+                    $rev['is_verified_purchase'] = !empty($rev['order_id']);
+                }
+                unset($rev);
+            } catch (Exception $e2) {
+                $reviews = [];
             }
         }
 
-        // Verificar se já possui avaliação neste produto
-        $myRevStmt = $db->prepare("SELECT * FROM reviews WHERE product_id = ? AND user_id = ? LIMIT 1");
-        $myRevStmt->execute([$id, $currentUserId]);
-        $userReview = $myRevStmt->fetch();
-        if ($userReview) {
-            $myImgStmt = $db->prepare("SELECT id, image_url FROM review_images WHERE review_id = ? ORDER BY id ASC");
-            $myImgStmt->execute([$userReview['id']]);
-            $userReview['images'] = $myImgStmt->fetchAll();
-            $userReview['is_verified_purchase'] = !empty($userReview['order_id']);
+        // Verificar elegibilidade de avaliação do usuário logado
+        $isSeller = ($currentUserId > 0 && $currentUserId === (int)$product['seller_id']);
+        $purchased = false;
+        $userOrderId = null;
+        $userReview = null;
+
+        if ($currentUserId > 0) {
+            // Verificar se comprou o produto
+            if (!$isSeller) {
+                try {
+                    $ordStmt = $db->prepare("
+                        SELECT o.id 
+                        FROM orders o 
+                        JOIN order_items oi ON oi.order_id = o.id 
+                        WHERE o.buyer_id = ? AND oi.product_id = ? AND o.status != 'cancelled'
+                        ORDER BY o.id DESC 
+                        LIMIT 1
+                    ");
+                    $ordStmt->execute([$currentUserId, $id]);
+                    $orderRow = $ordStmt->fetch();
+                    if ($orderRow) {
+                        $purchased = true;
+                        $userOrderId = (int)$orderRow['id'];
+                    }
+                } catch (Exception $e) {}
+            }
+
+            // Verificar se já possui avaliação neste produto
+            try {
+                $myRevStmt = $db->prepare("SELECT * FROM reviews WHERE product_id = ? AND user_id = ? LIMIT 1");
+                $myRevStmt->execute([$id, $currentUserId]);
+                $userReview = $myRevStmt->fetch();
+                if ($userReview) {
+                    $userReview['images'] = [];
+                    try {
+                        $myImgStmt = $db->prepare("SELECT id, image_url FROM review_images WHERE review_id = ? ORDER BY id ASC");
+                        $myImgStmt->execute([$userReview['id']]);
+                        $userReview['images'] = $myImgStmt->fetchAll();
+                    } catch (Exception $e) {}
+                    $userReview['is_verified_purchase'] = !empty($userReview['order_id']);
+                }
+            } catch (Exception $e) {}
         }
+
+        // Sincronizar pontos com a regra 1 pt por R$ 1,00
+        $product['points'] = max(1, (int)round((float)$product['price'] * BUYER_POINTS_PER_REAL));
+
+        echo json_encode([
+            'success' => true,
+            'product' => $product,
+            'images' => $images,
+            'reviews' => $reviews,
+            'user_can_review' => ($currentUserId > 0 && !$isSeller && $purchased && !$userReview),
+            'user_has_purchased' => $purchased,
+            'user_is_seller' => $isSeller,
+            'user_review' => $userReview,
+            'user_order_id' => $userOrderId
+        ]);
+        exit;
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'error' => 'Erro ao carregar detalhes do produto: ' . $e->getMessage()]);
+        exit;
     }
-
-    // Sincronizar pontos com a regra 1 pt por R$ 1,00
-    $product['points'] = max(1, (int)round((float)$product['price'] * BUYER_POINTS_PER_REAL));
-
-    echo json_encode([
-        'success' => true,
-        'product' => $product,
-        'images' => $images,
-        'reviews' => $reviews,
-        'user_can_review' => ($currentUserId > 0 && !$isSeller && $purchased && !$userReview),
-        'user_has_purchased' => $purchased,
-        'user_is_seller' => $isSeller,
-        'user_review' => $userReview,
-        'user_order_id' => $userOrderId
-    ]);
-    exit;
 }
 
 // ----------------------------------------------------
@@ -214,20 +256,26 @@ if ($method === 'GET' && $action === 'my_products') {
         exit;
     }
 
-    $sellerId = $_SESSION['user_id'];
-    $stmt = $db->prepare("SELECT p.*, (SELECT image_url FROM product_images WHERE product_id = p.id ORDER BY is_primary DESC LIMIT 1) as primary_image 
-                          FROM products p 
-                          WHERE p.seller_id = ? 
-                          ORDER BY p.id DESC");
-    $stmt->execute([$sellerId]);
-    $products = $stmt->fetchAll();
+    try {
+        $sellerId = $_SESSION['user_id'];
+        $stmt = $db->prepare("SELECT p.*, (SELECT image_url FROM product_images WHERE product_id = p.id ORDER BY is_primary DESC LIMIT 1) as primary_image 
+                              FROM products p 
+                              WHERE p.seller_id = ? 
+                              ORDER BY p.id DESC");
+        $stmt->execute([$sellerId]);
+        $products = $stmt->fetchAll();
 
-    foreach ($products as &$prod) {
-        $prod['points'] = max(1, (int)round((float)$prod['price'] * BUYER_POINTS_PER_REAL));
+        foreach ($products as &$prod) {
+            $prod['points'] = max(1, (int)round((float)$prod['price'] * BUYER_POINTS_PER_REAL));
+        }
+        unset($prod);
+
+        echo json_encode(['success' => true, 'products' => $products]);
+        exit;
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'error' => 'Erro ao carregar produtos do vendedor: ' . $e->getMessage()]);
+        exit;
     }
-
-    echo json_encode(['success' => true, 'products' => $products]);
-    exit;
 }
 
 // ----------------------------------------------------

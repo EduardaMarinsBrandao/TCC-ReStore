@@ -103,24 +103,47 @@ if ($method === 'GET' && ($action === 'list' || $action === 'my_reviews')) {
     $userIdParam = (int)($_GET['user_id'] ?? 0);
     $currentUserId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 0;
 
-    // Listar avaliações de um produto
+    // Listar avaliações de um produto (com fallback resiliente)
     if ($productId > 0 && $action !== 'my_reviews') {
-        $stmt = $db->prepare("SELECT r.*, u.name as user_name, u.avatar as user_avatar,
-                              EXISTS(SELECT 1 FROM review_votes rv WHERE rv.review_id = r.id AND rv.user_id = ?) as user_voted 
-                              FROM reviews r 
-                              JOIN users u ON r.user_id = u.id 
-                              WHERE r.product_id = ? 
-                              ORDER BY r.id DESC");
-        $stmt->execute([$currentUserId, $productId]);
-        $reviews = $stmt->fetchAll();
+        $reviews = [];
+        try {
+            $stmt = $db->prepare("SELECT r.*, u.name as user_name, u.avatar as user_avatar,
+                                  EXISTS(SELECT 1 FROM review_votes rv WHERE rv.review_id = r.id AND rv.user_id = ?) as user_voted 
+                                  FROM reviews r 
+                                  JOIN users u ON r.user_id = u.id 
+                                  WHERE r.product_id = ? 
+                                  ORDER BY r.id DESC");
+            $stmt->execute([$currentUserId, $productId]);
+            $reviews = $stmt->fetchAll();
 
-        foreach ($reviews as &$rev) {
-            $imgStmt = $db->prepare("SELECT id, image_url FROM review_images WHERE review_id = ? ORDER BY id ASC");
-            $imgStmt->execute([$rev['id']]);
-            $rev['images'] = $imgStmt->fetchAll();
-            $rev['is_verified_purchase'] = !empty($rev['order_id']);
+            foreach ($reviews as &$rev) {
+                $rev['images'] = [];
+                try {
+                    $imgStmt = $db->prepare("SELECT id, image_url FROM review_images WHERE review_id = ? ORDER BY id ASC");
+                    $imgStmt->execute([$rev['id']]);
+                    $rev['images'] = $imgStmt->fetchAll();
+                } catch (Exception $e) {}
+                $rev['is_verified_purchase'] = !empty($rev['order_id']);
+            }
+            unset($rev);
+        } catch (Exception $e) {
+            try {
+                $stmt = $db->prepare("SELECT r.*, u.name as user_name, u.avatar as user_avatar, 0 as user_voted 
+                                      FROM reviews r 
+                                      JOIN users u ON r.user_id = u.id 
+                                      WHERE r.product_id = ? 
+                                      ORDER BY r.id DESC");
+                $stmt->execute([$productId]);
+                $reviews = $stmt->fetchAll();
+                foreach ($reviews as &$rev) {
+                    $rev['images'] = [];
+                    $rev['is_verified_purchase'] = !empty($rev['order_id']);
+                }
+                unset($rev);
+            } catch (Exception $e2) {
+                $reviews = [];
+            }
         }
-        unset($rev);
 
         echo json_encode(['success' => true, 'reviews' => $reviews]);
         exit;

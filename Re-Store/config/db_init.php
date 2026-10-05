@@ -9,11 +9,38 @@ function initializeDatabase() {
     $db = getDbConnection();
     $driver = $db->getAttribute(PDO::ATTR_DRIVER_NAME);
 
-    // Migrations de colunas adicionais executadas com segurança
+    // Migrations de colunas e tabelas adicionais executadas com segurança
     if ($driver === 'sqlite') {
         try { $db->exec("ALTER TABLE orders ADD COLUMN coupon_code TEXT NULL"); } catch (Exception $e) {}
         try { $db->exec("ALTER TABLE orders ADD COLUMN discount_amount REAL DEFAULT 0.0"); } catch (Exception $e) {}
         try { $db->exec("ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 1"); } catch (Exception $e) {}
+        try {
+            $db->exec("CREATE TABLE IF NOT EXISTS reviews (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                product_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                order_id INTEGER NULL,
+                rating INTEGER NOT NULL,
+                comment TEXT,
+                helpful_count INTEGER DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (order_id) REFERENCES orders(id)
+            )");
+        } catch (Exception $e) {}
+        try {
+            $db->exec("CREATE TABLE IF NOT EXISTS review_votes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                review_id INT NOT NULL,
+                user_id INT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT unique_user_review UNIQUE (review_id, user_id),
+                FOREIGN KEY (review_id) REFERENCES reviews(id) ON DELETE CASCADE,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )");
+        } catch (Exception $e) {}
         try {
             $db->exec("CREATE TABLE IF NOT EXISTS review_images (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -27,6 +54,35 @@ function initializeDatabase() {
         try { $db->exec("ALTER TABLE orders ADD COLUMN coupon_code VARCHAR(50) NULL"); } catch (Exception $e) {}
         try { $db->exec("ALTER TABLE orders ADD COLUMN discount_amount DECIMAL(10,2) DEFAULT 0.00"); } catch (Exception $e) {}
         try { $db->exec("ALTER TABLE users ADD COLUMN email_verified TINYINT(1) DEFAULT 1"); } catch (Exception $e) {}
+        try {
+            $db->exec("CREATE TABLE IF NOT EXISTS reviews (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                product_id INT NOT NULL,
+                user_id INT NOT NULL,
+                order_id INT NULL,
+                rating INT NOT NULL,
+                comment TEXT,
+                helpful_count INT DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL
+            )");
+        } catch (Exception $e) {}
+        try { $db->exec("ALTER TABLE reviews ADD COLUMN helpful_count INT DEFAULT 0"); } catch (Exception $e) {}
+        try { $db->exec("ALTER TABLE reviews ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"); } catch (Exception $e) {}
+        try {
+            $db->exec("CREATE TABLE IF NOT EXISTS review_votes (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                review_id INT NOT NULL,
+                user_id INT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT unique_user_review UNIQUE (review_id, user_id),
+                FOREIGN KEY (review_id) REFERENCES reviews(id) ON DELETE CASCADE,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )");
+        } catch (Exception $e) {}
         try {
             $db->exec("CREATE TABLE IF NOT EXISTS review_images (
                 id INT AUTO_INCREMENT PRIMARY KEY,

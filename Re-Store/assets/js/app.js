@@ -708,21 +708,25 @@ const App = {
       const data = await res.json();
       const grid = document.getElementById('home-products-grid');
 
-      if (data.success && data.products.length > 0) {
+      if (data.success && data.products && data.products.length > 0) {
         this.productsCache = data.products;
         if (grid) {
           grid.innerHTML = data.products.map(p => this.renderProductCardHTML(p)).join('');
         }
       } else if (grid && !this.productsCache) {
-        grid.innerHTML = `<div class="col-span-full text-center py-10 text-gray-500">Nenhum produto cadastrado até o momento.</div>`;
+        grid.innerHTML = `<div class="col-span-full text-center py-10 text-gray-500">${data.error || 'Nenhum produto cadastrado até o momento.'}</div>`;
       }
     } catch (e) {
-      console.error(e);
+      console.error('Erro ao carregar produtos na home:', e);
+      const grid = document.getElementById('home-products-grid');
+      if (grid && !this.productsCache) {
+        grid.innerHTML = `<div class="col-span-full text-center py-10 text-red-500">Erro ao carregar produtos do servidor.</div>`;
+      }
     }
   },
 
   renderProductCardHTML(p) {
-    const isFav = this.favoriteIds.includes(p.id);
+    const isFav = Array.isArray(this.favoriteIds) ? this.favoriteIds.includes(p.id) : false;
     const heartIcon = isFav ? '❤️' : '🤍';
     const user = typeof AuthManager !== 'undefined' ? AuthManager.currentUser : null;
     const isOwner = user && parseInt(user.id) === parseInt(p.seller_id);
@@ -825,8 +829,13 @@ const App = {
       }
 
       const p = data.product;
-      const images = data.images;
-      const reviews = data.reviews;
+      const images = (data.images && data.images.length > 0) ? data.images : [{ id: 0, image_url: (p.primary_image || 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=600'), is_primary: 1 }];
+      const reviews = Array.isArray(data.reviews) ? data.reviews : [];
+
+      const user = (typeof AuthManager !== 'undefined' && AuthManager.currentUser) ? AuthManager.currentUser : null;
+      const isSeller = Boolean(data.user_is_seller || (user && parseInt(user.id, 10) === parseInt(p.seller_id, 10)));
+      const myReview = data.user_review || null;
+      const hasPurchased = Boolean(data.user_has_purchased);
 
       container.innerHTML = `
         <div class="animate-fade-in max-w-4xl mx-auto">
@@ -996,7 +1005,7 @@ const App = {
                   </div>
                   <div class="pt-2">
                     <div class="flex items-center justify-between mb-1">
-                      <span class="text-amber-400 text-sm font-bold">${'★'.repeat(myReview.rating)}${'☆'.repeat(5 - myReview.rating)}</span>
+                      <span class="text-amber-400 text-sm font-bold">${'★'.repeat(Math.max(1, Math.min(5, parseInt(myReview.rating || 5, 10))))}${'☆'.repeat(5 - Math.max(1, Math.min(5, parseInt(myReview.rating || 5, 10))))}</span>
                       <span class="text-[11px] text-gray-400">${myReview.created_at || 'Recente'}</span>
                     </div>
                     <p class="text-xs text-gray-700 dark:text-gray-300">${myReview.comment || 'Sem comentário por escrito.'}</p>
@@ -1202,7 +1211,7 @@ const App = {
                             </div>
                           </div>
                           <div class="text-amber-400 text-sm font-bold">
-                            ${'★'.repeat(r.rating)}${'☆'.repeat(5 - r.rating)}
+                            ${'★'.repeat(Math.max(1, Math.min(5, parseInt(r.rating || 5, 10))))}${'☆'.repeat(5 - Math.max(1, Math.min(5, parseInt(r.rating || 5, 10))))}
                           </div>
                         </div>
 
@@ -5406,17 +5415,21 @@ const App = {
 
     let url = `api/products.php?action=list&search=${encodeURIComponent(q)}&category=${encodeURIComponent(cat)}&location=${encodeURIComponent(loc)}`;
     const grid = document.getElementById('search-grid');
+    if (!grid) return;
 
     try {
       const res = await fetch(url);
       const data = await res.json();
-      if (data.success && data.products.length > 0) {
+      if (data.success && data.products && data.products.length > 0) {
         grid.innerHTML = data.products.map(p => this.renderProductCardHTML(p)).join('');
       } else {
-        grid.innerHTML = `<div class="col-span-full text-center py-10 text-gray-500">Nenhum produto encontrado para estes filtros de localização e categoria.</div>`;
+        grid.innerHTML = `<div class="col-span-full text-center py-10 text-gray-500">${data.error || 'Nenhum produto encontrado para estes filtros de localização e categoria.'}</div>`;
       }
     } catch (e) {
-      console.error(e);
+      console.error('Erro ao buscar produtos:', e);
+      if (grid) {
+        grid.innerHTML = `<div class="col-span-full text-center py-10 text-red-500">Erro ao carregar produtos.</div>`;
+      }
     }
   },
 
