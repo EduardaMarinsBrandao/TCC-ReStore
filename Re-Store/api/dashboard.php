@@ -5,6 +5,7 @@ session_start();
 
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/db_init.php';
+require_once __DIR__ . '/../config/gamification.php';
 
 initializeDatabase();
 $db = getDbConnection();
@@ -14,7 +15,7 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
-$sellerId = $_SESSION['user_id'];
+$sellerId = (int)$_SESSION['user_id'];
 
 // 1. Total de Produtos Ativos
 $pStmt = $db->prepare("SELECT COUNT(*) as total FROM products WHERE seller_id = ? AND status = 'active'");
@@ -48,6 +49,9 @@ $recentSalesStmt = $db->prepare("SELECT oi.*, p.name as product_name, o.order_nu
 $recentSalesStmt->execute([$sellerId]);
 $recentSales = $recentSalesStmt->fetchAll();
 
+// 5. Nível e Bônus de Gamificação do Vendedor
+$sellerTier = getSellerTierInfo($db, $sellerId);
+
 echo json_encode([
     'success' => true,
     'metrics' => [
@@ -56,5 +60,6 @@ echo json_encode([
         'total_sales' => $totalSales,
         'total_revenue' => $totalRevenue
     ],
+    'seller_tier' => $sellerTier,
     'recent_sales' => $recentSales
 ]);

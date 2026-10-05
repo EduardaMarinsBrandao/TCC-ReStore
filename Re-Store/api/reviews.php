@@ -5,6 +5,7 @@ session_start();
 
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/db_init.php';
+require_once __DIR__ . '/../config/gamification.php';
 
 initializeDatabase();
 $db = getDbConnection();
@@ -152,15 +153,17 @@ if ($method === 'POST' && $action === 'create') {
 
         $db->prepare("UPDATE products SET rating = ?, total_reviews = ? WHERE id = ?")->execute([$avgRating, $totalReviews, $productId]);
 
-        // Bônus de +50 Pontos Verdes por avaliar um produto
-        $reviewBonusPoints = 50;
+        // Bônus justo de Pontos Verdes por avaliar um produto
+        $reviewBonusPoints = POINTS_REVIEW_BONUS;
         $db->prepare("UPDATE users SET points = points + ? WHERE id = ?")->execute([$reviewBonusPoints, $userId]);
         $db->prepare("INSERT INTO points_history (user_id, points, type, description) VALUES (?, ?, 'review', ?)")
            ->execute([$userId, $reviewBonusPoints, 'Bônus por avaliar um produto']);
 
+        updateUserEngagementLevel($db, $userId);
+
         $db->commit();
 
-        echo json_encode(['success' => true, 'message' => 'Avaliação enviada com sucesso! Você ganhou +50 Pontos Verdes 🌱']);
+        echo json_encode(['success' => true, 'message' => "Avaliação enviada com sucesso! Você ganhou +{$reviewBonusPoints} Pontos Verdes 🌱"]);
         exit;
 
     } catch (Exception $e) {

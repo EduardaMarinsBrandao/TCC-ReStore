@@ -307,7 +307,7 @@ submitReviewEdit: function(reviewId, formElement) {
           Entrar
         </button>
         <button type="button" onclick="App.showRegisterModal()" class="btn-primary text-sm py-1.5 px-4 cursor-pointer pointer-events-auto">
-          Criar Conta (+500 pts)
+          Criar Conta (+150 pts)
         </button>
       `;
 
@@ -588,6 +588,8 @@ submitReviewEdit: function(reviewId, formElement) {
   renderProductCardHTML(p) {
     const isFav = this.favoriteIds.includes(p.id);
     const heartIcon = isFav ? '❤️' : '🤍';
+    const user = typeof AuthManager !== 'undefined' ? AuthManager.currentUser : null;
+    const isOwner = user && parseInt(user.id) === parseInt(p.seller_id);
 
     const conditionBadge = p.product_condition === 'new'
       ? '<span class="badge-condition-new px-2 py-0.5 rounded text-[11px] font-semibold">Novo</span>'
@@ -629,9 +631,15 @@ submitReviewEdit: function(reviewId, formElement) {
                   R$ ${parseFloat(p.price).toFixed(2).replace('.', ',')}
                 </div>
               </div>
-              <button type="button" onclick="App.addToCartDirect(${p.id}, this)" class="btn-primary text-xs py-1.5 px-3 cursor-pointer">
-                <span>🛒</span> Adicionar
-              </button>
+              ${isOwner ? `
+                <button type="button" onclick="App.navigateTo('product-detail', { productId: ${p.id} })" class="btn-outline text-xs py-1.5 px-3 cursor-pointer text-teal-600 border-teal-500 hover:bg-teal-50 dark:hover:bg-teal-950/40" title="Você é o anunciante deste produto">
+                  <span>✏️</span> Seu Anúncio
+                </button>
+              ` : `
+                <button type="button" onclick="App.addToCartDirect(${p.id}, this)" class="btn-primary text-xs py-1.5 px-3 cursor-pointer">
+                  <span>🛒</span> Adicionar
+                </button>
+              `}
             </div>
           </div>
         </div>
@@ -768,38 +776,44 @@ submitReviewEdit: function(reviewId, formElement) {
 
                 </div>
 
-                ${user && parseInt(user.id) === parseInt(p.seller_id) ? `
-                  <div class="mb-4 p-3 bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 rounded-xl flex items-center justify-between">
-                    <span class="text-xs font-bold text-teal-800 dark:text-teal-300">Você é o anunciante deste produto</span>
-                    <button 
-                      type="button" 
-                      onclick="App.navigateTo('edit-product', { productId: ${p.id} })" 
-                      class="btn-primary text-xs py-1.5 px-3 cursor-pointer flex items-center gap-1"
-                    >
-                      <i data-lucide="pencil" class="w-4 h-4 pointer-events-none"></i>
-                      Editar Anúncio
-                    </button>
+              </div>
 
+              <!-- BOTOES DE AÇÃO / COMPRA -->
+              ${user && parseInt(user.id) === parseInt(p.seller_id) ? `
+                <div class="p-4 bg-teal-50 dark:bg-teal-950/40 border-2 border-teal-300 dark:border-teal-800 rounded-2xl space-y-3">
+                  <div class="flex items-center gap-3">
+                    <span class="text-2xl">🔒</span>
+                    <div>
+                      <div class="font-bold text-sm text-teal-950 dark:text-teal-200">Você é o anunciante deste produto</div>
+                      <div class="text-xs text-teal-700 dark:text-teal-400">Pela política do Re-Store, você não pode comprar seus próprios produtos.</div>
+                    </div>
                   </div>
-                ` : ''}
-              </div>
-
-              <!-- BOTOES DE COMPRA -->
-              <div class="flex gap-4">
-                <button type="button" onclick="App.addToCartAndCheckout(${p.id})" class="btn-secondary flex-1 py-3 text-base cursor-pointer">
-                  ⚡ Comprar Agora
-                </button>
-                <button 
-                  type="button" 
-                  onclick="App.addToCartDirect(${p.id}, this)" 
-                  class="btn-primary flex-1 py-3 text-base cursor-pointer flex items-center justify-center gap-2"
-                >
-                  <i data-lucide="shopping-cart" class="w-8 h-8 pointer-events-none"></i>
-                  <span>Adicionar ao Carrinho</span>
-                </button>
-
-
-              </div>
+                  <div class="flex gap-3 pt-1">
+                    <button type="button" onclick="App.navigateTo('edit-product', { productId: ${p.id} })" class="btn-primary flex-1 py-2.5 text-sm cursor-pointer flex items-center justify-center gap-1.5">
+                      <i data-lucide="pencil" class="w-4 h-4 pointer-events-none"></i>
+                      <span>Editar Anúncio</span>
+                    </button>
+                    <button type="button" onclick="App.navigateTo('seller')" class="btn-outline flex-1 py-2.5 text-sm cursor-pointer flex items-center justify-center gap-1.5">
+                      <i data-lucide="layout-dashboard" class="w-4 h-4 pointer-events-none"></i>
+                      <span>Área do Vendedor</span>
+                    </button>
+                  </div>
+                </div>
+              ` : `
+                <div class="flex gap-4">
+                  <button type="button" onclick="App.addToCartAndCheckout(${p.id})" class="btn-secondary flex-1 py-3 text-base cursor-pointer">
+                    ⚡ Comprar Agora
+                  </button>
+                  <button 
+                    type="button" 
+                    onclick="App.addToCartDirect(${p.id}, this)" 
+                    class="btn-primary flex-1 py-3 text-base cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <i data-lucide="shopping-cart" class="w-8 h-8 pointer-events-none"></i>
+                    <span>Adicionar ao Carrinho</span>
+                  </button>
+                </div>
+              `}
             </div>
           </div>
 
@@ -977,6 +991,8 @@ ${isMyReview ? `
   renderCartScreen(container) {
     const cart = CartManager.getCart();
     const { total, totalPoints } = CartManager.getTotals();
+    const user = AuthManager.currentUser;
+    const hasOwnItems = user && cart.some(item => parseInt(item.seller_id) === parseInt(user.id));
 
     if (cart.length === 0) {
       container.innerHTML = `
@@ -998,15 +1014,38 @@ ${isMyReview ? `
     container.innerHTML = `
       <div class="animate-fade-in">
         <h1 class="text-2xl font-extrabold mb-6">Carrinho de Compras</h1>
+
+        ${hasOwnItems ? `
+          <div class="mb-6 p-4 bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-300 dark:border-amber-700 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm">
+            <div class="flex items-center gap-3">
+              <span class="text-3xl">⚠️</span>
+              <div>
+                <div class="font-bold text-sm text-amber-900 dark:text-amber-200">Atenção: Seu carrinho contém produtos anunciados por você</div>
+                <div class="text-xs text-amber-700 dark:text-amber-400 mt-0.5">Pelas diretrizes do Re-Store, não é permitido comprar seus próprios produtos. Remova-os para continuar.</div>
+              </div>
+            </div>
+            <button type="button" onclick="App.removeOwnCartItems()" class="btn-outline text-xs py-2 px-3 border-amber-500 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/60 cursor-pointer whitespace-nowrap font-bold">
+              Remover Meus Produtos
+            </button>
+          </div>
+        ` : ''}
+
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div class="lg:col-span-2 space-y-4">
-            ${cart.map(item => `
-              <div class="flex items-center justify-between p-4 rounded-2xl border dark:border-gray-800 bg-white dark:bg-gray-800">
+            ${cart.map(item => {
+              const isItemOwner = user && parseInt(item.seller_id) === parseInt(user.id);
+              return `
+              <div class="flex items-center justify-between p-4 rounded-2xl border ${isItemOwner ? 'border-amber-300 bg-amber-50/50 dark:bg-amber-950/20 dark:border-amber-800' : 'dark:border-gray-800 bg-white dark:bg-gray-800'}">
                 <div class="flex items-center gap-4">
                   <img src="${item.image}" onclick="App.navigateTo('product-detail', { productId: ${item.product_id} })" class="w-16 h-16 rounded-xl object-cover border dark:border-gray-700 cursor-pointer hover:opacity-80 transition" title="Ver Detalhes">
                   <div>
                     <h3 onclick="App.navigateTo('product-detail', { productId: ${item.product_id} })" class="font-bold text-gray-900 dark:text-white text-sm line-clamp-1 hover:text-teal-600 cursor-pointer" title="Ver Detalhes">${item.name}</h3>
                     <div class="text-xs text-gray-500">Vendedor: ${item.seller_name}</div>
+                    ${isItemOwner ? `
+                      <span class="inline-block mt-1 text-[10px] font-bold text-amber-800 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/60 px-2 py-0.5 rounded-full border border-amber-300 dark:border-amber-700">
+                        🚫 Seu Próprio Anúncio (Remoção Obrigatória)
+                      </span>
+                    ` : ''}
                     <div class="text-sm font-extrabold text-teal-600 mt-1">R$ ${item.price.toFixed(2).replace('.', ',')}</div>
                   </div>
                 </div>
@@ -1025,10 +1064,10 @@ ${isMyReview ? `
                   >
                     <i data-lucide="trash-2" class="w-5 h-5 pointer-events-none"></i>
                   </button>
-
                 </div>
               </div>
-            `).join('')}
+            `;
+            }).join('')}
           </div>
 
           <div class="p-6 rounded-2xl border dark:border-gray-800 bg-white dark:bg-gray-800 h-fit shadow-sm">
@@ -1051,9 +1090,19 @@ ${isMyReview ? `
                 <span>R$ ${total.toFixed(2).replace('.', ',')}</span>
               </div>
             </div>
-            <button type="button" onclick="App.navigateTo('checkout')" class="btn-primary w-full py-3 text-base cursor-pointer">
-              Ir para o Checkout Simulado
-            </button>
+
+            ${hasOwnItems ? `
+              <div class="mb-3 p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl text-xs text-amber-800 dark:text-amber-300">
+                Remova seus próprios produtos para liberar o botão de finalização de compra.
+              </div>
+              <button type="button" disabled class="btn-primary w-full py-3 text-base opacity-50 cursor-not-allowed">
+                Checkout Bloqueado 🔒
+              </button>
+            ` : `
+              <button type="button" onclick="App.navigateTo('checkout')" class="btn-primary w-full py-3 text-base cursor-pointer">
+                Ir para o Checkout Simulado
+              </button>
+            `}
           </div>
         </div>
       </div>
@@ -1072,10 +1121,32 @@ ${isMyReview ? `
 
   async renderCheckoutScreen(container) {
     const user = AuthManager.currentUser;
+    const cart = CartManager.getCart();
     const { total, totalPoints } = CartManager.getTotals();
 
     if (!user) {
       this.showLoginModal();
+      return;
+    }
+
+    if (cart.some(item => parseInt(item.seller_id) === parseInt(user.id))) {
+      container.innerHTML = `
+        <div class="animate-fade-in max-w-xl mx-auto text-center py-16">
+          <div class="text-5xl mb-4">⚠️</div>
+          <h2 class="text-2xl font-bold mb-2">Produtos Próprios no Carrinho</h2>
+          <p class="text-sm text-gray-500 dark:text-gray-400 mb-6">
+            Você não pode finalizar uma compra contendo itens anunciados por você mesmo. Por favor, retorne ao carrinho e remova os seus produtos.
+          </p>
+          <div class="flex gap-3 justify-center">
+            <button type="button" onclick="App.removeOwnCartItems(); App.navigateTo('cart');" class="btn-primary py-2.5 px-4 text-sm cursor-pointer">
+              Remover Meus Produtos e Voltar
+            </button>
+            <button type="button" onclick="App.navigateTo('cart')" class="btn-outline py-2.5 px-4 text-sm cursor-pointer">
+              Voltar ao Carrinho
+            </button>
+          </div>
+        </div>
+      `;
       return;
     }
 
@@ -1380,6 +1451,15 @@ ${isMyReview ? `
     e.preventDefault();
     if (this.isSubmittingCheckout) return;
 
+    const cart = CartManager.getCart();
+    const user = AuthManager.currentUser;
+    const ownItem = user ? cart.find(item => parseInt(item.seller_id) === parseInt(user.id)) : null;
+    if (ownItem) {
+      ToastManager.show(`Você não pode comprar produtos anunciados por você mesmo ("${ownItem.name}"). Remova-os do carrinho para continuar.`, 'warning');
+      this.navigateTo('cart');
+      return;
+    }
+
     const btn = document.getElementById('btn-submit-chk');
     this.isSubmittingCheckout = true;
     if (btn) {
@@ -1632,39 +1712,164 @@ ${isMyReview ? `
 
       const points = dataHistory.points || 0;
       const discounts = dataDiscounts.discounts || [];
+      const history = dataHistory.history || [];
+      const sTier = dataHistory.seller_tier || {
+        tier_name: 'Vendedor Semente 🌱',
+        rate_formatted: '0,30 pts / R$',
+        sales_count: 0,
+        progress_percent: 0,
+        sales_to_next_tier: 5,
+        next_tier_name: 'Vendedor Broto 🌿',
+        next_tier_bonus: 100,
+        total_seller_points: 0
+      };
 
       let levelName = 'Iniciante 🌱';
-      if (points >= 2500) levelName = 'Eco Master 👑';
-      else if (points >= 1000) levelName = 'Eco Warrior ⚔️';
+      if (points >= 3000) levelName = 'Eco Master 👑';
+      else if (points >= 1500) levelName = 'Eco Warrior ⚔️';
       else if (points >= 500) levelName = 'Sustentável 🌿';
 
       container.innerHTML = `
         <div class="max-w-4xl mx-auto space-y-8 animate-fade-in">
-          <div class="bg-gradient-to-r from-emerald-600 to-teal-700 rounded-3xl p-8 text-white flex flex-col md:flex-row items-center justify-between shadow-xl gap-4">
+          <!-- BANNER PRINCIPAL DE PONTOS -->
+          <div class="bg-gradient-to-r from-emerald-600 via-teal-600 to-teal-700 rounded-3xl p-8 text-white flex flex-col md:flex-row items-center justify-between shadow-xl gap-6">
             <div>
-              <span class="bg-white/20 px-3 py-1 rounded-full text-xs font-bold">Nível de Engajamento: ${levelName}</span>
-              <div class="text-4xl font-extrabold mt-2">${points} Pontos Verdes 🌱</div>
-              <div class="text-xs text-emerald-100 mt-1">Acumule pontos em compras sustentáveis e troque por cupons.</div>
+              <div class="flex items-center gap-2 mb-2">
+                <span class="bg-white/20 px-3 py-1 rounded-full text-xs font-bold">Nível Geral: ${levelName}</span>
+                <span class="bg-emerald-400/20 text-emerald-100 border border-emerald-300/30 px-3 py-1 rounded-full text-xs font-bold">Vendedor: ${sTier.tier_name}</span>
+              </div>
+              <div class="text-4xl sm:text-5xl font-extrabold">${points} Pontos Verdes 🌱</div>
+              <div class="text-xs text-emerald-100 mt-2 max-w-lg leading-relaxed">
+                Participe da economia circular! Ganhe pontos comprando, vendendo produtos sustentáveis e avaliando compras. Troque seus pontos por cupons reais de desconto.
+              </div>
             </div>
-            <button type="button" onclick="App.navigateTo('search')" class="bg-white text-emerald-800 font-bold px-5 py-2.5 rounded-full text-sm hover:bg-emerald-50 transition shadow cursor-pointer">
-              Ganhar Mais Pontos
-            </button>
+            <div class="flex flex-col sm:flex-row md:flex-col gap-2.5 w-full md:w-auto">
+              <button type="button" onclick="App.navigateTo('search')" class="bg-white text-emerald-800 font-bold px-5 py-2.5 rounded-full text-sm hover:bg-emerald-50 transition shadow text-center cursor-pointer">
+                Comprar & Ganhar Pontos
+              </button>
+              <button type="button" onclick="App.navigateTo('seller')" class="bg-emerald-800/80 hover:bg-emerald-900 text-white font-bold px-5 py-2.5 rounded-full text-sm transition shadow text-center border border-emerald-400/30 cursor-pointer">
+                Painel do Vendedor
+              </button>
+            </div>
           </div>
 
+          <!-- CARD DE INCENTIVOS DO VENDEDOR -->
+          <div class="p-6 rounded-3xl border border-teal-200 dark:border-teal-900 bg-teal-50/60 dark:bg-teal-950/20 shadow-sm space-y-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="text-xl">🏪</span>
+                  <h3 class="font-bold text-base text-teal-950 dark:text-teal-200">Programa de Incentivo ao Vendedor Sustentável</h3>
+                </div>
+                <p class="text-xs text-teal-700 dark:text-teal-400 mt-1">
+                  Vender no Re-Store também gera pontos! Conforme você realiza vendas na plataforma, sua taxa de bonificação aumenta e você conquista bônus exclusivos.
+                </p>
+              </div>
+              <div class="bg-white dark:bg-gray-800 p-3 rounded-2xl border dark:border-gray-700 text-center sm:text-right shrink-0">
+                <div class="text-[11px] text-gray-500 dark:text-gray-400">Pontos Ganhos com Vendas</div>
+                <div class="text-xl font-extrabold text-emerald-600">+${sTier.total_seller_points} pts</div>
+              </div>
+            </div>
+
+            <!-- GRADE DE STATUS DO VENDEDOR -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+              <div class="bg-white dark:bg-gray-800 p-3 rounded-2xl border dark:border-gray-700">
+                <div class="text-[11px] text-gray-400">Nível de Vendedor</div>
+                <div class="text-sm font-bold text-teal-700 dark:text-teal-300 mt-0.5">${sTier.tier_name}</div>
+              </div>
+              <div class="bg-white dark:bg-gray-800 p-3 rounded-2xl border dark:border-gray-700">
+                <div class="text-[11px] text-gray-400">Taxa por Venda</div>
+                <div class="text-sm font-bold text-emerald-600 mt-0.5">${sTier.rate_formatted}</div>
+              </div>
+              <div class="bg-white dark:bg-gray-800 p-3 rounded-2xl border dark:border-gray-700">
+                <div class="text-[11px] text-gray-400">Vendas Confirmadas</div>
+                <div class="text-sm font-bold text-gray-900 dark:text-white mt-0.5">${sTier.sales_count} pedido(s)</div>
+              </div>
+              <div class="bg-white dark:bg-gray-800 p-3 rounded-2xl border dark:border-gray-700">
+                <div class="text-[11px] text-gray-400">Próximo Nível</div>
+                <div class="text-sm font-bold text-purple-600 dark:text-purple-400 mt-0.5">${sTier.next_tier_name || 'Nível Máximo 👑'}</div>
+              </div>
+            </div>
+
+            <!-- BARRA DE PROGRESSO DO VENDEDOR -->
+            <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl border dark:border-gray-700 space-y-2">
+              <div class="flex justify-between items-center text-xs font-semibold">
+                <span class="text-gray-700 dark:text-gray-300">Progresso para o próximo Marco de Vendas</span>
+                <span class="text-teal-600 font-bold">${sTier.sales_to_next_tier > 0 ? `Faltam ${sTier.sales_to_next_tier} venda(s)` : 'Meta Máxima Atingida 👑'}</span>
+              </div>
+              <div class="w-full bg-gray-100 dark:bg-gray-700 h-2.5 rounded-full overflow-hidden">
+                <div class="bg-gradient-to-r from-teal-500 to-emerald-500 h-full rounded-full transition-all duration-500" style="width: ${sTier.progress_percent}%"></div>
+              </div>
+              ${sTier.next_tier_bonus > 0 ? `
+                <div class="text-[11px] text-gray-500 dark:text-gray-400 flex items-center justify-between">
+                  <span>Próximo nível: <strong>${sTier.next_tier_name}</strong></span>
+                  <span class="text-emerald-600 font-bold">Bônus de Incentivo: +${sTier.next_tier_bonus} Pontos 🎁</span>
+                </div>
+              ` : `
+                <div class="text-[11px] text-emerald-600 font-semibold">
+                  Você atingiu o nível mais alto de vendedor sustentável! Obrigado pelo grande impacto positivo na comunidade Re-Store.
+                </div>
+              `}
+            </div>
+          </div>
+
+          <!-- REGRAS DA ECONOMIA JUSTA DE PONTOS -->
+          <div class="p-6 rounded-3xl border dark:border-gray-800 bg-white dark:bg-gray-800 shadow-sm space-y-4">
+            <h2 class="text-lg font-bold flex items-center gap-2">
+              <span>⚖️</span>
+              <span>Como Funciona o Sistema de Pontos Justo</span>
+            </h2>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div class="p-4 rounded-2xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800">
+                <div class="text-2xl mb-1">🛍️</div>
+                <div class="font-bold text-xs text-emerald-900 dark:text-emerald-200">Comprando</div>
+                <div class="text-sm font-extrabold text-emerald-600 mt-1">1 pt / R$ 1,00</div>
+                <p class="text-[11px] text-emerald-800/80 dark:text-emerald-400 mt-1">A cada R$ 1,00 gasto em compras ecológicas você ganha 1 Ponto Verde direto.</p>
+              </div>
+
+              <div class="p-4 rounded-2xl bg-teal-50/60 dark:bg-teal-950/20 border border-teal-200 dark:border-teal-800">
+                <div class="text-2xl mb-1">🏪</div>
+                <div class="font-bold text-xs text-teal-900 dark:text-teal-200">Vendendo</div>
+                <div class="text-sm font-extrabold text-teal-600 mt-1">0,30 a 0,60 pts / R$</div>
+                <p class="text-[11px] text-teal-800/80 dark:text-teal-400 mt-1">Bônus por venda escalonado por nível + bonificações de até +300 pts nos marcos.</p>
+              </div>
+
+              <div class="p-4 rounded-2xl bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800">
+                <div class="text-2xl mb-1">✍️</div>
+                <div class="font-bold text-xs text-blue-900 dark:text-blue-200">Avaliando</div>
+                <div class="text-sm font-extrabold text-blue-600 mt-1">+30 Pontos Verdes</div>
+                <p class="text-[11px] text-blue-800/80 dark:text-blue-400 mt-1">Deixe sua opinião sincera sobre itens recebidos para ajudar a comunidade.</p>
+              </div>
+
+              <div class="p-4 rounded-2xl bg-purple-50/60 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800">
+                <div class="text-2xl mb-1">🎁</div>
+                <div class="font-bold text-xs text-purple-900 dark:text-purple-200">Boas-Vindas</div>
+                <div class="text-sm font-extrabold text-purple-600 mt-1">+150 Pontos Verdes</div>
+                <p class="text-[11px] text-purple-800/80 dark:text-purple-400 mt-1">Pontos iniciais liberados ao confirmar e validar sua conta de e-mail.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- RESGATE DE CUPONS DE DESCONTO -->
           <div>
-            <h2 class="text-xl font-bold mb-4">Resgatar Cupons de Desconto</h2>
-            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="flex items-center justify-between mb-4">
+              <h2 class="text-xl font-bold">Resgatar Cupons de Desconto 🎟️</h2>
+              <span class="text-xs text-gray-500">Seu saldo: <strong>${points} pts</strong></span>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
               ${[
-          { type: '5%', name: 'Desconto de 5%', cost: 150 },
-          { type: '10%', name: 'Desconto de 10%', cost: 300 },
-          { type: '15%', name: 'Desconto de 15%', cost: 500 },
-          { type: 'free_shipping', name: 'Frete Grátis Ecológico', cost: 250 }
-        ].map(c => `
+                { type: '5%', name: '5% de Desconto', cost: 150, desc: 'Ideal para suas compras do dia a dia.' },
+                { type: 'free_shipping', name: 'Frete Grátis Ecológico', cost: 250, desc: 'Entrega 100% gratuita no seu pedido.' },
+                { type: '10%', name: '10% de Desconto', cost: 300, desc: 'Excelente economia em produtos circulares.' },
+                { type: '15%', name: '15% de Desconto', cost: 500, desc: 'Desconto expressivo para pedidos maiores.' },
+                { type: '20%', name: '20% de Desconto', cost: 800, desc: 'Super economia para membros engajados.' }
+              ].map(c => `
                 <div class="p-4 rounded-2xl border dark:border-gray-800 bg-white dark:bg-gray-800 flex flex-col justify-between shadow-sm">
                   <div>
                     <div class="text-2xl font-black text-teal-600 mb-1">${c.type === 'free_shipping' ? '🚚' : c.type}</div>
                     <div class="font-bold text-sm text-gray-900 dark:text-white">${c.name}</div>
-                    <div class="text-xs text-gray-500 mt-1">Custo: ${c.cost} Pontos</div>
+                    <div class="text-[11px] text-gray-400 mt-1 leading-snug">${c.desc}</div>
+                    <div class="text-xs font-semibold text-teal-700 dark:text-teal-400 mt-2">Custo: ${c.cost} Pontos</div>
                   </div>
                   <button type="button" onclick="App.redeemCoupon('${c.type}', this)" ${points < c.cost ? 'disabled' : ''} 
                     class="mt-4 btn-primary text-xs py-2 w-full cursor-pointer ${points < c.cost ? 'opacity-50 cursor-not-allowed' : ''}">
@@ -1679,14 +1884,14 @@ ${isMyReview ? `
           <div class="p-6 rounded-3xl border dark:border-gray-800 bg-white dark:bg-gray-800 shadow-sm">
             <div class="flex items-center justify-between mb-4">
               <h2 class="text-xl font-bold">Meus Cupons Resgatados 🎟️</h2>
-              <span class="text-xs text-gray-400">${discounts.length} cupom(ns) encontrado(s)</span>
+              <span class="text-xs text-gray-400">${discounts.length} cupom(ns) resgatado(s)</span>
             </div>
 
             ${discounts.length > 0 ? `
               <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                 ${discounts.map(d => {
-          const isUsed = parseInt(d.is_used) === 1;
-          return `
+                  const isUsed = parseInt(d.is_used) === 1;
+                  return `
                     <div class="p-4 rounded-2xl border ${isUsed ? 'border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40 opacity-60' : 'border-teal-200 dark:border-teal-900 bg-teal-50/50 dark:bg-teal-950/30'} flex flex-col justify-between">
                       <div>
                         <div class="flex items-center justify-between mb-2">
@@ -1715,11 +1920,72 @@ ${isMyReview ? `
                       `}
                     </div>
                   `;
-        }).join('')}
+                }).join('')}
               </div>
             ` : `
               <div class="text-center py-8 text-gray-400 text-xs">
-                Você ainda não resgatou nenhum cupom. Use seus pontos acumulados acima para resgatar descontos exclusivos!
+                Você ainda não resgatou nenhum cupom. Use seus pontos acumulados para resgatar descontos exclusivos acima!
+              </div>
+            `}
+          </div>
+
+          <!-- SEÇÃO EXTRATO DE MOVIMENTAÇÕES DE PONTOS -->
+          <div class="p-6 rounded-3xl border dark:border-gray-800 bg-white dark:bg-gray-800 shadow-sm">
+            <div class="flex items-center justify-between mb-4">
+              <div>
+                <h2 class="text-xl font-bold flex items-center gap-2">
+                  <span>📜</span>
+                  <span>Extrato de Movimentações</span>
+                </h2>
+                <p class="text-xs text-gray-500 mt-0.5">Histórico completo de entradas e saídas de Pontos Verdes da sua conta.</p>
+              </div>
+              <span class="text-xs text-gray-400 font-semibold">${history.length} transação(ões)</span>
+            </div>
+
+            ${history.length > 0 ? `
+              <div class="divide-y dark:divide-gray-800">
+                ${history.map(h => {
+                  const pts = parseInt(h.points);
+                  const isPositive = pts > 0;
+                  let typeBadge = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-700">Outro</span>';
+                  
+                  if (h.type === 'purchase') {
+                    typeBadge = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">🛍️ Compra / Bônus</span>';
+                  } else if (h.type === 'sale') {
+                    typeBadge = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300">🏪 Venda Realizada</span>';
+                  } else if (h.type === 'review') {
+                    typeBadge = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">✍️ Avaliação</span>';
+                  } else if (h.type === 'redemption') {
+                    typeBadge = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">🎟️ Resgate Cupom</span>';
+                  } else if (h.type === 'reversal' || h.type === 'sale_reversal') {
+                    typeBadge = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300">↩️ Estorno</span>';
+                  }
+
+                  const dateFormatted = h.created_at ? new Date(h.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+
+                  return `
+                    <div class="py-3.5 flex items-center justify-between gap-4">
+                      <div class="space-y-1">
+                        <div class="flex items-center gap-2">
+                          ${typeBadge}
+                          <span class="text-xs text-gray-400">${dateFormatted}</span>
+                        </div>
+                        <div class="text-xs font-semibold text-gray-800 dark:text-gray-200">
+                          ${this.escapeHtml(h.description || 'Movimentação de pontos')}
+                        </div>
+                      </div>
+                      <div class="text-right shrink-0">
+                        <span class="text-sm font-extrabold ${isPositive ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}">
+                          ${isPositive ? `+${pts}` : pts} pts
+                        </span>
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            ` : `
+              <div class="text-center py-8 text-gray-400 text-xs">
+                Nenhuma movimentação de pontos registrada ainda. Comece a comprar ou vender para movimentar seu extrato!
               </div>
             `}
           </div>
@@ -1919,11 +2185,24 @@ ${isMyReview ? `
 
       const metrics = metricsData.metrics || { active_products: 0, low_stock_count: 0, total_sales: 0, total_revenue: 0 };
       const products = productsData.products || [];
+      const sTier = metricsData.seller_tier || {
+        tier_name: 'Vendedor Semente 🌱',
+        rate_formatted: '0,30 pts / R$',
+        sales_count: 0,
+        progress_percent: 0,
+        sales_to_next_tier: 5,
+        next_tier_name: 'Vendedor Broto 🌿',
+        next_tier_bonus: 100,
+        total_seller_points: 0
+      };
 
       container.innerHTML = `
         <div class="space-y-8 animate-fade-in">
           <div class="flex items-center justify-between">
-            <h1 class="text-2xl font-extrabold">Painel da Área do Vendedor</h1>
+            <div>
+              <h1 class="text-2xl font-extrabold">Painel da Área do Vendedor</h1>
+              <p class="text-xs text-gray-500 mt-1">Gerencie seu catálogo sustentável, monitore vendas e acompanhe suas recompensas.</p>
+            </div>
             <div class="flex items-center gap-2">
               <button type="button" onclick="App.navigateTo('chat')" class="btn-outline text-sm py-2 px-4 cursor-pointer flex items-center gap-1.5">
                 <i data-lucide="message-circle" class="w-4 h-4"></i>
@@ -1932,6 +2211,54 @@ ${isMyReview ? `
               <button type="button" onclick="App.navigateTo('add-product')" class="btn-primary text-sm py-2 px-4 cursor-pointer">
                 + Cadastrar Novo Produto
               </button>
+            </div>
+          </div>
+
+          <!-- CARD DE GAMIFICAÇÃO & NÍVEL DO VENDEDOR -->
+          <div class="p-6 rounded-3xl bg-gradient-to-r from-teal-800 via-teal-900 to-emerald-900 text-white shadow-xl space-y-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="bg-white/20 text-white text-xs font-bold px-3 py-1 rounded-full">
+                    Gamificação de Vendas
+                  </span>
+                  <span class="bg-emerald-400/20 text-emerald-300 text-xs font-bold px-3 py-1 rounded-full border border-emerald-400/30">
+                    ${sTier.tier_name}
+                  </span>
+                </div>
+                <h2 class="text-2xl font-black mt-2">Bônus Atual: ${sTier.rate_formatted}</h2>
+                <p class="text-xs text-teal-200 mt-1 max-w-lg leading-relaxed">
+                  A cada produto vendido você ganha Pontos Verdes diretamente na sua conta, incentivando a economia circular e aumentando seu prestígio na comunidade!
+                </p>
+              </div>
+              <div class="bg-white/10 backdrop-blur p-4 rounded-2xl border border-white/20 text-center sm:text-right shrink-0">
+                <div class="text-[11px] text-teal-200 uppercase tracking-wider font-bold">Pontos Acumulados em Vendas</div>
+                <div class="text-3xl font-black text-emerald-300 mt-0.5">+${sTier.total_seller_points} pts</div>
+                <button type="button" onclick="App.navigateTo('points')" class="mt-2 text-xs font-bold text-white hover:text-emerald-200 underline cursor-pointer inline-flex items-center gap-1">
+                  <span>Ver Extrato de Pontos</span> →
+                </button>
+              </div>
+            </div>
+
+            <!-- BARRA DE PROGRESSO DO VENDEDOR -->
+            <div class="bg-black/30 p-4 rounded-2xl border border-white/10 space-y-2">
+              <div class="flex justify-between items-center text-xs font-semibold">
+                <span class="text-teal-100">Progresso para o próximo nível de vendedor</span>
+                <span class="text-emerald-300 font-bold">${sTier.sales_to_next_tier > 0 ? `Faltam ${sTier.sales_to_next_tier} venda(s) para ${sTier.next_tier_name}` : 'Nível Máximo Atingido 👑'}</span>
+              </div>
+              <div class="w-full bg-white/20 h-2.5 rounded-full overflow-hidden">
+                <div class="bg-gradient-to-r from-emerald-400 to-teal-300 h-full rounded-full transition-all duration-500" style="width: ${sTier.progress_percent}%"></div>
+              </div>
+              ${sTier.next_tier_bonus > 0 ? `
+                <div class="text-[11px] text-teal-200 flex items-center justify-between">
+                  <span>Próximo Marco: <strong>${sTier.next_tier_name}</strong></span>
+                  <span class="text-emerald-300 font-bold">Bônus de Incentivo: +${sTier.next_tier_bonus} Pontos 🎁</span>
+                </div>
+              ` : `
+                <div class="text-[11px] text-emerald-300 font-medium">
+                  Parabéns! Você alcançou o nível mais alto de vendedor sustentável (Eco Master Seller 👑).
+                </div>
+              `}
             </div>
           </div>
 
@@ -3245,8 +3572,25 @@ ${isMyReview ? `
                 <span>🌱 Como funcionam os Pontos Verdes e os Níveis?</span>
                 <span class="text-xs text-teal-600 group-open:rotate-180 transition-transform">▼</span>
               </summary>
+              <div class="text-xs text-gray-600 dark:text-gray-300 mt-3 leading-relaxed space-y-2">
+                <p>O Re-Store adota um sistema justo, equilibrado e sustentável tanto para quem compra quanto para quem vende:</p>
+                <ul class="list-disc pl-4 space-y-1">
+                  <li><strong>🛍️ Compradores:</strong> Ganham 1 Ponto Verde por cada R$ 1,00 gasto em compras ecológicas.</li>
+                  <li><strong>🏪 Vendedores:</strong> Ganham bônus a cada produto vendido (de 0,30 a 0,60 pts por R$ 1,00 conforme o nível de vendedor: Semente 🌱, Broto 🌿, Florescer 🌸 e Eco Master 👑), além de incentivos de até +300 pts nos marcos de vendas!</li>
+                  <li><strong>✍️ Avaliações:</strong> Ganham +30 Pontos Verdes ao deixar feedback detalhado de um produto recebido.</li>
+                  <li><strong>🎁 Boas-Vindas:</strong> Ganham +150 Pontos Verdes de incentivo ao cadastrar e validar o e-mail.</li>
+                </ul>
+                <p>Seus pontos acumulados aumentam seu nível de sustentabilidade geral (Iniciante 🌱, Sustentável 🌿, Eco Warrior ⚔️ e Eco Master 👑) e podem ser trocados por cupons de desconto reais na aba <em>"Extrato de Pontos"</em>.</p>
+              </div>
+            </details>
+
+            <details class="p-4 rounded-2xl border dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 cursor-pointer group">
+              <summary class="font-bold text-sm text-gray-900 dark:text-white flex items-center justify-between">
+                <span>🚫 Posso comprar produtos anunciados por mim mesmo?</span>
+                <span class="text-xs text-teal-600 group-open:rotate-180 transition-transform">▼</span>
+              </summary>
               <p class="text-xs text-gray-600 dark:text-gray-300 mt-3 leading-relaxed">
-                A cada produto sustentável comprado você ganha Pontos Verdes equivalentes ao valor (cerca de 2 pts por R$ 1,00). Você também ganha <strong>+500 pontos de boas-vindas</strong> ao se cadastrar e <strong>+50 pontos</strong> ao avaliar uma compra. Seus pontos acumulados aumentam seu nível de engajamento (Iniciante 🌱, Sustentável 🌿, Eco Warrior ⚔️ e Eco Master 👑) e podem ser trocados por cupons de desconto reais.
+                <strong>Não.</strong> Para garantir a integridade das avaliações, manter a transparência das métricas e prevenir fraudes no sistema de bonificação de pontos, nossa plataforma bloqueia tecnicamente qualquer tentativa de um vendedor comprar seus próprios anúncios.
               </p>
             </details>
 
@@ -3494,7 +3838,7 @@ ${isMyReview ? `
         </details>
 
         <div class="mt-4 text-center text-xs text-gray-500">
-          Não tem conta? <button type="button" onclick="App.showRegisterModal()" class="text-teal-600 font-bold hover:underline cursor-pointer">Cadastre-se e ganhe +500 pts</button>
+          Não tem conta? <button type="button" onclick="App.showRegisterModal()" class="text-teal-600 font-bold hover:underline cursor-pointer">Cadastre-se e ganhe +150 pts</button>
         </div>
       </div>
     `;
@@ -3693,7 +4037,7 @@ ${isMyReview ? `
       <div class="bg-white dark:bg-gray-800 rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl relative max-h-[90vh] overflow-y-auto">
         <button type="button" onclick="document.getElementById('auth-modal').remove()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold cursor-pointer">✕</button>
 
-        <span class="inline-block bg-emerald-100 text-emerald-800 text-[11px] font-bold px-2.5 py-0.5 rounded-full mb-2">🎁 Bônus de 500 Pontos Verdes</span>
+        <span class="inline-block bg-emerald-100 text-emerald-800 text-[11px] font-bold px-2.5 py-0.5 rounded-full mb-2">🎁 Bônus de 150 Pontos Verdes</span>
         <h2 class="text-2xl font-bold mb-1 text-gray-900 dark:text-white">Criar Nova Conta</h2>
         <p class="text-xs text-gray-500 mb-3">Preencha seus dados para validar seu e-mail e receber seus pontos.</p>
 
@@ -3979,7 +4323,7 @@ ${isMyReview ? `
           </span>
           <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Confirme seu E-mail</h2>
           <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 max-w-xs mx-auto">
-            Para ativar sua conta e liberar <strong>+500 Pontos Verdes</strong>, digite o código de 6 dígitos enviado para:
+            Para ativar sua conta e liberar <strong>+150 Pontos Verdes</strong>, digite o código de 6 dígitos enviado para:
           </p>
           <div class="mt-2 inline-block px-3 py-1 bg-gray-100 dark:bg-gray-700/60 rounded-full font-mono text-xs font-semibold text-teal-700 dark:text-teal-300">
             ${this.escapeHtml(email)}
@@ -4580,20 +4924,38 @@ ${isMyReview ? `
   },
 
   // UTILS
-  addToCartDirect(productId, btnElement = null) {
-    if (btnElement) {
-      const originalHTML = btnElement.innerHTML;
-      btnElement.innerHTML = `<span>✓</span> Adicionado!`;
-      btnElement.classList.add('bg-emerald-600');
-      setTimeout(() => {
-        btnElement.innerHTML = originalHTML;
-        btnElement.classList.remove('bg-emerald-600');
-      }, 1500);
+  removeOwnCartItems() {
+    const user = AuthManager.currentUser;
+    if (!user) return;
+    const cart = CartManager.getCart();
+    const filtered = cart.filter(item => parseInt(item.seller_id) !== parseInt(user.id));
+    CartManager.saveCart(filtered);
+    ToastManager.show('Produtos de sua autoria foram removidos do carrinho.', 'info');
+    const main = document.getElementById('main-content');
+    if (main && (this.currentScreen === 'cart' || this.currentScreen === 'checkout')) {
+      this.renderCartScreen(main);
     }
+  },
+
+  addToCartDirect(productId, btnElement = null) {
+    const user = AuthManager.currentUser;
 
     if (this.productsCache) {
       const p = this.productsCache.find(item => item.id === productId);
       if (p) {
+        if (user && parseInt(user.id) === parseInt(p.seller_id)) {
+          ToastManager.show('Você não pode comprar produtos anunciados por você mesmo!', 'warning');
+          return;
+        }
+        if (btnElement) {
+          const originalHTML = btnElement.innerHTML;
+          btnElement.innerHTML = `<span>✓</span> Adicionado!`;
+          btnElement.classList.add('bg-emerald-600');
+          setTimeout(() => {
+            btnElement.innerHTML = originalHTML;
+            btnElement.classList.remove('bg-emerald-600');
+          }, 1500);
+        }
         CartManager.addItem(p);
         ToastManager.show(`"${p.name}" adicionado ao carrinho!`, 'success');
         return;
@@ -4603,16 +4965,49 @@ ${isMyReview ? `
     fetch(`api/products.php?action=detail&id=${productId}`)
       .then(res => res.json())
       .then(data => {
-        if (data.success) {
+        if (data.success && data.product) {
+          if (user && parseInt(user.id) === parseInt(data.product.seller_id)) {
+            ToastManager.show('Você não pode comprar produtos anunciados por você mesmo!', 'warning');
+            return;
+          }
+          if (btnElement) {
+            const originalHTML = btnElement.innerHTML;
+            btnElement.innerHTML = `<span>✓</span> Adicionado!`;
+            btnElement.classList.add('bg-emerald-600');
+            setTimeout(() => {
+              btnElement.innerHTML = originalHTML;
+              btnElement.classList.remove('bg-emerald-600');
+            }, 1500);
+          }
           CartManager.addItem(data.product);
           ToastManager.show(`"${data.product.name}" adicionado ao carrinho!`, 'success');
         }
       });
   },
 
-  addToCartAndCheckout(productId) {
-    this.addToCartDirect(productId);
-    if (!AuthManager.currentUser) {
+  async addToCartAndCheckout(productId) {
+    const user = AuthManager.currentUser;
+    let p = this.productsCache ? this.productsCache.find(item => item.id === productId) : null;
+    if (!p) {
+      try {
+        const res = await fetch(`api/products.php?action=detail&id=${productId}`);
+        const data = await res.json();
+        if (data.success) p = data.product;
+      } catch (e) {}
+    }
+
+    if (p && user && parseInt(user.id) === parseInt(p.seller_id)) {
+      ToastManager.show('Você não pode comprar produtos anunciados por você mesmo!', 'warning');
+      return;
+    }
+
+    if (p) {
+      CartManager.addItem(p);
+    } else {
+      this.addToCartDirect(productId);
+    }
+
+    if (!user) {
       this.redirectAfterLogin = { screen: 'checkout', params: {} };
       ToastManager.show('Faça login para prosseguir para a finalização da compra.', 'info');
       this.showLoginModal();

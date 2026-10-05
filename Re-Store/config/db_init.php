@@ -217,6 +217,8 @@ function initializeDatabase() {
         // Migrations automáticas para colunas adicionais
         try { $db->exec("ALTER TABLE orders ADD COLUMN coupon_code TEXT NULL"); } catch (Exception $e) {}
         try { $db->exec("ALTER TABLE orders ADD COLUMN discount_amount REAL DEFAULT 0.0"); } catch (Exception $e) {}
+        // Migração para alinhar pontuação ao novo padrão econômico justo (1 ponto por R$ 1,00)
+        try { $db->exec("UPDATE products SET points = ROUND(price * 1.0) WHERE points != ROUND(price * 1.0)"); } catch (Exception $e) {}
     } /*else {
         // Esquema MySQL
         $sqlPath = __DIR__ . '/../database.sql';
@@ -294,7 +296,7 @@ function initializeDatabase() {
                 'material' => 'Aço Inox 304',
                 'stock' => 15,
                 'location' => 'São Paulo, SP',
-                'points' => 150,
+                'points' => 80,
                 'rating' => 4.9,
                 'total_reviews' => 12,
                 'img' => 'uploads/products/garrafa_termica_inox_eco.webp'
@@ -309,7 +311,7 @@ function initializeDatabase() {
                 'material' => 'Algodão Orgânico 100%',
                 'stock' => 25,
                 'location' => 'São Paulo, SP',
-                'points' => 80,
+                'points' => 40,
                 'rating' => 4.8,
                 'total_reviews' => 8,
                 'img' => 'uploads/products/bolsa_tote_bag_algodao_organico.webp'
@@ -324,7 +326,7 @@ function initializeDatabase() {
                 'material' => 'Wood / Madeira Demolição',
                 'stock' => 2,
                 'location' => 'São Paulo, SP',
-                'points' => 600,
+                'points' => 420,
                 'rating' => 5.0,
                 'total_reviews' => 4,
                 'img' => 'uploads/products/cadeira_de_balanco_restaurada_em_madeira_demolicao.jpg'
@@ -339,7 +341,7 @@ function initializeDatabase() {
                 'material' => 'Denim Reciclado',
                 'stock' => 1,
                 'location' => 'Rio de Janeiro, RJ',
-                'points' => 250,
+                'points' => 149,
                 'rating' => 4.7,
                 'total_reviews' => 6,
                 'img' => 'uploads/products/jaqueta_jeans_vintage_upcycled.webp'
@@ -354,7 +356,7 @@ function initializeDatabase() {
                 'material' => 'Inox Alimentício',
                 'stock' => 40,
                 'location' => 'São Paulo, SP',
-                'points' => 50,
+                'points' => 25,
                 'rating' => 4.9,
                 'total_reviews' => 19,
                 'img' => 'https://images.unsplash.com/photo-1544816155-12df9643f363?w=800'
@@ -369,7 +371,7 @@ function initializeDatabase() {
                 'material' => 'Bambu e Sisal',
                 'stock' => 3,
                 'location' => 'Rio de Janeiro, RJ',
-                'points' => 200,
+                'points' => 110,
                 'rating' => 4.6,
                 'total_reviews' => 3,
                 'img' => 'https://images.unsplash.com/photo-1507473885765-e6ed057f782c?w=800'
@@ -384,7 +386,7 @@ function initializeDatabase() {
                 'material' => 'Plástico Reciclado / Painel Solar',
                 'stock' => 8,
                 'location' => 'Curitiba, PR',
-                'points' => 320,
+                'points' => 190,
                 'rating' => 4.8,
                 'total_reviews' => 7,
                 'img' => 'uploads/products/carregador_solar_portatil_eco_power.webp'
@@ -399,7 +401,7 @@ function initializeDatabase() {
                 'material' => 'Fibra de Coco Orgânica',
                 'stock' => 20,
                 'location' => 'Belo Horizonte, MG',
-                'points' => 90,
+                'points' => 45,
                 'rating' => 4.9,
                 'total_reviews' => 11,
                 'img' => 'https://images.unsplash.com/photo-1485955900006-10f4d324d411?w=800'
@@ -414,7 +416,7 @@ function initializeDatabase() {
                 'material' => 'Borracha de Pneu Reciclada',
                 'stock' => 5,
                 'location' => 'Porto Alegre, RS',
-                'points' => 450,
+                'points' => 230,
                 'rating' => 5.0,
                 'total_reviews' => 15,
                 'img' => 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=800'

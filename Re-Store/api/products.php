@@ -5,6 +5,7 @@ session_start();
 
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/db_init.php';
+require_once __DIR__ . '/../config/gamification.php';
 
 initializeDatabase();
 $db = getDbConnection();
@@ -77,12 +78,13 @@ if ($method === 'GET' && $action === 'list') {
     $stmt->execute($params);
     $products = $stmt->fetchAll();
 
-    // Carregar imagem principal para cada produto
+    // Carregar imagem principal e sincronizar pontos (1 pt por R$ 1,00)
     foreach ($products as &$prod) {
         $imgStmt = $db->prepare("SELECT image_url FROM product_images WHERE product_id = ? ORDER BY is_primary DESC, id ASC LIMIT 1");
         $imgStmt->execute([$prod['id']]);
         $primaryImg = $imgStmt->fetch();
         $prod['primary_image'] = $primaryImg ? $primaryImg['image_url'] : 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=600';
+        $prod['points'] = max(1, (int)round((float)$prod['price'] * BUYER_POINTS_PER_REAL));
     }
 
     echo json_encode(['success' => true, 'products' => $products]);
@@ -132,6 +134,9 @@ if ($method === 'GET' && $action === 'detail') {
     $revStmt->execute([$id]);
     $reviews = $revStmt->fetchAll();
 
+    // Sincronizar pontos com a regra 1 pt por R$ 1,00
+    $product['points'] = max(1, (int)round((float)$product['price'] * BUYER_POINTS_PER_REAL));
+
     echo json_encode([
         'success' => true,
         'product' => $product,
@@ -157,6 +162,10 @@ if ($method === 'GET' && $action === 'my_products') {
                           ORDER BY p.id DESC");
     $stmt->execute([$sellerId]);
     $products = $stmt->fetchAll();
+
+    foreach ($products as &$prod) {
+        $prod['points'] = max(1, (int)round((float)$prod['price'] * BUYER_POINTS_PER_REAL));
+    }
 
     echo json_encode(['success' => true, 'products' => $products]);
     exit;
@@ -193,8 +202,8 @@ if ($method === 'POST' && ($action === 'create' || $action === 'add')) {
         exit;
     }
 
-    // Cálculo automático de pontos verdes sustentáveis (ex: 2 pontos por cada R$ 1,00)
-    $points = (int)round($price * 2);
+    // Cálculo automático de pontos verdes sustentáveis (1 ponto por cada R$ 1,00)
+    $points = max(1, (int)round($price * BUYER_POINTS_PER_REAL));
 
     $stmt = $db->prepare("INSERT INTO products (seller_id, name, description, price, category, product_condition, material, stock, location, points) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
     $stmt->execute([$sellerId, $name, $description, $price, $category, $condition, $material, $stock, $location, $points]);
@@ -305,8 +314,8 @@ if ($method === 'POST' && ($action === 'update' || $action === 'edit')) {
         exit;
     }
 
-    // Atualiza pontos verdes de acordo com o novo preço
-    $points = (int)round($price * 2);
+    // Atualiza pontos verdes de acordo com o novo preço (1 ponto por cada R$ 1,00)
+    $points = max(1, (int)round($price * BUYER_POINTS_PER_REAL));
 
     $location = trim($_POST['location'] ?? '');
     if ($location === '') $location = $existingProduct['location'] ?? 'São Paulo, SP';

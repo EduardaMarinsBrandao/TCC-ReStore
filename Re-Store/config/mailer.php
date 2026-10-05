@@ -226,7 +226,7 @@ function sendRegistrationVerificationEmail($toEmail, $toName, $verificationCode)
                   Olá, <strong>{$safeName}</strong>!
                 </p>
                 <p style='margin: 0 0 20px 0; color: #475569; font-size: 14px; line-height: 1.6;'>
-                  Obrigado por se juntar à comunidade <strong>Re-Store</strong>! Para confirmar seu endereço de e-mail e ativar sua conta com <strong>+500 Pontos Verdes</strong> de boas-vindas, utilize o código de verificação abaixo:
+                  Obrigado por se juntar à comunidade <strong>Re-Store</strong>! Para confirmar seu endereço de e-mail e ativar sua conta com <strong>+150 Pontos Verdes</strong> de boas-vindas, utilize o código de verificação abaixo:
                 </p>
 
                 <!-- CAIXA DO CÓDIGO -->
@@ -259,7 +259,7 @@ function sendRegistrationVerificationEmail($toEmail, $toName, $verificationCode)
         </html>
         ";
 
-        $mail->AltBody = "Olá, {$displayName}!\n\nSeu código de confirmação de cadastro no Re-Store é: {$verificationCode}\n\nEste código é válido por 10 minutos.\nInforme-o para concluir a criação de sua conta e liberar seus +500 Pontos Verdes.";
+        $mail->AltBody = "Olá, {$displayName}!\n\nSeu código de confirmação de cadastro no Re-Store é: {$verificationCode}\n\nEste código é válido por 10 minutos.\nInforme-o para concluir a criação de sua conta e liberar seus +150 Pontos Verdes.";
 
         $mail->send();
         return ['success' => true];

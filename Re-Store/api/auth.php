@@ -5,6 +5,7 @@ session_start();
 
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/db_init.php';
+require_once __DIR__ . '/../config/gamification.php';
 
 // Garantir que as tabelas e dados iniciais foram carregados
 initializeDatabase();
@@ -276,7 +277,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             // 2. Novo usuário: cadastro automático
             $randomPassword = password_hash(bin2hex(random_bytes(16)), PASSWORD_DEFAULT);
-            $initialPoints = 500;
+            $initialPoints = POINTS_WELCOME_BONUS;
 
             $insStmt = $db->prepare("
                 INSERT INTO users (email, name, password_hash, avatar, points, level)
@@ -285,7 +286,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $insStmt->execute([$email, $name, $randomPassword, $avatar, $initialPoints]);
             $newUserId = (int)$db->lastInsertId();
 
-            // Grava histórico dos 500 pontos de boas-vindas
+            // Grava histórico dos pontos de boas-vindas
             try {
                 $histStmt = $db->prepare("
                     INSERT INTO points_history (user_id, points, type, description)
@@ -308,7 +309,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             echo json_encode([
                 'success' => true,
-                'message' => 'Conta criada com sucesso via Google! Você ganhou +500 Pontos Verdes 🎉',
+                'message' => "Conta criada com sucesso via Google! Você ganhou +{$initialPoints} Pontos Verdes 🎉",
                 'user' => $newUser
             ]);
             exit;
@@ -564,8 +565,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $passHash = password_hash($password, PASSWORD_DEFAULT);
 
-        // 500 Pontos de Boas-Vindas
-        $initialPoints = 500;
+        // Pontos Justos de Boas-Vindas
+        $initialPoints = POINTS_WELCOME_BONUS;
 
         try {
             $insertStmt = $db->prepare("
@@ -671,7 +672,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         echo json_encode([
             'success' => true,
-            'message' => 'Conta criada e e-mail validado com sucesso! Você ganhou +500 Pontos Verdes 🎉',
+            'message' => "Conta criada e e-mail validado com sucesso! Você ganhou +{$initialPoints} Pontos Verdes 🎉",
             'user' => $newUser
         ]);
 

@@ -5,6 +5,7 @@ session_start();
 
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/db_init.php';
+require_once __DIR__ . '/../config/gamification.php';
 
 initializeDatabase();
 $db = getDbConnection();
@@ -69,8 +70,20 @@ if ($method === 'POST' && ($action === 'create' || $action === 'checkout')) {
                 exit;
             }
 
+            // REGRA ESSENCIAL: Vendedor não pode comprar seus próprios produtos
+            if ((int)$product['seller_id'] === (int)$userId) {
+                $db->rollBack();
+                $pName = $product ? $product['name'] : 'Produto';
+                echo json_encode([
+                    'success' => false, 
+                    'error' => "Você não pode comprar produtos anunciados por você mesmo (\"{$pName}\")."
+                ]);
+                exit;
+            }
+
             $itemPrice = (float)$product['price'];
-            $itemPoints = (int)$product['points'] * $qty;
+            // 1 Ponto Verde por cada R$ 1,00 gasto
+            $itemPoints = max(1, (int)round($itemPrice * BUYER_POINTS_PER_REAL)) * $qty;
             $subtotal = $itemPrice * $qty;
 
             $totalAmount += $subtotal;
@@ -78,7 +91,7 @@ if ($method === 'POST' && ($action === 'create' || $action === 'checkout')) {
 
             $orderItemsData[] = [
                 'product_id' => $productId,
-                'seller_id' => $product['seller_id'],
+                'seller_id' => (int)$product['seller_id'],
                 'quantity' => $qty,
                 'price' => $itemPrice,
                 'points' => $itemPoints
@@ -147,24 +160,57 @@ if ($method === 'POST' && ($action === 'create' || $action === 'checkout')) {
             $itemStmt->execute([$orderId, $oi['product_id'], $oi['seller_id'], $oi['quantity'], $oi['price'], $oi['points']]);
         }
 
-        // Creditar pontos ao comprador na tabela users
+        // 1. Creditar pontos ao comprador na tabela users
         $db->prepare("UPDATE users SET points = points + ? WHERE id = ?")->execute([$totalPointsEarned, $userId]);
 
-        // Registrar no histórico de pontos
+        // Registrar no histórico de pontos do comprador
         $db->prepare("INSERT INTO points_history (user_id, points, type, description, order_id) VALUES (?, ?, 'purchase', ?, ?)")
            ->execute([$userId, $totalPointsEarned, "Pontos ganhos no pedido #{$orderNumber}", $orderId]);
 
-        // Atualizar nível do usuário baseado no saldo total de pontos
-        $userStmt = $db->prepare("SELECT points FROM users WHERE id = ?");
-        $userStmt->execute([$userId]);
-        $currentPoints = (int)$userStmt->fetch()['points'];
+        // Atualizar nível de engajamento do comprador
+        $newBuyerLevel = updateUserEngagementLevel($db, $userId);
 
-        $newLevel = 1;
-        if ($currentPoints >= 2500) $newLevel = 4;
-        else if ($currentPoints >= 1000) $newLevel = 3;
-        else if ($currentPoints >= 500) $newLevel = 2;
+        // 2. SISTEMA DE BÔNUS E INCENTIVOS DO VENDEDOR
+        // Agrupar itens por vendedor para creditar incentivos escalonados
+        $sellersGrouped = [];
+        foreach ($orderItemsData as $oi) {
+            $sId = (int)$oi['seller_id'];
+            if (!isset($sellersGrouped[$sId])) {
+                $sellersGrouped[$sId] = [
+                    'subtotal' => 0.0,
+                    'count' => 0
+                ];
+            }
+            $sellersGrouped[$sId]['subtotal'] += ($oi['price'] * $oi['quantity']);
+            $sellersGrouped[$sId]['count'] += $oi['quantity'];
+        }
 
-        $db->prepare("UPDATE users SET level = ? WHERE id = ?")->execute([$newLevel, $userId]);
+        foreach ($sellersGrouped as $sId => $sInfo) {
+            $tierInfo = getSellerTierInfo($db, $sId);
+            $tierName = $tierInfo['tier_name'];
+            $sellerRate = $tierInfo['rate'];
+            $subtotalVendido = $sInfo['subtotal'];
+
+            // Bônus proporcional de venda (menor que o do comprador, escalonado com o nível de vendedor)
+            $sellerBasePoints = max(1, (int)round($subtotalVendido * $sellerRate));
+            $milestoneBonus = $tierInfo['milestone_bonus'];
+            $totalSellerPoints = $sellerBasePoints + $milestoneBonus;
+
+            // Creditar pontos ao vendedor
+            $db->prepare("UPDATE users SET points = points + ? WHERE id = ?")->execute([$totalSellerPoints, $sId]);
+
+            // Registrar no histórico de pontos do vendedor
+            $desc = "Bônus de Venda ({$tierName}) no pedido #{$orderNumber} (+{$sellerBasePoints} pts)";
+            if ($milestoneBonus > 0 && !empty($tierInfo['milestone_text'])) {
+                $desc .= " + Bônus Especial: {$tierInfo['milestone_text']} (+{$milestoneBonus} pts)";
+            }
+
+            $db->prepare("INSERT INTO points_history (user_id, points, type, description, order_id) VALUES (?, ?, 'sale', ?, ?)")
+               ->execute([$sId, $totalSellerPoints, $desc, $orderId]);
+
+            // Atualizar nível de engajamento geral do vendedor
+            updateUserEngagementLevel($db, $sId);
+        }
 
         $db->commit();
 
@@ -178,7 +224,7 @@ if ($method === 'POST' && ($action === 'create' || $action === 'checkout')) {
             'coupon_code' => $couponCode,
             'total' => $finalTotal,
             'points_earned' => $totalPointsEarned,
-            'new_level' => $newLevel
+            'new_level' => $newBuyerLevel
         ]);
         exit;
 
@@ -281,11 +327,27 @@ if ($method === 'POST' && $action === 'cancel') {
             $db->prepare("UPDATE products SET stock = stock + ? WHERE id = ?")->execute([$oi['quantity'], $oi['product_id']]);
         }
 
-        // 3. Estornar pontos ganhos com a compra
+        // 3. Estornar pontos ganhos com a compra (comprador)
         if ((int)$order['points_earned'] > 0) {
             $db->prepare("UPDATE users SET points = MAX(0, points - ?) WHERE id = ?")->execute([(int)$order['points_earned'], $userId]);
             $db->prepare("INSERT INTO points_history (user_id, points, type, description, order_id) VALUES (?, ?, 'reversal', ?, ?)")
                ->execute([$userId, -(int)$order['points_earned'], "Estorno de pontos pelo cancelamento do pedido #{$order['order_number']}", $orderId]);
+            updateUserEngagementLevel($db, $userId);
+        }
+
+        // 4. Estornar pontos de incentivo concedidos ao(s) vendedor(es) neste pedido
+        $sellerPointsStmt = $db->prepare("SELECT user_id, points FROM points_history WHERE order_id = ? AND type = 'sale'");
+        $sellerPointsStmt->execute([$orderId]);
+        $sellerHistRows = $sellerPointsStmt->fetchAll();
+        foreach ($sellerHistRows as $shr) {
+            $sId = (int)$shr['user_id'];
+            $sPts = (int)$shr['points'];
+            if ($sPts > 0) {
+                $db->prepare("UPDATE users SET points = MAX(0, points - ?) WHERE id = ?")->execute([$sPts, $sId]);
+                $db->prepare("INSERT INTO points_history (user_id, points, type, description, order_id) VALUES (?, ?, 'sale_reversal', ?, ?)")
+                   ->execute([$sId, -$sPts, "Estorno de bônus de venda pelo cancelamento do pedido #{$order['order_number']}", $orderId]);
+                updateUserEngagementLevel($db, $sId);
+            }
         }
 
         $db->commit();

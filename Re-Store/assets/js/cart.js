@@ -16,6 +16,17 @@ const CartManager = {
 
   addItem(product, quantity = 1) {
     const cart = this.getCart();
+
+    // REGRA DE SEGURANÇA: Vendedor não pode comprar o próprio produto
+    if (typeof AuthManager !== 'undefined' && AuthManager.currentUser) {
+      if (parseInt(AuthManager.currentUser.id) === parseInt(product.seller_id)) {
+        if (typeof ToastManager !== 'undefined') {
+          ToastManager.show('Você não pode comprar produtos anunciados por você mesmo!', 'warning');
+        }
+        return cart;
+      }
+    }
+
     const existingIndex = cart.findIndex(item => item.product_id === product.id);
     const availableStock = parseInt(product.stock !== undefined ? product.stock : 999);
 
@@ -113,6 +124,17 @@ const CartManager = {
     const cart = this.getCart();
     if (cart.length === 0) {
       return { success: false, error: 'O carrinho está vazio.' };
+    }
+
+    // REGRA DE SEGURANÇA: Bloquear se houver produtos do próprio vendedor logado
+    if (typeof AuthManager !== 'undefined' && AuthManager.currentUser) {
+      const ownItem = cart.find(item => parseInt(item.seller_id) === parseInt(AuthManager.currentUser.id));
+      if (ownItem) {
+        return {
+          success: false,
+          error: `Você não pode comprar seus próprios produtos ("${ownItem.name}"). Remova-os do carrinho para finalizar a compra.`
+        };
+      }
     }
 
     const payload = {

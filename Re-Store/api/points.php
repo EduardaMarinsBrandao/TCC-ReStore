@@ -5,6 +5,7 @@ session_start();
 
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/db_init.php';
+require_once __DIR__ . '/../config/gamification.php';
 
 initializeDatabase();
 $db = getDbConnection();
@@ -20,7 +21,7 @@ if (empty($data) && !empty($_POST)) {
     $data = $_POST;
 }
 
-$userId = $_SESSION['user_id'];
+$userId = (int)$_SESSION['user_id'];
 $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? $_POST['action'] ?? $data['action'] ?? 'history';
 
@@ -36,10 +37,13 @@ if ($method === 'GET' && $action === 'history') {
     $userStmt->execute([$userId]);
     $user = $userStmt->fetch();
 
+    $sellerTier = getSellerTierInfo($db, $userId);
+
     echo json_encode([
         'success' => true,
         'points' => $user ? (int)$user['points'] : 0,
         'level' => $user ? (int)$user['level'] : 1,
+        'seller_tier' => $sellerTier,
         'history' => $history
     ]);
     exit;
@@ -66,14 +70,8 @@ if ($method === 'POST' && $action === 'redeem') {
 
     $discountType = $data['discount_type'] ?? '5%';
     
-    // Tabela de custos de cupons em pontos
-    $couponCosts = [
-        '5%' => 150,
-        '10%' => 300,
-        '15%' => 500,
-        '20%' => 800,
-        'free_shipping' => 250
-    ];
+    // Tabela Justa e Equilibrada de Custos de Cupons
+    $couponCosts = getCouponCostsTable();
 
     if (!isset($couponCosts[$discountType])) {
         echo json_encode(['success' => false, 'error' => 'Tipo de cupom inválido.']);
@@ -110,6 +108,9 @@ if ($method === 'POST' && $action === 'redeem') {
         $db->prepare("INSERT INTO points_history (user_id, points, type, description) VALUES (?, ?, 'redemption', ?)")
            ->execute([$userId, -$pointsCost, "Resgate de cupom {$discountType} (#{$code})"]);
 
+        // Atualizar nível de engajamento do usuário
+        $newLevel = updateUserEngagementLevel($db, $userId);
+
         $db->commit();
 
         echo json_encode([
@@ -117,7 +118,8 @@ if ($method === 'POST' && $action === 'redeem') {
             'message' => "Cupom de {$discountType} resgatado com sucesso! Código: {$code}",
             'code' => $code,
             'discount_type' => $discountType,
-            'remaining_points' => $userPoints - $pointsCost
+            'remaining_points' => $userPoints - $pointsCost,
+            'new_level' => $newLevel
         ]);
         exit;
 
