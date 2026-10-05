@@ -179,7 +179,14 @@ if ($method === 'POST' && ($action === 'create' || $action === 'add')) {
     $condition = trim($_POST['product_condition'] ?? $_POST['condition'] ?? 'used');
     $material = trim($_POST['material'] ?? '');
     $stock = (int)($_POST['stock'] ?? 1);
-    $location = trim($_POST['location'] ?? 'São Paulo, SP');
+    $location = trim($_POST['location'] ?? '');
+    if ($location === '') {
+        $uStmt = $db->prepare("SELECT city, state FROM users WHERE id = ?");
+        $uStmt->execute([$sellerId]);
+        $u = $uStmt->fetch();
+        $location = $u ? implode(', ', array_filter([$u['city'], $u['state']])) : '';
+        if ($location === '') $location = 'São Paulo, SP';
+    }
 
     if (empty($name) || empty($description) || $price <= 0 || empty($category)) {
         echo json_encode(['success' => false, 'error' => 'Preencha os campos obrigatórios (Nome, Descrição, Preço e Categoria).']);
@@ -301,10 +308,13 @@ if ($method === 'POST' && ($action === 'update' || $action === 'edit')) {
     // Atualiza pontos verdes de acordo com o novo preço
     $points = (int)round($price * 2);
 
+    $location = trim($_POST['location'] ?? '');
+    if ($location === '') $location = $existingProduct['location'] ?? 'São Paulo, SP';
+
     $upStmt = $db->prepare("UPDATE products SET 
-        name = ?, description = ?, price = ?, category = ?, product_condition = ?, material = ?, stock = ?, points = ? 
+        name = ?, description = ?, price = ?, category = ?, product_condition = ?, material = ?, stock = ?, location = ?, points = ? 
         WHERE id = ? AND seller_id = ?");
-    $upStmt->execute([$name, $description, $price, $category, $condition, $material, $stock, $points, $productId, $sellerId]);
+    $upStmt->execute([$name, $description, $price, $category, $condition, $material, $stock, $location, $points, $productId, $sellerId]);
 
     // 1. Processar exclusão de imagens removidas pelo usuário
     $removedImageIds = $_POST['removed_image_ids'] ?? [];

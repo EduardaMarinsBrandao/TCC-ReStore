@@ -569,6 +569,8 @@ const App = {
                   <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Descrição Ecológica</h3>
                   <p class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-line leading-relaxed">${p.description}</p>
                   ${p.material ? `<div class="mt-3 text-xs text-gray-500"><strong>Material Sustentável:</strong> ${p.material}</div>` : ''}
+                  <div class="mt-2 text-xs text-gray-500"><strong>📍 Local de venda:</strong> ${p.location || [p.seller_city, p.seller_state].filter(Boolean).join(', ') || 'Não informado'}</div>
+                  <div class="mt-2 text-xs text-gray-500"><strong>Disponibilidade:</strong> ${p.stock > 0 ? p.stock + ' un. em estoque' : 'Esgotado'}</div>
                 </div>
 
                 <!-- CARD DO VENDEDOR -->
@@ -1648,7 +1650,15 @@ const App = {
                     <img src="${p.primary_image}" class="w-12 h-12 rounded-xl object-cover hover:opacity-80 transition">
                     <div>
                       <div class="font-bold text-sm text-gray-900 dark:text-white line-clamp-1 hover:text-teal-600 transition">${p.name}</div>
-                      <div class="text-xs text-gray-500">Estoque: ${p.stock} • R$ ${parseFloat(p.price).toFixed(2).replace('.', ',')}</div>
+                      <div class="text-xs text-gray-500">R$ ${parseFloat(p.price).toFixed(2).replace('.', ',')}</div>
+                      <div class="mt-1">
+                        ${parseInt(p.stock) <= 0
+                          ? '<span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700">Esgotado</span>'
+                          : (parseInt(p.stock) <= 3
+                            ? `<span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">⚠ Estoque baixo: ${p.stock} un.</span>`
+                            : `<span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Estoque: ${p.stock} un.</span>`)}
+                      </div>
+                      <div class="text-[11px] text-gray-400 mt-1">📍 ${p.location || 'Local não informado'}</div>
                     </div>
                   </div>
                   <div class="flex items-center gap-1">
@@ -1728,6 +1738,11 @@ const App = {
               <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Estoque Disponível *</label>
               <input type="number" id="prod-stock" value="1" required class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 text-sm">
             </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Local de Venda (Cidade, UF) *</label>
+            <input type="text" id="prod-location" required value="${((AuthManager.currentUser && AuthManager.currentUser.city) ? AuthManager.currentUser.city + (AuthManager.currentUser.state ? ', ' + AuthManager.currentUser.state : '') : '').replace(/"/g, '&quot;')}" placeholder="Ex: São Paulo, SP" class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 text-sm">
           </div>
 
           <div>
@@ -1856,6 +1871,7 @@ const App = {
     const condition = document.getElementById('prod-condition').value;
     const stock = parseInt(document.getElementById('prod-stock').value) || 1;
     const material = document.getElementById('prod-material').value.trim();
+    const location = document.getElementById('prod-location').value.trim();
     const description = document.getElementById('prod-desc').value.trim();
 
     if (!name || !description || isNaN(price) || price <= 0 || !category) {
@@ -1885,6 +1901,7 @@ const App = {
     formData.append('product_condition', condition);
     formData.append('stock', stock);
     formData.append('material', material);
+    formData.append('location', location);
     formData.append('description', description);
 
     for (let i = 0; i < this.selectedProductImages.length; i++) {
@@ -1999,6 +2016,11 @@ const App = {
                 <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Estoque Disponível *</label>
                 <input type="number" id="edit-prod-stock" value="${p.stock}" required class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 text-sm">
               </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Local de Venda (Cidade, UF) *</label>
+              <input type="text" id="edit-prod-location" required value="${(p.location || '').replace(/"/g, '&quot;')}" placeholder="Ex: São Paulo, SP" class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 text-sm">
             </div>
 
             <div>
@@ -2171,6 +2193,7 @@ const App = {
     const condition = document.getElementById('edit-prod-condition').value;
     const stock = parseInt(document.getElementById('edit-prod-stock').value) || 0;
     const material = document.getElementById('edit-prod-material').value.trim();
+    const location = document.getElementById('edit-prod-location').value.trim();
     const description = document.getElementById('edit-prod-desc').value.trim();
 
     if (!name || !description || isNaN(price) || price <= 0 || !category) {
@@ -2191,6 +2214,7 @@ const App = {
     formData.append('product_condition', condition);
     formData.append('stock', stock);
     formData.append('material', material);
+    formData.append('location', location);
     formData.append('description', description);
 
     for (const remId of this.editRemovedImageIds) {
