@@ -485,7 +485,13 @@ const App = {
     if (params.category !== undefined) this.selectedCategory = params.category;
     if (params.search !== undefined) this.searchQuery = params.search;
     if (params.location !== undefined) this.searchLocation = params.location;
-    if (params.productId) this.selectedProductId = params.productId;
+    const prodId = params.productId !== undefined && params.productId !== null ? params.productId : params.id;
+    if (prodId !== undefined && prodId !== null) {
+      this.selectedProductId = parseInt(prodId, 10);
+    }
+    if (params.scrollToReview) {
+      this.shouldScrollToReview = true;
+    }
 
     this.renderCurrentScreen().catch(err => console.error('Erro ao renderizar tela:', err));
   },
@@ -970,7 +976,7 @@ const App = {
           </div>
 
           <!-- SEÇÃO DE AVALIAÇÕES DA COMUNIDADE -->
-          <section class="border-t dark:border-gray-800 pt-8">
+          <section id="reviews-section" class="border-t dark:border-gray-800 pt-8">
             <h2 class="text-xl font-bold mb-6 flex items-center gap-2">
               <span>Avaliações da Comunidade</span>
               <span class="text-sm font-normal text-gray-500">(${reviews.length})</span>
@@ -1118,7 +1124,7 @@ const App = {
                   </span>
                 </div>
 
-                <form onsubmit="event.preventDefault(); App.submitReview(${p.id}, this);" class="space-y-3">
+                <form id="review-submit-form" onsubmit="event.preventDefault(); App.submitReview(${p.id}, this);" class="space-y-3">
                   <!-- Seleção de Estrelas -->
                   <div class="flex items-center gap-2">
                     <label class="text-xs text-gray-600 dark:text-gray-300 font-semibold">Sua Nota:</label>
@@ -1349,6 +1355,21 @@ const App = {
       // IMPORTANTE: renderizar os ícones adicionados dinamicamente
       if (typeof lucide !== 'undefined') {
         lucide.createIcons();
+      }
+
+      // Rolagem suave automática direto para o formulário de avaliação se solicitado
+      if (this.shouldScrollToReview) {
+        this.shouldScrollToReview = false;
+        setTimeout(() => {
+          const revSection = document.getElementById('reviews-section') || container.querySelector('section.border-t');
+          if (revSection) {
+            revSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            const reviewInput = revSection.querySelector('textarea[name="comment"]');
+            if (reviewInput) {
+              reviewInput.focus();
+            }
+          }
+        }, 120);
       }
 
     } catch (e) {
@@ -1917,9 +1938,9 @@ const App = {
                   ${(o.items || []).map(i => `
                     <div class="flex items-center justify-between">
                       <div class="flex items-center gap-3">
-                        <img src="${i.product_image || 'https://images.unsplash.com/photo-1544816155-12df9643f363?w=100'}" class="w-12 h-12 rounded-xl object-cover border dark:border-gray-700">
+                        <img src="${i.product_image || 'https://images.unsplash.com/photo-1544816155-12df9643f363?w=100'}" onclick="App.navigateTo('product-detail', { productId: ${i.product_id}, id: ${i.product_id} })" class="w-12 h-12 rounded-xl object-cover border dark:border-gray-700 cursor-pointer hover:opacity-85 transition" title="Ver detalhes do produto">
                         <div>
-                          <div class="font-bold text-sm text-gray-900 dark:text-white">${i.product_name}</div>
+                          <div onclick="App.navigateTo('product-detail', { productId: ${i.product_id}, id: ${i.product_id} })" class="font-bold text-sm text-gray-900 dark:text-white hover:text-teal-600 cursor-pointer transition">${i.product_name}</div>
                           <div class="text-xs text-gray-500">Qtd: ${i.quantity} • Vendedor: ${i.seller_name}</div>
                           <div class="flex items-center gap-3 mt-1">
                             ${i.seller_id ? `
@@ -1929,10 +1950,17 @@ const App = {
                               </button>
                             ` : ''}
                             ${!isCancelled ? `
-                              <button type="button" onclick="App.navigateTo('product-detail', { id: ${i.product_id} })" class="text-[11px] text-amber-600 hover:text-amber-700 dark:text-amber-400 font-semibold hover:underline inline-flex items-center gap-1 cursor-pointer">
-                                <i data-lucide="star" class="w-3 h-3 pointer-events-none"></i>
-                                <span>Avaliar Produto</span>
-                              </button>
+                              ${parseInt(i.user_reviewed, 10) === 1 ? `
+                                <button type="button" onclick="App.navigateTo('product-detail', { productId: ${i.product_id}, id: ${i.product_id}, scrollToReview: true })" class="text-[11px] text-teal-600 hover:text-teal-700 dark:text-teal-400 font-semibold hover:underline inline-flex items-center gap-1 cursor-pointer" title="Ver ou editar sua avaliação">
+                                  <i data-lucide="check-circle-2" class="w-3 h-3 pointer-events-none text-emerald-500"></i>
+                                  <span>Avaliado ✓</span>
+                                </button>
+                              ` : `
+                                <button type="button" onclick="App.navigateTo('product-detail', { productId: ${i.product_id}, id: ${i.product_id}, scrollToReview: true })" class="text-[11px] text-amber-600 hover:text-amber-700 dark:text-amber-400 font-semibold hover:underline inline-flex items-center gap-1 cursor-pointer" title="Avaliar produto e acumular Pontos Verdes">
+                                  <i data-lucide="star" class="w-3 h-3 pointer-events-none"></i>
+                                  <span>Avaliar Produto</span>
+                                </button>
+                              `}
                             ` : ''}
                           </div>
                         </div>
@@ -1959,7 +1987,10 @@ const App = {
                     ${!isCancelled ? `
                       <button type="button" onclick="App.cancelOrder(${o.id})" class="text-xs font-semibold text-red-500 hover:underline px-2 py-1 cursor-pointer">Cancelar Pedido</button>
                     ` : ''}
-                    <button type="button" onclick="App.navigateTo('help')" class="btn-outline text-xs py-1 px-3 cursor-pointer">Suporte</button>
+                    <button type="button" onclick="App.openSupportChat({ orderNumber: '${o.order_number}', orderId: ${o.id} })" class="btn-outline text-xs py-1.5 px-3 cursor-pointer inline-flex items-center gap-1.5 hover:border-teal-500 hover:text-teal-600 dark:hover:text-teal-400 transition" title="Falar diretamente com o Suporte Re-Store sobre este pedido">
+                      <i data-lucide="headphones" class="w-3.5 h-3.5 pointer-events-none"></i>
+                      <span>Falar com o Suporte</span>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -2546,9 +2577,9 @@ const App = {
                   <div class="review-display space-y-3">
                     <div class="flex flex-wrap items-center justify-between gap-3 border-b dark:border-gray-700 pb-3">
                       <div class="flex items-center gap-3">
-                        <img src="${r.product_image || 'https://images.unsplash.com/photo-1544816155-12df9643f363?w=100'}" class="w-12 h-12 rounded-xl object-cover border border-gray-200 dark:border-gray-700">
+                        <img src="${r.product_image || 'https://images.unsplash.com/photo-1544816155-12df9643f363?w=100'}" onclick="App.navigateTo('product-detail', { productId: ${r.product_id}, id: ${r.product_id} })" class="w-12 h-12 rounded-xl object-cover border border-gray-200 dark:border-gray-700 cursor-pointer hover:opacity-85 transition" title="Ver detalhes do produto">
                         <div>
-                          <button type="button" onclick="App.navigateTo('product-detail', { id: ${r.product_id} })" class="font-bold text-sm text-gray-900 dark:text-white hover:text-teal-600 text-left cursor-pointer transition">
+                          <button type="button" onclick="App.navigateTo('product-detail', { productId: ${r.product_id}, id: ${r.product_id} })" class="font-bold text-sm text-gray-900 dark:text-white hover:text-teal-600 text-left cursor-pointer transition">
                             ${r.product_name}
                           </button>
                           <div class="flex items-center gap-2 mt-0.5">
@@ -3417,7 +3448,7 @@ const App = {
     this.navigateTo('chat', { withUserId: receiverId, productId: productId });
   },
 
-  async openSupportChat() {
+  async openSupportChat(context = {}) {
     if (!AuthManager.currentUser) {
       ToastManager.show('Faça login para conversar com o suporte.', 'info');
       this.showLoginModal();
@@ -3443,9 +3474,20 @@ const App = {
           ToastManager.show('Você é o operador da conta de suporte.', 'info');
           return;
         }
-        this.chatParams = { withUserId: supportId };
+
+        const initialMsg = context?.orderNumber 
+          ? `Olá! Preciso de ajuda com o meu Pedido #${context.orderNumber}.` 
+          : (context?.initialMessage || '');
+
+        const chatParams = { 
+          withUserId: supportId,
+          orderNumber: context?.orderNumber || null,
+          initialMessage: initialMsg
+        };
+
+        this.chatParams = chatParams;
         if (this.currentScreen !== 'chat') {
-          this.navigateTo('chat', { withUserId: supportId });
+          this.navigateTo('chat', chatParams);
         } else {
           await this.selectChatPartner(supportId);
         }
@@ -3598,7 +3640,12 @@ const App = {
 
     this.currentChatPartnerId = partnerId;
     this.currentChatView = 'chat';
-    this.chatParams = { withUserId: partnerId, productId: productId };
+    const prevParams = this.chatParams || {};
+    this.chatParams = {
+      ...prevParams,
+      withUserId: partnerId,
+      productId: productId !== null ? productId : (prevParams.withUserId === partnerId ? prevParams.productId : null)
+    };
     ChatManager.stopPolling();
 
     // Mantém a barra lateral e o chat no layout correto (mobile foca na conversa; desktop mantém ambos lado a lado)
@@ -3688,6 +3735,24 @@ const App = {
         </div>
       ` : ''}
 
+      <!-- CARD DE REFERÊNCIA AO PEDIDO EM SUPORTE (SE HOUVER) -->
+      ${this.chatParams?.orderNumber ? `
+        <div class="p-2.5 mx-4 mt-3 bg-teal-500/10 dark:bg-teal-950/50 border border-teal-500/30 rounded-2xl flex items-center justify-between shadow-sm animate-fade-in">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <div class="w-8 h-8 rounded-xl bg-teal-600 text-white flex items-center justify-center shrink-0 shadow-sm font-bold text-xs">
+              📦
+            </div>
+            <div class="min-w-0">
+              <div class="text-[10px] text-teal-700 dark:text-teal-300 font-bold uppercase tracking-wider">Atendimento sobre Pedido</div>
+              <div class="font-bold text-xs text-gray-900 dark:text-white truncate">Referente ao Pedido #${this.escapeHtml(String(this.chatParams.orderNumber))}</div>
+            </div>
+          </div>
+          <button type="button" onclick="App.navigateTo('orders')" class="text-xs font-bold text-teal-700 dark:text-teal-300 hover:underline px-2 py-1 shrink-0 cursor-pointer">
+            Ver Pedidos →
+          </button>
+        </div>
+      ` : ''}
+
       <!-- CORPO DE MENSAGENS COM CONTRASTE EQUILIBRADO NO MODO CLARO E ESCURO -->
       <div id="chat-msgs-body" class="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 space-y-3 min-h-0 w-full chat-body-bg bg-slate-50/70 dark:bg-gray-950/40">
         ${msgs.length === 0 ? `
@@ -3704,6 +3769,7 @@ const App = {
       <!-- SUGESTÕES RÁPIDAS -->
       <div class="px-4 py-2 border-t border-gray-200 dark:border-gray-800/80 bg-white dark:bg-gray-900 flex gap-2 overflow-x-auto no-scrollbar">
         ${(partner.name.toLowerCase().includes('suporte') || (partner.business_name && partner.business_name.toLowerCase().includes('suporte')) ? [
+          ...(this.chatParams?.orderNumber ? [`Dúvida sobre o Pedido #${this.chatParams.orderNumber}`] : []),
           'Como funciona o sistema de pontos e cupons?',
           'Preciso de ajuda com um pedido meu',
           'Como me tornar um vendedor verificado (PJ)?',
@@ -3728,6 +3794,7 @@ const App = {
           autocomplete="off" 
           required 
           placeholder="Digite sua mensagem aqui..." 
+          value="${this.escapeHtml(this.chatParams?.initialMessage || '')}"
           class="flex-1 px-4 py-2.5 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-2xl focus:outline-none focus:ring-2 focus:ring-teal-500 transition text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
         >
         <button type="submit" id="chat-send-btn" class="btn-primary text-xs py-2.5 px-5 rounded-2xl flex items-center gap-1.5 font-bold cursor-pointer shrink-0 shadow-sm">
@@ -3739,6 +3806,12 @@ const App = {
 
     if (typeof lucide !== 'undefined') {
       lucide.createIcons();
+    }
+
+    const chatInput = document.getElementById('chat-input-text');
+    if (chatInput && this.chatParams?.initialMessage) {
+      chatInput.focus();
+      chatInput.select();
     }
 
     this.scrollChatToBottom();
@@ -3820,6 +3893,9 @@ const App = {
     if (!text) return;
 
     input.value = '';
+    if (this.chatParams) {
+      this.chatParams.initialMessage = '';
+    }
     input.focus();
 
     const intro = document.getElementById('chat-empty-intro');

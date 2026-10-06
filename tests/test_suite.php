@@ -473,8 +473,45 @@ runTest('API: Listagem de avaliações do usuário ("Minhas Avaliações") e exc
     return true;
 });
 
+runTest('API: Localização da conta oficial de suporte (api/messenger.php?action=get_support_user)', function() {
+    $output = callApiIsolated('api/messenger.php', ['action' => 'get_support_user'], 'GET', ['user_id' => 2]);
+    $json = json_decode($output, true);
 
-// --------------------------------------------------------------------------
+    if (empty($json['success']) || empty($json['support_user']['id'])) {
+        throw new Exception("Falha ao recuperar conta de suporte: " . ($json['error'] ?? 'desconhecido'));
+    }
+
+    if (stripos($json['support_user']['name'], 'Suporte') === false) {
+        throw new Exception("Nome da conta de suporte não é condizente: " . $json['support_user']['name']);
+    }
+
+    return true;
+});
+
+runTest('API: Listagem de pedidos com identificação de itens avaliados (api/orders.php?action=my_orders)', function() {
+    $output = callApiIsolated('api/orders.php', ['action' => 'my_orders'], 'GET', ['user_id' => 2]);
+    $json = json_decode($output, true);
+
+    if (empty($json['success']) || !isset($json['orders'])) {
+        throw new Exception("Falha ao listar pedidos do usuário: " . ($json['error'] ?? 'desconhecido'));
+    }
+
+    // Usuário 2 possui pedido realizado nos testes anteriores
+    if (!empty($json['orders'])) {
+        $firstOrder = $json['orders'][0];
+        if (empty($firstOrder['items'])) {
+            throw new Exception("Pedido não continha itens");
+        }
+        $item = $firstOrder['items'][0];
+        if (!array_key_exists('user_reviewed', $item)) {
+            throw new Exception("Item do pedido não retornou o campo user_reviewed");
+        }
+    }
+
+    return true;
+});
+
+
 // Limpeza de arquivos temporários do teste
 // --------------------------------------------------------------------------
 if (file_exists($testDbFile)) {

@@ -1,7 +1,11 @@
 <?php
 // api/orders.php
-header('Content-Type: application/json; charset=utf-8');
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+if (!headers_sent()) {
+    header('Content-Type: application/json; charset=utf-8');
+}
 
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/db_init.php';
@@ -246,12 +250,13 @@ if ($method === 'GET' && ($action === 'list_buyer' || $action === 'my_orders')) 
     foreach ($orders as &$ord) {
         $itemStmt = $db->prepare("SELECT oi.*, p.name as product_name, p.category, 
                                  (SELECT image_url FROM product_images WHERE product_id = p.id ORDER BY is_primary DESC LIMIT 1) as product_image,
-                                 u.name as seller_name 
+                                 u.name as seller_name,
+                                 EXISTS(SELECT 1 FROM reviews r WHERE r.product_id = p.id AND r.user_id = ?) as user_reviewed
                                  FROM order_items oi 
                                  JOIN products p ON oi.product_id = p.id 
                                  JOIN users u ON oi.seller_id = u.id 
                                  WHERE oi.order_id = ?");
-        $itemStmt->execute([$ord['id']]);
+        $itemStmt->execute([$userId, $ord['id']]);
         $ord['items'] = $itemStmt->fetchAll();
     }
 
