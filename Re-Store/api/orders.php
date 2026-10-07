@@ -46,8 +46,9 @@ if ($method === 'POST' && ($action === 'create' || $action === 'checkout')) {
         exit;
     }
 
-    if (empty($shippingAddress) || empty($shippingCity) || empty($shippingState)) {
-        echo json_encode(['success' => false, 'error' => 'Preencha o endereço completo de entrega.']);
+    $cleanZip = preg_replace('/\D/', '', $shippingZip);
+    if (empty($shippingAddress) || empty($shippingCity) || empty($shippingState) || strlen($cleanZip) !== 8) {
+        echo json_encode(['success' => false, 'error' => 'Preencha o endereço completo de entrega com um CEP válido de 8 dígitos.']);
         exit;
     }
 
@@ -166,6 +167,10 @@ if ($method === 'POST' && ($action === 'create' || $action === 'checkout')) {
 
         // 1. Creditar pontos ao comprador na tabela users
         $db->prepare("UPDATE users SET points = points + ? WHERE id = ?")->execute([$totalPointsEarned, $userId]);
+
+        // Atualizar endereço no cadastro do usuário para futuras compras
+        $db->prepare("UPDATE users SET address = ?, city = ?, state = ?, zip_code = ? WHERE id = ?")
+           ->execute([$shippingAddress, $shippingCity, $shippingState, $shippingZip, $userId]);
 
         // Registrar no histórico de pontos do comprador
         $db->prepare("INSERT INTO points_history (user_id, points, type, description, order_id) VALUES (?, ?, 'purchase', ?, ?)")

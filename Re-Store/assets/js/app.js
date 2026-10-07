@@ -1590,29 +1590,167 @@ const App = {
     const pixCode = `00020126580014br.gov.bcb.pix0136restore-pix-${Date.now()}5204000053039865405${finalTotal.toFixed(2)}5802BR5908RESTORE6009SAOPAULO62070503***6304ABCD`;
     const boletoCode = `34191.79001 01043.510047 91020.150008 5 91230000007990`;
 
+    const draft = this.checkoutAddressDraft || {};
+    const defaultZip = draft.zip !== undefined ? draft.zip : ((user.zip_code && user.zip_code !== '01000-000') ? user.zip_code : '');
+    const defaultStreet = draft.street || '';
+    const defaultNumber = draft.number || '';
+    const defaultComplement = draft.complement || '';
+    const defaultNeighborhood = draft.neighborhood || '';
+    const defaultCity = draft.city !== undefined ? draft.city : ((user.city && user.city !== 'São Paulo') ? user.city : '');
+    const defaultState = draft.state !== undefined ? draft.state : ((user.state && user.state !== 'SP') ? user.state : '');
+
     container.innerHTML = `
       <div class="animate-fade-in max-w-4xl mx-auto">
         <h1 class="text-2xl font-extrabold mb-6">Finalizar Compra </h1>
         <form id="checkout-form" onsubmit="App.submitCheckout(event)" class="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div class="lg:col-span-2 space-y-6">
-            <div class="p-6 rounded-2xl border dark:border-gray-800 bg-white dark:bg-gray-800">
-              <h2 class="font-bold text-base mb-4">1. Endereço de Entrega</h2>
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Rua e Número</label>
-                  <input type="text" id="chk-address" required value="${user.address || ''}" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 text-sm">
+            <div class="p-6 rounded-2xl border dark:border-gray-800 bg-white dark:bg-gray-800 shadow-sm">
+              <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-2.5">
+                  <div class="w-8 h-8 rounded-xl bg-teal-50 dark:bg-teal-950/60 text-teal-600 dark:text-teal-400 flex items-center justify-center font-bold text-sm">
+                    1
+                  </div>
+                  <div>
+                    <h2 class="font-bold text-base text-gray-900 dark:text-white leading-tight">Endereço de Entrega</h2>
+                    <p class="text-[11px] text-gray-500">Informe seu CEP para buscar rua e bairro automaticamente.</p>
+                  </div>
                 </div>
+                <button type="button" onclick="App.toggleManualAddressEdit()" id="btn-toggle-address-edit" class="text-xs text-teal-600 hover:text-teal-700 dark:text-teal-400 font-semibold inline-flex items-center gap-1 cursor-pointer hover:underline">
+                  <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
+                  <span>Editar campos</span>
+                </button>
+              </div>
+
+              <div class="space-y-4">
+                <!-- CEP com busca automática e status -->
                 <div>
-                  <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Cidade</label>
-                  <input type="text" id="chk-city" required value="${user.city || 'São Paulo'}" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 text-sm">
+                  <div class="flex items-center justify-between mb-1.5">
+                    <label for="chk-zip" class="block text-xs font-bold text-gray-700 dark:text-gray-300">
+                      CEP <span class="text-red-500">*</span>
+                    </label>
+                    <a href="https://buscacepinter.correios.com.br/app/endereco/index.php" target="_blank" rel="noopener noreferrer" class="text-[11px] text-teal-600 hover:text-teal-700 dark:text-teal-400 inline-flex items-center gap-1 hover:underline">
+                      <span>Não sei meu CEP</span>
+                      <i data-lucide="external-link" class="w-3 h-3"></i>
+                    </a>
+                  </div>
+
+                  <div class="relative flex items-center">
+                    <input 
+                      type="text" 
+                      id="chk-zip" 
+                      maxlength="9" 
+                      required 
+                      placeholder="00000-000" 
+                      value="${this.escapeHtml(defaultZip)}" 
+                      oninput="App.handleCepInput(this)" 
+                      onblur="App.handleCepBlur(this)"
+                      class="w-full pl-3.5 pr-24 py-2.5 border rounded-xl dark:bg-gray-700 dark:border-gray-600 text-sm font-mono tracking-wider focus:ring-2 focus:ring-teal-500 transition"
+                    >
+                    <div id="chk-cep-status" class="absolute right-2 flex items-center gap-1">
+                      <button type="button" onclick="App.searchCepManually()" class="px-2.5 py-1 text-xs bg-teal-50 hover:bg-teal-100 dark:bg-teal-900/60 dark:hover:bg-teal-900 text-teal-700 dark:text-teal-200 rounded-lg cursor-pointer transition font-semibold">
+                        Buscar
+                      </button>
+                    </div>
+                  </div>
+                  <div id="chk-cep-msg" class="text-xs mt-1.5 min-h-[16px]"></div>
                 </div>
-                <div>
-                  <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Estado (UF)</label>
-                  <input type="text" id="chk-state" required value="${user.state || 'SP'}" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 text-sm">
+
+                <!-- Rua e Número -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div class="md:col-span-2">
+                    <label class="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      Rua / Avenida <span class="text-red-500">*</span>
+                    </label>
+                    <input 
+                      type="text" 
+                      id="chk-street" 
+                      placeholder="Preenchido automaticamente pelo CEP" 
+                      required 
+                      readonly 
+                      value="${this.escapeHtml(defaultStreet)}"
+                      class="w-full px-3 py-2 border rounded-xl bg-gray-50 dark:bg-gray-700/60 dark:border-gray-600 text-sm cursor-not-allowed transition"
+                    >
+                  </div>
+
+                  <div>
+                    <label class="block text-xs font-bold text-teal-700 dark:text-teal-400 mb-1 flex items-center justify-between">
+                      <span>Número <span class="text-red-500">*</span></span>
+                      <span class="text-[10px] font-normal text-gray-400">(Sua casa)</span>
+                    </label>
+                    <input 
+                      type="text" 
+                      id="chk-number" 
+                      placeholder="Ex: 123" 
+                      required 
+                      value="${this.escapeHtml(defaultNumber)}"
+                      class="w-full px-3 py-2 border-2 border-teal-500/70 rounded-xl dark:bg-gray-700 text-sm font-semibold focus:ring-2 focus:ring-teal-500 transition"
+                    >
+                  </div>
                 </div>
-                <div>
-                  <label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">CEP</label>
-                  <input type="text" id="chk-zip" required value="${user.zip_code || '01000-000'}" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 text-sm">
+
+                <!-- Bairro e Complemento -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label class="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      Bairro <span class="text-red-500">*</span>
+                    </label>
+                    <input 
+                      type="text" 
+                      id="chk-neighborhood" 
+                      placeholder="Preenchido automaticamente pelo CEP" 
+                      required 
+                      readonly 
+                      value="${this.escapeHtml(defaultNeighborhood)}"
+                      class="w-full px-3 py-2 border rounded-xl bg-gray-50 dark:bg-gray-700/60 dark:border-gray-600 text-sm cursor-not-allowed transition"
+                    >
+                  </div>
+
+                  <div>
+                    <label class="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      Complemento <span class="text-[11px] font-normal text-gray-400">(Opcional)</span>
+                    </label>
+                    <input 
+                      type="text" 
+                      id="chk-complement" 
+                      placeholder="Ex: Apto 42, Bloco B, Casa 2" 
+                      value="${this.escapeHtml(defaultComplement)}"
+                      class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 dark:border-gray-600 text-sm"
+                    >
+                  </div>
+                </div>
+
+                <!-- Cidade e Estado -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div class="md:col-span-2">
+                    <label class="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      Cidade <span class="text-red-500">*</span>
+                    </label>
+                    <input 
+                      type="text" 
+                      id="chk-city" 
+                      placeholder="Cidade" 
+                      required 
+                      readonly 
+                      value="${this.escapeHtml(defaultCity)}" 
+                      class="w-full px-3 py-2 border rounded-xl bg-gray-50 dark:bg-gray-700/60 dark:border-gray-600 text-sm cursor-not-allowed transition"
+                    >
+                  </div>
+
+                  <div>
+                    <label class="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      Estado (UF) <span class="text-red-500">*</span>
+                    </label>
+                    <input 
+                      type="text" 
+                      id="chk-state" 
+                      placeholder="UF" 
+                      required 
+                      readonly 
+                      maxlength="2" 
+                      value="${this.escapeHtml(defaultState)}" 
+                      class="w-full px-3 py-2 border rounded-xl bg-gray-50 dark:bg-gray-700/60 dark:border-gray-600 text-sm uppercase text-center font-bold cursor-not-allowed transition"
+                    >
+                  </div>
                 </div>
               </div>
             </div>
@@ -1799,9 +1937,268 @@ const App = {
     if (typeof lucide !== 'undefined') {
       lucide.createIcons();
     }
+
+    // Se o usuário já possui um CEP válido e a rua ainda está vazia, busca e preenche automaticamente
+    const initCleanZip = defaultZip.replace(/\D/g, '');
+    if (initCleanZip.length === 8 && !defaultStreet) {
+      setTimeout(() => {
+        this.fetchAddressByCep(initCleanZip, true);
+      }, 120);
+    }
+  },
+
+  saveCurrentCheckoutAddress() {
+    const zip = document.getElementById('chk-zip')?.value || '';
+    const street = document.getElementById('chk-street')?.value || '';
+    const number = document.getElementById('chk-number')?.value || '';
+    const complement = document.getElementById('chk-complement')?.value || '';
+    const neighborhood = document.getElementById('chk-neighborhood')?.value || '';
+    const city = document.getElementById('chk-city')?.value || '';
+    const state = document.getElementById('chk-state')?.value || '';
+
+    this.checkoutAddressDraft = {
+      zip, street, number, complement, neighborhood, city, state
+    };
+  },
+
+  toggleManualAddressEdit() {
+    const street = document.getElementById('chk-street');
+    const neighborhood = document.getElementById('chk-neighborhood');
+    const city = document.getElementById('chk-city');
+    const state = document.getElementById('chk-state');
+    const btn = document.getElementById('btn-toggle-address-edit');
+
+    if (!street) return;
+
+    const isLocked = street.hasAttribute('readonly');
+    if (isLocked) {
+      street.removeAttribute('readonly');
+      street.classList.remove('bg-gray-50', 'cursor-not-allowed');
+      neighborhood?.removeAttribute('readonly');
+      neighborhood?.classList.remove('bg-gray-50', 'cursor-not-allowed');
+      city?.removeAttribute('readonly');
+      city?.classList.remove('bg-gray-50', 'cursor-not-allowed');
+      state?.removeAttribute('readonly');
+      state?.classList.remove('bg-gray-50', 'cursor-not-allowed');
+
+      if (btn) btn.innerHTML = `<i data-lucide="lock" class="w-3.5 h-3.5"></i><span>Travar campos</span>`;
+      ToastManager.show('Campos liberados para edição manual.', 'info');
+    } else {
+      street.setAttribute('readonly', 'true');
+      street.classList.add('bg-gray-50', 'cursor-not-allowed');
+      neighborhood?.setAttribute('readonly', 'true');
+      neighborhood?.classList.add('bg-gray-50', 'cursor-not-allowed');
+      city?.setAttribute('readonly', 'true');
+      city?.classList.add('bg-gray-50', 'cursor-not-allowed');
+      state?.setAttribute('readonly', 'true');
+      state?.classList.add('bg-gray-50', 'cursor-not-allowed');
+
+      if (btn) btn.innerHTML = `<i data-lucide="edit-3" class="w-3.5 h-3.5"></i><span>Editar campos</span>`;
+    }
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+  },
+
+  handleCepInput(input) {
+    let val = input.value.replace(/\D/g, '');
+    if (val.length > 8) val = val.substring(0, 8);
+
+    if (val.length > 5) {
+      input.value = `${val.substring(0, 5)}-${val.substring(5)}`;
+    } else {
+      input.value = val;
+    }
+
+    if (val.length === 8) {
+      this.fetchAddressByCep(val);
+    } else {
+      const msg = document.getElementById('chk-cep-msg');
+      if (msg) msg.innerHTML = '';
+      const status = document.getElementById('chk-cep-status');
+      if (status) {
+        status.innerHTML = `
+          <button type="button" onclick="App.searchCepManually()" class="px-2.5 py-1 text-xs bg-teal-50 hover:bg-teal-100 dark:bg-teal-900/60 dark:hover:bg-teal-900 text-teal-700 dark:text-teal-200 rounded-lg cursor-pointer transition font-semibold">
+            Buscar
+          </button>
+        `;
+      }
+    }
+  },
+
+  handleCepBlur(input) {
+    const val = input.value.replace(/\D/g, '');
+    if (val.length === 8 && (!this.lastFetchedCep || this.lastFetchedCep !== val)) {
+      this.fetchAddressByCep(val);
+    }
+  },
+
+  searchCepManually() {
+    const input = document.getElementById('chk-zip');
+    if (!input) return;
+    const val = input.value.replace(/\D/g, '');
+    if (val.length !== 8) {
+      ToastManager.show('Digite um CEP válido com 8 números.', 'warning');
+      input.focus();
+      return;
+    }
+    this.fetchAddressByCep(val);
+  },
+
+  async fetchAddressByCep(cepClean, isAutoInit = false) {
+    if (this.isFetchingCep) return;
+    const statusBox = document.getElementById('chk-cep-status');
+    const msgBox = document.getElementById('chk-cep-msg');
+    const streetInput = document.getElementById('chk-street');
+    const numberInput = document.getElementById('chk-number');
+    const neighborhoodInput = document.getElementById('chk-neighborhood');
+    const cityInput = document.getElementById('chk-city');
+    const stateInput = document.getElementById('chk-state');
+
+    this.isFetchingCep = true;
+    if (statusBox) {
+      statusBox.innerHTML = `
+        <span class="inline-flex items-center gap-1 text-teal-600 dark:text-teal-400 text-xs animate-pulse font-medium">
+          <i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i>
+          <span>Buscando...</span>
+        </span>
+      `;
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+    }
+    if (msgBox) {
+      msgBox.innerHTML = `<span class="text-xs text-gray-500 dark:text-gray-400">Consultando endereço na base dos Correios...</span>`;
+    }
+
+    try {
+      let data = null;
+
+      // 1ª Tentativa: ViaCEP (API pública brasileira, suporte nativo a CORS no navegador)
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        const res = await fetch(`https://viacep.com.br/ws/${cepClean}/json/`, {
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        if (res.ok) {
+          const json = await res.json();
+          if (!json.erro) {
+            data = {
+              street: json.logradouro || '',
+              neighborhood: json.bairro || '',
+              city: json.localidade || '',
+              state: json.uf || ''
+            };
+          } else {
+            data = { notFound: true };
+          }
+        }
+      } catch (err) {
+        console.warn('ViaCEP indisponível ou timeout, tentando BrasilAPI como fallback...', err);
+      }
+
+      // 2ª Tentativa (Fallback resiliente): BrasilAPI
+      if (!data || data.notFound) {
+        try {
+          const controller2 = new AbortController();
+          const timeoutId2 = setTimeout(() => controller2.abort(), 5000);
+          const res2 = await fetch(`https://brasilapi.com.br/api/cep/v1/${cepClean}`, {
+            signal: controller2.signal
+          });
+          clearTimeout(timeoutId2);
+
+          if (res2.ok) {
+            const json2 = await res2.json();
+            data = {
+              street: json2.street || '',
+              neighborhood: json2.neighborhood || '',
+              city: json2.city || '',
+              state: json2.state || ''
+            };
+          }
+        } catch (err2) {
+          console.warn('BrasilAPI fallback falhou:', err2);
+        }
+      }
+
+      if (data && !data.notFound && (data.city || data.street)) {
+        this.lastFetchedCep = cepClean;
+
+        if (streetInput) {
+          streetInput.value = data.street;
+          if (!data.street) {
+            // Em cidades menores de CEP único, o logradouro não vem na API
+            streetInput.removeAttribute('readonly');
+            streetInput.classList.remove('bg-gray-50', 'cursor-not-allowed');
+            streetInput.placeholder = 'Digite sua rua ou avenida';
+          }
+        }
+        if (neighborhoodInput) {
+          neighborhoodInput.value = data.neighborhood;
+          if (!data.neighborhood) {
+            neighborhoodInput.removeAttribute('readonly');
+            neighborhoodInput.classList.remove('bg-gray-50', 'cursor-not-allowed');
+            neighborhoodInput.placeholder = 'Digite seu bairro';
+          }
+        }
+        if (cityInput) cityInput.value = data.city;
+        if (stateInput) stateInput.value = data.state;
+
+        if (statusBox) {
+          statusBox.innerHTML = `
+            <span class="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 text-xs font-bold">
+              <i data-lucide="check-circle" class="w-3.5 h-3.5"></i>
+              <span>Localizado</span>
+            </span>
+          `;
+          if (typeof lucide !== 'undefined') lucide.createIcons();
+        }
+
+        if (msgBox) {
+          msgBox.innerHTML = `
+            <span class="text-emerald-600 dark:text-emerald-400 text-xs flex items-center gap-1 font-medium">
+              <i data-lucide="check" class="w-3.5 h-3.5"></i>
+              <span>Endereço preenchido! Agora informe o <strong>número</strong> da residência.</span>
+            </span>
+          `;
+          if (typeof lucide !== 'undefined') lucide.createIcons();
+        }
+
+        if (!isAutoInit) {
+          ToastManager.show('Endereço localizado! Informe o número da residência.', 'success', 3000);
+          if (numberInput) {
+            setTimeout(() => numberInput.focus(), 150);
+          }
+        }
+      } else {
+        if (statusBox) {
+          statusBox.innerHTML = `
+            <button type="button" onclick="App.searchCepManually()" class="px-2.5 py-1 text-xs bg-red-50 text-red-600 rounded-lg cursor-pointer font-medium">
+              Tentar novamente
+            </button>
+          `;
+        }
+        if (msgBox) {
+          msgBox.innerHTML = `
+            <span class="text-red-500 text-xs flex items-center gap-1">
+              ⚠️ CEP não localizado. Verifique os números ou clique em "Editar campos" para digitar manualmente.
+            </span>
+          `;
+        }
+        if (!isAutoInit) {
+          ToastManager.show('CEP não encontrado. Verifique o número digitado.', 'warning');
+        }
+      }
+    } catch (e) {
+      if (msgBox) {
+        msgBox.innerHTML = `<span class="text-amber-500 text-xs">Não foi possível consultar o CEP automaticamente. Você pode preencher manualmente.</span>`;
+      }
+    } finally {
+      this.isFetchingCep = false;
+    }
   },
 
   removeCouponCheckout() {
+    this.saveCurrentCheckoutAddress();
     this.appliedCouponCode = '';
     ToastManager.show('Cupom removido.', 'info');
     const main = document.getElementById('main-content');
@@ -1852,6 +2249,7 @@ const App = {
         return;
       }
 
+      this.saveCurrentCheckoutAddress();
       this.appliedCouponCode = coupon.code;
       ToastManager.show(`Cupom ${coupon.code} (${coupon.discount_type} OFF) aplicado com sucesso!`, 'success');
       this.renderCheckoutScreen(document.getElementById('main-content'));
@@ -1883,18 +2281,78 @@ const App = {
     }
 
     try {
-      const paymentMethod = document.querySelector('input[name="payment_method"]:checked').value;
+      const paymentMethod = document.querySelector('input[name="payment_method"]:checked')?.value || 'pix';
+
+      const zipInput = document.getElementById('chk-zip');
+      const streetInput = document.getElementById('chk-street');
+      const numberInput = document.getElementById('chk-number');
+      const complementInput = document.getElementById('chk-complement');
+      const neighborhoodInput = document.getElementById('chk-neighborhood');
+      const cityInput = document.getElementById('chk-city');
+      const stateInput = document.getElementById('chk-state');
+
+      const zip = (zipInput?.value || '').trim();
+      const street = (streetInput?.value || '').trim();
+      const number = (numberInput?.value || '').trim();
+      const complement = (complementInput?.value || '').trim();
+      const neighborhood = (neighborhoodInput?.value || '').trim();
+      const city = (cityInput?.value || '').trim();
+      const state = (stateInput?.value || '').trim().toUpperCase();
+
+      const cleanZip = zip.replace(/\D/g, '');
+      if (cleanZip.length !== 8) {
+        ToastManager.show('Por favor, informe um CEP válido com 8 dígitos para a entrega.', 'warning');
+        zipInput?.focus();
+        if (btn) { btn.disabled = false; btn.innerHTML = `Confirmar Pedido Simulado`; }
+        this.isSubmittingCheckout = false;
+        return;
+      }
+
+      if (!street) {
+        ToastManager.show('Por favor, aguarde a busca do CEP ou informe a rua / logradouro.', 'warning');
+        streetInput?.focus();
+        if (btn) { btn.disabled = false; btn.innerHTML = `Confirmar Pedido Simulado`; }
+        this.isSubmittingCheckout = false;
+        return;
+      }
+
+      if (!number) {
+        ToastManager.show('Por favor, digite o número da sua casa / residência.', 'warning');
+        numberInput?.focus();
+        if (btn) { btn.disabled = false; btn.innerHTML = `Confirmar Pedido Simulado`; }
+        this.isSubmittingCheckout = false;
+        return;
+      }
+
+      if (!neighborhood) {
+        ToastManager.show('Por favor, informe o bairro para entrega.', 'warning');
+        neighborhoodInput?.focus();
+        if (btn) { btn.disabled = false; btn.innerHTML = `Confirmar Pedido Simulado`; }
+        this.isSubmittingCheckout = false;
+        return;
+      }
+
+      if (!city || !state) {
+        ToastManager.show('Por favor, informe a cidade e o estado para entrega.', 'warning');
+        if (btn) { btn.disabled = false; btn.innerHTML = `Confirmar Pedido Simulado`; }
+        this.isSubmittingCheckout = false;
+        return;
+      }
+
+      const fullAddress = `${street}, Nº ${number}${complement ? ' (' + complement + ')' : ''} - Bairro: ${neighborhood}`;
+
       const shippingData = {
-        address: document.getElementById('chk-address').value,
-        city: document.getElementById('chk-city').value,
-        state: document.getElementById('chk-state').value,
-        zip: document.getElementById('chk-zip').value
+        address: fullAddress,
+        city: city,
+        state: state,
+        zip: zip
       };
 
       const res = await CartManager.processCheckout(paymentMethod, shippingData, this.appliedCouponCode);
       if (res.success) {
         ToastManager.show(`Pedido #${res.order_number} confirmado com sucesso!`, 'success', 5000);
         this.appliedCouponCode = '';
+        this.checkoutAddressDraft = null;
         await AuthManager.checkAuth();
         this.updateHeaderUI();
         this.navigateTo('orders');
@@ -2004,6 +2462,12 @@ const App = {
                     <div>
                       Total Pago: <strong class="text-gray-900 dark:text-white text-sm">R$ ${parseFloat(o.total).toFixed(2).replace('.', ',')}</strong> | Pontos Ganhos: <strong class="text-emerald-600">+${o.points_earned} pts</strong>
                     </div>
+                    ${o.shipping_address ? `
+                      <div class="text-[11px] text-gray-500 dark:text-gray-400 flex items-center gap-1.5 mt-1">
+                        <i data-lucide="map-pin" class="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0"></i>
+                        <span>Entrega em: <strong>${this.escapeHtml(o.shipping_address)}</strong>, ${this.escapeHtml(o.shipping_city || '')}-${this.escapeHtml(o.shipping_state || '')} (CEP: ${this.escapeHtml(o.shipping_zip || '')})</span>
+                      </div>
+                    ` : ''}
                   </div>
                   <div class="flex gap-2">
                     ${!isCancelled ? `
