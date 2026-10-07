@@ -348,6 +348,16 @@ html.dark .header-glass {
   animation: modalBackdropFadeIn 0.2s ease-out forwards;
 }
 
+/* Trava de rolagem e interação de fundo quando modais estão abertos */
+body.modal-open {
+  overflow: hidden !important;
+  touch-action: none;
+}
+
+html.modal-open {
+  overflow: hidden !important;
+}
+
 .skeleton-box {
   background-color: #E5E7EB;
   animation: skeletonPulse 1.5s ease-in-out infinite;

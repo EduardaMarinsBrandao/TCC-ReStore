@@ -73,6 +73,8 @@ CREATE TABLE IF NOT EXISTS orders (
     shipping_state VARCHAR(50),
     shipping_zip VARCHAR(10),
     status ENUM('pending', 'confirmed', 'shipped', 'delivered', 'cancelled') DEFAULT 'pending',
+    coupon_code VARCHAR(50) NULL,
+    discount_amount DECIMAL(10,2) DEFAULT 0.00,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (buyer_id) REFERENCES users(id) ON DELETE CASCADE
@@ -139,7 +141,7 @@ CREATE TABLE IF NOT EXISTS points_history (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
     points INT NOT NULL,
-    type ENUM('purchase', 'review', 'sale', 'redemption') NOT NULL,
+    type ENUM('purchase', 'review', 'sale', 'redemption', 'reversal', 'sale_reversal') NOT NULL,
     description TEXT,
     order_id INT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

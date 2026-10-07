@@ -225,17 +225,27 @@ const App = {
 
     const modal = document.createElement('div');
     modal.id = 'review-photo-modal';
-    modal.className = 'fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in';
+    modal.className = 'fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in select-none';
+    
+    document.body.classList.add('modal-open');
+    document.documentElement.classList.add('modal-open');
+
+    const closeModal = () => {
+      modal.remove();
+      document.body.classList.remove('modal-open');
+      document.documentElement.classList.remove('modal-open');
+    };
+
     modal.onclick = (e) => {
       if (e.target === modal || e.target.closest('.close-modal-btn')) {
-        modal.remove();
+        closeModal();
       }
     };
     modal.innerHTML = `
-      <div class="relative max-w-3xl max-h-[90vh] bg-white dark:bg-gray-900 rounded-2xl overflow-hidden shadow-2xl flex flex-col" onclick="event.stopPropagation()">
+      <div class="relative max-w-3xl max-h-[90vh] bg-white dark:bg-gray-900 rounded-2xl overflow-hidden shadow-2xl flex flex-col select-auto animate-modal-in" onclick="event.stopPropagation()">
         <div class="flex items-center justify-between px-4 py-3 border-b dark:border-gray-800">
           <span class="text-sm font-bold text-gray-800 dark:text-gray-200">${title}</span>
-          <button type="button" class="close-modal-btn text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 p-1 rounded-lg cursor-pointer" onclick="document.getElementById('review-photo-modal').remove()">
+          <button type="button" class="close-modal-btn text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 p-1 rounded-lg cursor-pointer">
             ✕
           </button>
         </div>
@@ -4901,15 +4911,74 @@ const App = {
   // ----------------------------------------------------
   // MODAIS E DIÁLOGOS
   // ----------------------------------------------------
-  showTutorialModal(step = 1) {
+  openAuthModal(contentHtml) {
     let modal = document.getElementById('auth-modal');
     if (!modal) {
       modal = document.createElement('div');
       modal.id = 'auth-modal';
-      modal.className = 'fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in';
+      modal.className = 'fixed inset-0 bg-black/60 backdrop-blur-sm z-[999] flex items-center justify-center p-4 animate-backdrop-in overscroll-contain select-none';
+      
+      // Fecha ao clicar no backdrop (fora do card)
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          this.closeAuthModal();
+        }
+      });
+
+      // Impede propagação de rolagem e toques para a tela de trás
+      modal.addEventListener('wheel', (e) => {
+        if (e.target === modal) {
+          e.preventDefault();
+        }
+      }, { passive: false });
+
+      modal.addEventListener('touchmove', (e) => {
+        if (e.target === modal) {
+          e.preventDefault();
+        }
+      }, { passive: false });
+
       document.body.appendChild(modal);
     }
 
+    // Trava de rolagem absoluta do fundo (body e html)
+    document.body.classList.add('modal-open');
+    document.documentElement.classList.add('modal-open');
+
+    modal.innerHTML = contentHtml;
+
+    // Garante que o card interno não propague o clique de fechar para o backdrop
+    const card = modal.firstElementChild;
+    if (card) {
+      card.classList.add('select-auto');
+      card.addEventListener('click', (e) => {
+        e.stopPropagation();
+      });
+      // Permite rolagem apenas dentro do próprio card se ele tiver overflow
+      card.addEventListener('wheel', (e) => {
+        e.stopPropagation();
+      }, { passive: true });
+      card.addEventListener('touchmove', (e) => {
+        e.stopPropagation();
+      }, { passive: true });
+    }
+
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
+    return modal;
+  },
+
+  closeAuthModal() {
+    const modal = document.getElementById('auth-modal');
+    if (modal) {
+      modal.remove();
+    }
+    document.body.classList.remove('modal-open');
+    document.documentElement.classList.remove('modal-open');
+  },
+
+  showTutorialModal(step = 1) {
     const stepsContent = [
       {
         iconName: 'recycle',
@@ -4935,9 +5004,9 @@ const App = {
 
     const currentStep = stepsContent[step - 1];
 
-    modal.innerHTML = `
-      <div class="bg-white dark:bg-gray-800 rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl relative text-center">
-        <button type="button" onclick="document.getElementById('auth-modal').remove()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold cursor-pointer">✕</button>
+    this.openAuthModal(`
+      <div class="bg-white dark:bg-gray-800 rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl relative text-center animate-modal-in">
+        <button type="button" onclick="App.closeAuthModal()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold cursor-pointer">✕</button>
 
         <div class="flex items-center gap-2 justify-center mb-6">
           ${[1, 2, 3, 4].map(s => `
@@ -4958,29 +5027,17 @@ const App = {
           ${step < 4 ? `
             <button type="button" onclick="App.showTutorialModal(${step + 1})" class="btn-primary flex-1 py-2.5 text-xs cursor-pointer">Próximo Passo →</button>
           ` : `
-            <button type="button" onclick="document.getElementById('auth-modal').remove(); ToastManager.show('Tutorial concluído! Bom proveito!', 'success');" class="btn-primary flex-1 py-2.5 text-xs cursor-pointer">Concluir Tutorial</button>
+            <button type="button" onclick="App.closeAuthModal(); ToastManager.show('Tutorial concluído! Bom proveito!', 'success');" class="btn-primary flex-1 py-2.5 text-xs cursor-pointer">Concluir Tutorial</button>
           `}
         </div>
       </div>
-    `;
-
-    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
-    if (typeof lucide !== 'undefined') {
-      lucide.createIcons();
-    }
+    `);
   },
 
   showLoginModal() {
-    let modal = document.getElementById('auth-modal');
-    if (!modal) {
-      modal = document.createElement('div');
-      modal.id = 'auth-modal';
-      modal.className = 'fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in';
-      document.body.appendChild(modal);
-    }
-    modal.innerHTML = `
-      <div class="bg-white dark:bg-gray-800 rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl relative">
-        <button type="button" onclick="document.getElementById('auth-modal').remove()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold cursor-pointer">✕</button>
+    this.openAuthModal(`
+      <div class="bg-white dark:bg-gray-800 rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl relative animate-modal-in">
+        <button type="button" onclick="App.closeAuthModal()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold cursor-pointer">✕</button>
 
         <div class="p-2.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded-xl mb-4 flex items-center gap-2 text-xs text-emerald-800 dark:text-emerald-300">
           <i data-lucide="shield-check" class="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0"></i>
@@ -5031,11 +5088,10 @@ const App = {
           Não tem conta? <button type="button" onclick="App.showRegisterModal()" class="text-teal-600 font-bold hover:underline cursor-pointer">Cadastre-se e ganhe +150 pts</button>
         </div>
       </div>
-    `;
+    `);
 
     this.renderGoogleSignInButton('google-login-btn-container');
 
-    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
     if (typeof lucide !== 'undefined') {
       lucide.createIcons();
     }
@@ -5055,7 +5111,7 @@ const App = {
     if (res.success) {
       ToastManager.show('Login realizado com sucesso!', 'success');
 
-      document.getElementById('auth-modal').remove();
+      this.closeAuthModal();
 
       this.updateHeaderUI();
 
@@ -5166,8 +5222,7 @@ const App = {
       if (res.success) {
         ToastManager.show(res.message || 'Login com Google realizado com sucesso!', 'success');
 
-        const modal = document.getElementById('auth-modal');
-        if (modal) modal.remove();
+        this.closeAuthModal();
 
         this.updateHeaderUI();
 
@@ -5206,14 +5261,6 @@ const App = {
   },
 
   showRegisterModal(preserveData = null) {
-    let modal = document.getElementById('auth-modal');
-    if (!modal) {
-      modal = document.createElement('div');
-      modal.id = 'auth-modal';
-      modal.className = 'fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in';
-      document.body.appendChild(modal);
-    }
-
     const saved = preserveData || this.pendingRegistration || {};
     const nameVal = saved.name || '';
     const emailVal = saved.email || '';
@@ -5223,9 +5270,9 @@ const App = {
     const bizNameVal = saved.businessName || '';
     const cnpjVal = saved.cnpj || '';
 
-    modal.innerHTML = `
-      <div class="bg-white dark:bg-gray-800 rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl relative max-h-[90vh] overflow-y-auto">
-        <button type="button" onclick="document.getElementById('auth-modal').remove()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold cursor-pointer">✕</button>
+    this.openAuthModal(`
+      <div class="bg-white dark:bg-gray-800 rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl relative max-h-[90vh] overflow-y-auto animate-modal-in">
+        <button type="button" onclick="App.closeAuthModal()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold cursor-pointer">✕</button>
 
         <span class="inline-flex items-center gap-1.5 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 text-[11px] font-bold px-2.5 py-0.5 rounded-full mb-2"><i data-lucide="gift" class="w-3.5 h-3.5"></i> Bônus de 150 Pontos Verdes</span>
         <h2 class="text-2xl font-bold mb-1 text-gray-900 dark:text-white">Criar Nova Conta</h2>
@@ -5307,7 +5354,7 @@ const App = {
           Já tem conta? <button type="button" onclick="App.showLoginModal()" class="text-teal-600 font-bold hover:underline cursor-pointer">Fazer Login</button>
         </div>
       </div>
-    `;
+    `);
 
     this.selectedRole = roleVal;
     if (passVal) {
@@ -5477,7 +5524,7 @@ const App = {
       const res = await AuthManager.sendRegisterCode(name, email);
       if (res.success) {
         ToastManager.show(res.message, 'success', 5000);
-        this.renderRegisterVerifyStep(document.getElementById('auth-modal'), email);
+        this.renderRegisterVerifyStep(email);
       } else {
         if (btn) {
           btn.disabled = false;
@@ -5495,12 +5542,10 @@ const App = {
     }
   },
 
-  renderRegisterVerifyStep(modal, email) {
-    if (!modal) return;
-
-    modal.innerHTML = `
-      <div class="bg-white dark:bg-gray-800 rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl relative animate-fade-in">
-        <button type="button" onclick="document.getElementById('auth-modal').remove()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold cursor-pointer">✕</button>
+  renderRegisterVerifyStep(email) {
+    this.openAuthModal(`
+      <div class="bg-white dark:bg-gray-800 rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl relative animate-modal-in">
+        <button type="button" onclick="App.closeAuthModal()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold cursor-pointer">✕</button>
 
         <!-- Barra de Progresso do Cadastro -->
         <div class="flex items-center gap-2 mb-6">
@@ -5576,7 +5621,7 @@ const App = {
           <span>Dica: Caso não encontre em sua caixa de entrada, verifique também as pastas de <strong>Spam</strong> ou <strong>Lixo Eletrônico</strong>.</span>
         </div>
       </div>
-    `;
+    `);
 
     setTimeout(() => {
       const codeInput = document.getElementById('reg-verify-code');
@@ -5627,8 +5672,7 @@ const App = {
         this.pendingRegistration = null;
         ToastManager.show(res.message, 'success', 5000);
 
-        const modal = document.getElementById('auth-modal');
-        if (modal) modal.remove();
+        this.closeAuthModal();
 
         this.updateHeaderUI();
 
@@ -5746,20 +5790,13 @@ const App = {
   },
 
   showForgotPasswordModal() {
-    let modal = document.getElementById('auth-modal');
-    if (!modal) {
-      modal = document.createElement('div');
-      modal.id = 'auth-modal';
-      modal.className = 'fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in';
-      document.body.appendChild(modal);
-    }
-    this.renderForgotStep1(modal);
+    this.renderForgotStep1();
   },
 
-  renderForgotStep1(modal) {
-    modal.innerHTML = `
-      <div class="bg-white dark:bg-gray-800 rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl relative">
-        <button type="button" onclick="document.getElementById('auth-modal').remove()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold cursor-pointer">✕</button>
+  renderForgotStep1() {
+    this.openAuthModal(`
+      <div class="bg-white dark:bg-gray-800 rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl relative animate-modal-in">
+        <button type="button" onclick="App.closeAuthModal()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold cursor-pointer">✕</button>
 
         <div class="flex items-center gap-2 mb-6">
           <div class="flex-1 h-2 bg-teal-600 rounded-full"></div>
@@ -5778,12 +5815,7 @@ const App = {
           <button type="submit" class="btn-primary w-full py-3 text-sm cursor-pointer">Enviar Código de Verificação</button>
         </form>
       </div>
-    `;
-
-    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
-    if (typeof lucide !== 'undefined') {
-      lucide.createIcons();
-    }
+    `);
   },
 
   async submitForgotStep1(e) {
@@ -5797,16 +5829,16 @@ const App = {
     const data = await res.json();
     if (data.success) {
       ToastManager.show(data.message, 'success', 5000);
-      this.renderForgotStep2(document.getElementById('auth-modal'));
+      this.renderForgotStep2();
     } else {
       ToastManager.show(data.error, 'error');
     }
   },
 
-  renderForgotStep2(modal) {
-    modal.innerHTML = `
-      <div class="bg-white dark:bg-gray-800 rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl relative">
-        <button type="button" onclick="document.getElementById('auth-modal').remove()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold cursor-pointer">✕</button>
+  renderForgotStep2() {
+    this.openAuthModal(`
+      <div class="bg-white dark:bg-gray-800 rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl relative animate-modal-in">
+        <button type="button" onclick="App.closeAuthModal()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold cursor-pointer">✕</button>
 
         <div class="flex items-center gap-2 mb-6">
           <div class="flex-1 h-2 bg-teal-600 rounded-full"></div>
@@ -5829,12 +5861,7 @@ const App = {
           </div>
         </form>
       </div>
-    `;
-
-    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
-    if (typeof lucide !== 'undefined') {
-      lucide.createIcons();
-    }
+    `);
   },
 
   async submitForgotStep2(e) {
@@ -5848,16 +5875,16 @@ const App = {
     const data = await res.json();
     if (data.success) {
       ToastManager.show(data.message, 'success');
-      this.renderForgotStep3(document.getElementById('auth-modal'));
+      this.renderForgotStep3();
     } else {
       ToastManager.show(data.error, 'error');
     }
   },
 
-  renderForgotStep3(modal) {
-    modal.innerHTML = `
-      <div class="bg-white dark:bg-gray-800 rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl relative">
-        <button type="button" onclick="document.getElementById('auth-modal').remove()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold cursor-pointer">✕</button>
+  renderForgotStep3() {
+    this.openAuthModal(`
+      <div class="bg-white dark:bg-gray-800 rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl relative animate-modal-in">
+        <button type="button" onclick="App.closeAuthModal()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold cursor-pointer">✕</button>
 
         <div class="flex items-center gap-2 mb-6">
           <div class="flex-1 h-2 bg-teal-600 rounded-full"></div>
@@ -5882,12 +5909,7 @@ const App = {
           <button type="submit" class="btn-primary w-full py-3 text-sm cursor-pointer">Salvar Nova Senha</button>
         </form>
       </div>
-    `;
-
-    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
-    if (typeof lucide !== 'undefined') {
-      lucide.createIcons();
-    }
+    `);
   },
 
   async submitForgotStep3(e) {
@@ -6346,7 +6368,7 @@ const App = {
       if (e.key === 'Escape') {
         const modal = document.getElementById('auth-modal');
         if (modal) {
-          modal.remove();
+          this.closeAuthModal();
         } else if (this.currentScreen === 'product-detail') {
           this.navigateTo('home');
         }

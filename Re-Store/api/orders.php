@@ -184,6 +184,7 @@ if ($method === 'POST' && ($action === 'create' || $action === 'checkout')) {
         $sellersGrouped = [];
         foreach ($orderItemsData as $oi) {
             $sId = (int)$oi['seller_id'];
+            if ($sId <= 0) continue;
             if (!isset($sellersGrouped[$sId])) {
                 $sellersGrouped[$sId] = [
                     'subtotal' => 0.0,
@@ -195,30 +196,41 @@ if ($method === 'POST' && ($action === 'create' || $action === 'checkout')) {
         }
 
         foreach ($sellersGrouped as $sId => $sInfo) {
-            $tierInfo = getSellerTierInfo($db, $sId);
-            $tierName = $tierInfo['tier_name'];
-            $sellerRate = $tierInfo['rate'];
-            $subtotalVendido = $sInfo['subtotal'];
+            if ($sId <= 0) continue;
+            try {
+                // Verificar se o vendedor existe de verdade no banco antes de creditar
+                $sellerCheck = $db->prepare("SELECT id FROM users WHERE id = ?");
+                $sellerCheck->execute([$sId]);
+                if (!$sellerCheck->fetch()) continue;
 
-            // Bônus proporcional de venda (menor que o do comprador, escalonado com o nível de vendedor)
-            $sellerBasePoints = max(1, (int)round($subtotalVendido * $sellerRate));
-            $milestoneBonus = $tierInfo['milestone_bonus'];
-            $totalSellerPoints = $sellerBasePoints + $milestoneBonus;
+                $tierInfo = getSellerTierInfo($db, $sId);
+                $tierName = $tierInfo['tier_name'];
+                $sellerRate = $tierInfo['rate'];
+                $subtotalVendido = $sInfo['subtotal'];
 
-            // Creditar pontos ao vendedor
-            $db->prepare("UPDATE users SET points = points + ? WHERE id = ?")->execute([$totalSellerPoints, $sId]);
+                // Bônus proporcional de venda (menor que o do comprador, escalonado com o nível de vendedor)
+                $sellerBasePoints = max(1, (int)round($subtotalVendido * $sellerRate));
+                $milestoneBonus = $tierInfo['milestone_bonus'];
+                $totalSellerPoints = $sellerBasePoints + $milestoneBonus;
 
-            // Registrar no histórico de pontos do vendedor
-            $desc = "Bônus de Venda ({$tierName}) no pedido #{$orderNumber} (+{$sellerBasePoints} pts)";
-            if ($milestoneBonus > 0 && !empty($tierInfo['milestone_text'])) {
-                $desc .= " + Bônus Especial: {$tierInfo['milestone_text']} (+{$milestoneBonus} pts)";
+                // Creditar pontos ao vendedor
+                $db->prepare("UPDATE users SET points = points + ? WHERE id = ?")->execute([$totalSellerPoints, $sId]);
+
+                // Registrar no histórico de pontos do vendedor
+                $desc = "Bônus de Venda ({$tierName}) no pedido #{$orderNumber} (+{$sellerBasePoints} pts)";
+                if ($milestoneBonus > 0 && !empty($tierInfo['milestone_text'])) {
+                    $desc .= " + Bônus Especial: {$tierInfo['milestone_text']} (+{$milestoneBonus} pts)";
+                }
+
+                $db->prepare("INSERT INTO points_history (user_id, points, type, description, order_id) VALUES (?, ?, 'sale', ?, ?)")
+                   ->execute([$sId, $totalSellerPoints, $desc, $orderId]);
+
+                // Atualizar nível de engajamento geral do vendedor
+                updateUserEngagementLevel($db, $sId);
+            } catch (Exception $sellerEx) {
+                // Falha secundária no bônus do vendedor nunca interrompe a compra do cliente
+                error_log("Aviso: Falha ao conceder bônus de venda ao vendedor {$sId}: " . $sellerEx->getMessage());
             }
-
-            $db->prepare("INSERT INTO points_history (user_id, points, type, description, order_id) VALUES (?, ?, 'sale', ?, ?)")
-               ->execute([$sId, $totalSellerPoints, $desc, $orderId]);
-
-            // Atualizar nível de engajamento geral do vendedor
-            updateUserEngagementLevel($db, $sId);
         }
 
         $db->commit();
@@ -339,9 +351,18 @@ if ($method === 'POST' && $action === 'cancel') {
 
         // 3. Estornar pontos ganhos com a compra (comprador)
         if ((int)$order['points_earned'] > 0) {
-            $db->prepare("UPDATE users SET points = MAX(0, points - ?) WHERE id = ?")->execute([(int)$order['points_earned'], $userId]);
-            $db->prepare("INSERT INTO points_history (user_id, points, type, description, order_id) VALUES (?, ?, 'reversal', ?, ?)")
-               ->execute([$userId, -(int)$order['points_earned'], "Estorno de pontos pelo cancelamento do pedido #{$order['order_number']}", $orderId]);
+            $buyerPts = (int)$order['points_earned'];
+            $db->prepare("UPDATE users SET points = CASE WHEN points >= ? THEN points - ? ELSE 0 END WHERE id = ?")
+               ->execute([$buyerPts, $buyerPts, $userId]);
+            try {
+                $db->prepare("INSERT INTO points_history (user_id, points, type, description, order_id) VALUES (?, ?, 'reversal', ?, ?)")
+                   ->execute([$userId, -$buyerPts, "Estorno de pontos pelo cancelamento do pedido #{$order['order_number']}", $orderId]);
+            } catch (Exception $ePh) {
+                try {
+                    $db->prepare("INSERT INTO points_history (user_id, points, type, description, order_id) VALUES (?, ?, 'purchase', ?, ?)")
+                       ->execute([$userId, -$buyerPts, "Estorno de pontos pelo cancelamento do pedido #{$order['order_number']}", $orderId]);
+                } catch (Exception $ePh2) {}
+            }
             updateUserEngagementLevel($db, $userId);
         }
 
@@ -352,11 +373,23 @@ if ($method === 'POST' && $action === 'cancel') {
         foreach ($sellerHistRows as $shr) {
             $sId = (int)$shr['user_id'];
             $sPts = (int)$shr['points'];
-            if ($sPts > 0) {
-                $db->prepare("UPDATE users SET points = MAX(0, points - ?) WHERE id = ?")->execute([$sPts, $sId]);
-                $db->prepare("INSERT INTO points_history (user_id, points, type, description, order_id) VALUES (?, ?, 'sale_reversal', ?, ?)")
-                   ->execute([$sId, -$sPts, "Estorno de bônus de venda pelo cancelamento do pedido #{$order['order_number']}", $orderId]);
-                updateUserEngagementLevel($db, $sId);
+            if ($sPts > 0 && $sId > 0) {
+                try {
+                    $db->prepare("UPDATE users SET points = CASE WHEN points >= ? THEN points - ? ELSE 0 END WHERE id = ?")
+                       ->execute([$sPts, $sPts, $sId]);
+                    try {
+                        $db->prepare("INSERT INTO points_history (user_id, points, type, description, order_id) VALUES (?, ?, 'sale_reversal', ?, ?)")
+                           ->execute([$sId, -$sPts, "Estorno de bônus de venda pelo cancelamento do pedido #{$order['order_number']}", $orderId]);
+                    } catch (Exception $ePh) {
+                        try {
+                            $db->prepare("INSERT INTO points_history (user_id, points, type, description, order_id) VALUES (?, ?, 'sale', ?, ?)")
+                               ->execute([$sId, -$sPts, "Estorno de bônus de venda pelo cancelamento do pedido #{$order['order_number']}", $orderId]);
+                        } catch (Exception $ePh2) {}
+                    }
+                    updateUserEngagementLevel($db, $sId);
+                } catch (Exception $eSellerRev) {
+                    error_log("Aviso: Falha ao estornar bônus do vendedor {$sId}: " . $eSellerRev->getMessage());
+                }
             }
         }
 

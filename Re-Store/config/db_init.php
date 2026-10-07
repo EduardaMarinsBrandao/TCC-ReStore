@@ -92,9 +92,11 @@ function initializeDatabase() {
                 FOREIGN KEY (review_id) REFERENCES reviews(id) ON DELETE CASCADE
             )");
         } catch (Exception $e) {}
+        try {
+            $db->exec("ALTER TABLE points_history MODIFY COLUMN type ENUM('purchase', 'review', 'sale', 'redemption', 'reversal', 'sale_reversal') NOT NULL");
+        } catch (Exception $e) {}
     }
 
-    // Verifica se as tabelas principais já existem no banco conectado
     $tableExists = false;
     try {
         $check = $db->query("SELECT 1 FROM users LIMIT 1");
