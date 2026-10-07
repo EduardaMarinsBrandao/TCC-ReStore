@@ -25,7 +25,7 @@ $userOrders = $oStmt->fetchAll();
 foreach ($userOrders as $o) {
     $notifications[] = [
         'id' => 'order_' . $o['id'],
-        'title' => 'Compra realizada com sucesso! 📦',
+        'title' => 'Compra realizada com sucesso!',
         'message' => "Seu pedido #{$o['order_number']} de R$ " . number_format($o['total'], 2, ',', '.') . " foi confirmado. Você ganhou +{$o['points_earned']} Pontos Verdes!",
         'type' => 'success',
         'time' => $o['created_at']
@@ -44,7 +44,7 @@ $sales = $sStmt->fetchAll();
 foreach ($sales as $s) {
     $notifications[] = [
         'id' => 'sale_' . $s['id'],
-        'title' => 'Nova Venda Realizada! 🛒',
+        'title' => 'Nova Venda Realizada!',
         'message' => "Você vendeu {$s['quantity']}x '{$s['product_name']}' no pedido #{$s['order_number']}.",
         'type' => 'info',
         'time' => $s['created_at']
@@ -59,7 +59,7 @@ $unreadMsgs = $mStmt->fetchAll();
 foreach ($unreadMsgs as $m) {
     $notifications[] = [
         'id' => 'msg_' . $m['id'],
-        'title' => "Nova mensagem de {$m['sender_name']} 💬",
+        'title' => "Nova mensagem de {$m['sender_name']}",
         'message' => mb_strimwidth($m['message'], 0, 60, "..."),
         'type' => 'chat',
         'time' => $m['created_at']

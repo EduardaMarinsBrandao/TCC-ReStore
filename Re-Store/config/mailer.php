@@ -69,7 +69,7 @@ function sendVerificationEmail($toEmail, $toName, $verificationCode) {
 
         // Assunto e Conteúdo HTML
         $mail->isHTML(true);
-        $mail->Subject = '🌱 Seu Código de Recuperação de Senha - Re-Store';
+        $mail->Subject = 'Seu Código de Recuperação de Senha - Re-Store';
 
         $safeName = htmlspecialchars($displayName, ENT_QUOTES, 'UTF-8');
         $safeCode = htmlspecialchars($verificationCode, ENT_QUOTES, 'UTF-8');
@@ -85,7 +85,7 @@ function sendVerificationEmail($toEmail, $toName, $verificationCode) {
           <table align='center' border='0' cellpadding='0' cellspacing='0' width='100%' style='max-width: 520px; background-color: #ffffff; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.05); border: 1px solid #e2e8f0;'>
             <tr>
               <td style='padding: 32px 32px 16px 32px; text-align: center; background: linear-gradient(135deg, #0d9488 0%, #059669 100%);'>
-                <h1 style='margin: 0; color: #ffffff; font-size: 26px; font-weight: 800; letter-spacing: -0.5px;'>🌱 Re-Store</h1>
+                <h1 style='margin: 0; color: #ffffff; font-size: 26px; font-weight: 800; letter-spacing: -0.5px;'>Re-Store</h1>
                 <p style='margin: 6px 0 0 0; color: #ccfbf1; font-size: 13px; font-weight: 500;'>Marketplace Sustentável & Gamificação</p>
               </td>
             </tr>
@@ -199,7 +199,7 @@ function sendRegistrationVerificationEmail($toEmail, $toName, $verificationCode)
         $mail->addReplyTo($fromEmail, $fromName);
 
         $mail->isHTML(true);
-        $mail->Subject = '🌱 Confirme seu E-mail - Código de Cadastro Re-Store';
+        $mail->Subject = 'Confirme seu E-mail - Código de Cadastro Re-Store';
 
         $safeName = htmlspecialchars($displayName, ENT_QUOTES, 'UTF-8');
         $safeCode = htmlspecialchars($verificationCode, ENT_QUOTES, 'UTF-8');
@@ -215,7 +215,7 @@ function sendRegistrationVerificationEmail($toEmail, $toName, $verificationCode)
           <table align='center' border='0' cellpadding='0' cellspacing='0' width='100%' style='max-width: 520px; background-color: #ffffff; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.05); border: 1px solid #e2e8f0;'>
             <tr>
               <td style='padding: 32px 32px 16px 32px; text-align: center; background: linear-gradient(135deg, #0d9488 0%, #059669 100%);'>
-                <h1 style='margin: 0; color: #ffffff; font-size: 26px; font-weight: 800; letter-spacing: -0.5px;'>🌱 Re-Store</h1>
+                <h1 style='margin: 0; color: #ffffff; font-size: 26px; font-weight: 800; letter-spacing: -0.5px;'>Re-Store</h1>
                 <p style='margin: 6px 0 0 0; color: #ccfbf1; font-size: 13px; font-weight: 500;'>Marketplace Sustentável & Gamificação</p>
               </td>
             </tr>

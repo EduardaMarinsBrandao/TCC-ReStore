@@ -42,50 +42,50 @@ if (!defined('RESTORE_GAMIFICATION')) {
 
         // Progressão de Vendedor Sustentável
         if ($salesCount < 5) {
-            $tierName = 'Vendedor Semente 🌱';
+            $tierName = 'Vendedor Semente';
             $tierLevel = 1;
             $rate = 0.30; // 30% do valor vendido em pontos verdes
             $nextThreshold = 5;
             $salesNeeded = 5 - $salesCount;
             $progressPercent = min(100, round(($salesCount / 5) * 100));
             $milestoneBonus = ($salesCount === 0) ? 50 : 0;
-            $milestoneText = ($salesCount === 0) ? 'Primeira Venda Realizada! 🌱' : '';
+            $milestoneText = ($salesCount === 0) ? 'Primeira Venda Realizada!' : '';
             $nextTierBonus = 100;
-            $nextTierName = 'Vendedor Broto 🌿';
+            $nextTierName = 'Vendedor Broto';
             $badgeColor = 'emerald';
         } else if ($salesCount < 15) {
-            $tierName = 'Vendedor Broto 🌿';
+            $tierName = 'Vendedor Broto';
             $tierLevel = 2;
             $rate = 0.40; // 40%
             $nextThreshold = 15;
             $salesNeeded = 15 - $salesCount;
             $progressPercent = min(100, round((($salesCount - 5) / 10) * 100));
             $milestoneBonus = ($salesCount === 4) ? 100 : 0;
-            $milestoneText = ($salesCount === 4) ? 'Marco de 5 Vendas Conquistado! 🌿' : '';
+            $milestoneText = ($salesCount === 4) ? 'Marco de 5 Vendas Conquistado!' : '';
             $nextTierBonus = 150;
-            $nextTierName = 'Vendedor Florescer 🌸';
+            $nextTierName = 'Vendedor Florescer';
             $badgeColor = 'teal';
         } else if ($salesCount < 30) {
-            $tierName = 'Vendedor Florescer 🌸';
+            $tierName = 'Vendedor Florescer';
             $tierLevel = 3;
             $rate = 0.50; // 50%
             $nextThreshold = 30;
             $salesNeeded = 30 - $salesCount;
             $progressPercent = min(100, round((($salesCount - 15) / 15) * 100));
             $milestoneBonus = ($salesCount === 14) ? 150 : 0;
-            $milestoneText = ($salesCount === 14) ? 'Marco de 15 Vendas Conquistado! 🌸' : '';
+            $milestoneText = ($salesCount === 14) ? 'Marco de 15 Vendas Conquistado!' : '';
             $nextTierBonus = 300;
-            $nextTierName = 'Eco Master Seller 👑';
+            $nextTierName = 'Eco Master Seller';
             $badgeColor = 'purple';
         } else {
-            $tierName = 'Eco Master Seller 👑';
+            $tierName = 'Eco Master Seller';
             $tierLevel = 4;
             $rate = 0.60; // 60%
             $nextThreshold = null;
             $salesNeeded = 0;
             $progressPercent = 100;
             $milestoneBonus = ($salesCount === 29) ? 300 : 0;
-            $milestoneText = ($salesCount === 29) ? 'Marco de 30 Vendas Conquistado! 👑' : '';
+            $milestoneText = ($salesCount === 29) ? 'Marco de 30 Vendas Conquistado!' : '';
             $nextTierBonus = 0;
             $nextTierName = null;
             $badgeColor = 'amber';

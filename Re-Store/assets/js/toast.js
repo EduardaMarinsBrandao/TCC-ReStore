@@ -238,11 +238,20 @@ const ToastManager = {
     const toast = document.createElement('div');
     toast.className = `pointer-events-auto flex items-center justify-between p-4 rounded-2xl shadow-xl border text-sm font-semibold transition-all duration-300 transform translate-x-10 opacity-0 animate-toast-slide-in ${this.getTypeStyles(type)}`;
     
-    const icon = type === 'success' ? '🌱' : (type === 'error' ? '⚠️' : (type === 'warning' ? '🔔' : 'ℹ️'));
+    let svgIcon = '';
+    if (type === 'success') {
+      svgIcon = '<svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>';
+    } else if (type === 'error') {
+      svgIcon = '<svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>';
+    } else if (type === 'warning') {
+      svgIcon = '<svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>';
+    } else {
+      svgIcon = '<svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 16v-4m0-4h.01"/></svg>';
+    }
 
     toast.innerHTML = `
       <div class="flex items-center gap-3">
-        <span class="text-base">${icon}</span>
+        <span class="inline-flex items-center justify-center">${svgIcon}</span>
         <span>${message}</span>
       </div>
       <button onclick="this.parentElement.remove()" class="ml-4 text-xs font-bold opacity-70 hover:opacity-100 cursor-pointer">✕</button>

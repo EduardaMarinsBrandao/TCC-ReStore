@@ -309,7 +309,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             echo json_encode([
                 'success' => true,
-                'message' => "Conta criada com sucesso via Google! Você ganhou +{$initialPoints} Pontos Verdes 🎉",
+                'message' => "Conta criada com sucesso via Google! Você ganhou +{$initialPoints} Pontos Verdes.",
                 'user' => $newUser
             ]);
             exit;
@@ -672,7 +672,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         echo json_encode([
             'success' => true,
-            'message' => "Conta criada e e-mail validado com sucesso! Você ganhou +{$initialPoints} Pontos Verdes 🎉",
+            'message' => "Conta criada e e-mail validado com sucesso! Você ganhou +{$initialPoints} Pontos Verdes.",
             'user' => $newUser
         ]);
 

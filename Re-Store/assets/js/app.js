@@ -720,7 +720,9 @@ const App = {
 
   renderProductCardHTML(p) {
     const isFav = Array.isArray(this.favoriteIds) ? this.favoriteIds.includes(p.id) : false;
-    const heartIcon = isFav ? '❤️' : '🤍';
+    const heartSvg = isFav 
+      ? '<svg class="w-4 h-4 text-red-500 fill-red-500" viewBox="0 0 24 24"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>'
+      : '<svg class="w-4 h-4 text-gray-400 group-hover:text-red-500 transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>';
     const user = typeof AuthManager !== 'undefined' ? AuthManager.currentUser : null;
     const isOwner = user && parseInt(user.id) === parseInt(p.seller_id);
 
@@ -739,7 +741,7 @@ const App = {
           </div>
           <button type="button" id="fav-btn-${p.id}" onclick="event.stopPropagation(); App.toggleFavorite(${p.id}, this)" title="${isFav ? 'Remover dos Favoritos' : 'Favoritar Produto'}" 
             class="absolute top-2 right-2 p-2 rounded-full transition shadow backdrop-blur cursor-pointer ${isFav ? 'bg-red-50 dark:bg-red-950/60 border border-red-200' : 'bg-white/80 dark:bg-gray-800/80 text-gray-400 hover:text-red-500'}">
-            ${heartIcon}
+            ${heartSvg}
           </button>
           <div class="absolute bottom-2 right-2">
             <span class="badge-points">+${p.points} pts</span>
@@ -749,7 +751,10 @@ const App = {
           <div>
             <div class="flex items-center justify-between text-xs text-teal-600 font-semibold mb-1">
               <span>${p.category}</span>
-              <span class="text-gray-400 font-normal">📍 ${p.location || 'São Paulo, SP'}</span>
+              <span class="text-gray-400 font-normal inline-flex items-center gap-1">
+                <svg class="w-3 h-3 text-teal-600 inline-block flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 21s-7-4.5-7-10a7 7 0 1 1 14 0c0 5.5-7 10-7 10z"/><circle cx="12" cy="10" r="2.5"/></svg>
+                ${p.location || 'São Paulo, SP'}
+              </span>
             </div>
             <h3 onclick="App.navigateTo('product-detail', { productId: ${p.id} })" class="font-bold text-gray-900 dark:text-white text-base hover:text-teal-600 cursor-pointer line-clamp-1">
               ${p.name}
@@ -765,12 +770,14 @@ const App = {
                 </div>
               </div>
               ${isOwner ? `
-                <button type="button" onclick="App.navigateTo('product-detail', { productId: ${p.id} })" class="btn-outline text-xs py-1.5 px-3 cursor-pointer text-teal-600 border-teal-500 hover:bg-teal-50 dark:hover:bg-teal-950/40" title="Você é o anunciante deste produto">
-                  <span>✏️</span> Seu Anúncio
+                <button type="button" onclick="App.navigateTo('product-detail', { productId: ${p.id} })" class="btn-outline text-xs py-1.5 px-3 cursor-pointer text-teal-600 border-teal-500 hover:bg-teal-50 dark:hover:bg-teal-950/40 inline-flex items-center gap-1.5" title="Você é o anunciante deste produto">
+                  <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                  <span>Seu Anúncio</span>
                 </button>
               ` : `
-                <button type="button" onclick="App.addToCartDirect(${p.id}, this)" class="btn-primary text-xs py-1.5 px-3 cursor-pointer">
-                  <span>🛒</span> Adicionar
+                <button type="button" onclick="App.addToCartDirect(${p.id}, this)" class="btn-primary text-xs py-1.5 px-3 cursor-pointer inline-flex items-center gap-1.5">
+                  <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>
+                  <span>Adicionar</span>
                 </button>
               `}
             </div>
@@ -844,8 +851,9 @@ const App = {
             <div>
               <div class="aspect-square product-image-container rounded-2xl overflow-hidden mb-4 shadow-md relative group">
                 <img id="main-product-img" src="${images[0].image_url}" class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.02] cursor-pointer" alt="${(p.name || '').replace(/"/g, '&quot;')}" onclick="App.openImageModal(this.src, '${(p.name || '').replace(/'/g, "\\'")}')" title="Clique para ampliar a foto do produto">
-                <div class="absolute bottom-2 right-2 px-2.5 py-1 rounded-lg bg-black/60 text-white text-[11px] font-medium backdrop-blur flex items-center gap-1 opacity-0 group-hover:opacity-100 transition pointer-events-none">
-                  <span>🔍 Ampliar</span>
+                <div class="absolute bottom-2 right-2 px-2.5 py-1 rounded-lg bg-black/60 text-white text-[11px] font-medium backdrop-blur flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition pointer-events-none">
+                  <i data-lucide="zoom-in" class="w-3.5 h-3.5"></i>
+                  <span>Ampliar</span>
                 </div>
               </div>
               <div class="flex gap-3 overflow-x-auto no-scrollbar pb-1">
@@ -875,13 +883,16 @@ const App = {
                   <div class="text-2xl font-black text-teal-600 dark:text-teal-400">
                     R$ ${parseFloat(p.price).toFixed(2).replace('.', ',')}
                   </div>
-                  <span class="badge-points text-xs inline-flex items-center gap-1">
-                  <i data-lucide="sprout" class="w-4 h-4 pointer-events-none"></i> Recompensa +${p.points} Pontos</span>
-
+                  <span class="badge-points text-xs inline-flex items-center gap-1.5">
+                    <i data-lucide="sprout" class="w-4 h-4 pointer-events-none"></i>
+                    <span>Recompensa +${p.points} Pontos</span>
+                  </span>
                 </div>
 
-                <div class="p-3 bg-emerald-50 dark:bg-emerald-950/40 rounded-xl mb-4 border border-emerald-200 dark:border-emerald-900 flex items-center gap-3">
-                  <span class="text-2xl">🌱</span>
+                <div class="p-3.5 bg-emerald-50 dark:bg-emerald-950/40 rounded-2xl mb-4 border border-emerald-200 dark:border-emerald-900 flex items-center gap-3.5">
+                  <div class="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-300 flex items-center justify-center flex-shrink-0">
+                    <i data-lucide="leaf" class="w-5 h-5"></i>
+                  </div>
                   <div>
                     <div class="font-bold text-xs text-emerald-800 dark:text-emerald-300">Impacto Ambiental Positivo</div>
                     <div class="text-[11px] text-emerald-700 dark:text-emerald-400">Ao optar por este item reutilizável, você evita aproximadamente 2,5 kg de resíduos e CO₂ na natureza.</div>
@@ -892,7 +903,7 @@ const App = {
                   <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Descrição Ecológica</h3>
                   <p class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-line leading-relaxed">${p.description}</p>
                   ${p.material ? `<div class="mt-3 text-xs text-gray-500"><strong>Material Sustentável:</strong> ${p.material}</div>` : ''}
-                  <div class="mt-2 text-xs text-gray-500"><strong>📍 Local de venda:</strong> ${p.location || [p.seller_city, p.seller_state].filter(Boolean).join(', ') || 'Não informado'}</div>
+                  <div class="mt-2 text-xs text-gray-500 flex items-center gap-1"><strong class="text-gray-700 dark:text-gray-300 inline-flex items-center gap-1"><i data-lucide="map-pin" class="w-3.5 h-3.5 text-teal-600"></i> Local de venda:</strong> ${p.location || [p.seller_city, p.seller_state].filter(Boolean).join(', ') || 'Não informado'}</div>
                   <div class="mt-2 text-xs text-gray-500"><strong>Disponibilidade:</strong> ${p.stock > 0 ? p.stock + ' un. em estoque' : 'Esgotado'}</div>
                 </div>
 
@@ -905,7 +916,7 @@ const App = {
                         ${p.seller_name}
                         ${p.is_verified_business ? '<span class="text-teal-500 text-xs" title="Empresa Verificada">✓</span>' : ''}
                       </div>
-                      <div class="text-xs text-gray-500">Reputação: ★ 4.9 (Vendedor Confiável)</div>
+                      <div class="text-xs text-gray-500 flex items-center gap-1"><span>Reputação:</span> <span class="text-amber-500 font-bold inline-flex items-center gap-0.5"><i data-lucide="star" class="w-3 h-3 fill-amber-400 text-amber-400"></i> 4.9</span> <span>(Vendedor Confiável)</span></div>
                     </div>
                   </div>
                   ${user && parseInt(user.id, 10) === parseInt(p.seller_id, 10) ? '' : `
@@ -927,7 +938,9 @@ const App = {
               ${user && parseInt(user.id) === parseInt(p.seller_id) ? `
                 <div class="p-4 bg-teal-50 dark:bg-teal-950/40 border-2 border-teal-300 dark:border-teal-800 rounded-2xl space-y-3">
                   <div class="flex items-center gap-3">
-                    <span class="text-2xl">🔒</span>
+                    <div class="w-10 h-10 rounded-xl bg-teal-100 dark:bg-teal-900/60 text-teal-700 dark:text-teal-300 flex items-center justify-center flex-shrink-0">
+                      <i data-lucide="shield-alert" class="w-5 h-5"></i>
+                    </div>
                     <div>
                       <div class="font-bold text-sm text-teal-950 dark:text-teal-200">Você é o anunciante deste produto</div>
                       <div class="text-xs text-teal-700 dark:text-teal-400">Pela política do Re-Store, você não pode comprar seus próprios produtos.</div>
@@ -946,15 +959,16 @@ const App = {
                 </div>
               ` : `
                 <div class="flex gap-4">
-                  <button type="button" onclick="App.addToCartAndCheckout(${p.id})" class="btn-secondary flex-1 py-3 text-base cursor-pointer">
-                    ⚡ Comprar Agora
+                  <button type="button" onclick="App.addToCartAndCheckout(${p.id})" class="btn-secondary flex-1 py-3 text-base cursor-pointer inline-flex items-center justify-center gap-2">
+                    <i data-lucide="zap" class="w-5 h-5"></i>
+                    <span>Comprar Agora</span>
                   </button>
                   <button 
                     type="button" 
                     onclick="App.addToCartDirect(${p.id}, this)" 
                     class="btn-primary flex-1 py-3 text-base cursor-pointer flex items-center justify-center gap-2"
                   >
-                    <i data-lucide="shopping-cart" class="w-8 h-8 pointer-events-none"></i>
+                    <i data-lucide="shopping-cart" class="w-5 h-5 pointer-events-none"></i>
                     <span>Adicionar ao Carrinho</span>
                   </button>
                 </div>
@@ -978,8 +992,11 @@ const App = {
                 </button>
               </div>
             ` : isSeller ? `
-              <div class="mb-8 p-4 bg-amber-50 dark:bg-amber-950/40 rounded-2xl border border-amber-200 dark:border-amber-900 text-xs text-amber-800 dark:text-amber-300 flex items-center gap-2">
-                <span>📢 Você é o anunciante deste produto. Vendedores não podem avaliar os próprios anúncios.</span>
+              <div class="mb-8 p-4 bg-amber-50 dark:bg-amber-950/40 rounded-2xl border border-amber-200 dark:border-amber-900 text-xs text-amber-800 dark:text-amber-300 flex items-center gap-3">
+                <div class="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 flex items-center justify-center flex-shrink-0">
+                  <i data-lucide="info" class="w-4 h-4"></i>
+                </div>
+                <span>Você é o anunciante deste produto. Vendedores não podem avaliar os próprios anúncios.</span>
               </div>
             ` : myReview ? `
               <!-- USUÁRIO JÁ AVALIOU: EXIBE SUA AVALIAÇÃO COM BOTÃO DE EDIÇÃO -->
@@ -1062,8 +1079,9 @@ const App = {
 
                   <!-- Adicionar Mais Fotos (até 3 no total) -->
                   <div>
-                    <label class="text-[11px] font-semibold text-gray-600 dark:text-gray-400 block mb-1">
-                      📸 Adicionar novas fotos (máx. 3 no total):
+                    <label class="text-[11px] font-semibold text-gray-600 dark:text-gray-400 block mb-1 inline-flex items-center gap-1.5">
+                      <i data-lucide="camera" class="w-3.5 h-3.5 text-teal-600"></i>
+                      <span>Adicionar novas fotos (máx. 3 no total):</span>
                     </label>
                     <input 
                       type="file" 
@@ -1104,7 +1122,7 @@ const App = {
                       </span>
                       <h3 class="text-sm font-bold text-gray-900 dark:text-white">Avaliar Produto Adquirido</h3>
                     </div>
-                    <p class="text-[11px] text-gray-500 mt-0.5">Sua avaliação ajuda outros membros da comunidade a comprar de forma consciente 🌱</p>
+                    <p class="text-[11px] text-gray-500 mt-0.5">Sua avaliação ajuda outros membros da comunidade a comprar de forma consciente.</p>
                   </div>
                   <span class="text-xs font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800">
                     +20 Pontos Verdes
@@ -1137,8 +1155,9 @@ const App = {
 
                   <!-- Anexo de Fotos (Até 3 fotos) -->
                   <div>
-                    <label class="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                      📸 Fotos do produto recebido (opcional, máximo 3 fotos):
+                    <label class="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1 inline-flex items-center gap-1.5">
+                      <i data-lucide="camera" class="w-3.5 h-3.5 text-teal-600"></i>
+                      <span>Fotos do produto recebido (opcional, máximo 3 fotos):</span>
                     </label>
                     <input 
                       type="file" 
@@ -1166,8 +1185,10 @@ const App = {
             ` : `
               <!-- NÃO COMPROU O ITEM: AVISO EXCLUSIVO -->
               <div class="mb-8 p-5 bg-gray-50 dark:bg-gray-800/60 rounded-2xl border border-gray-200 dark:border-gray-700 space-y-2">
-                <div class="flex items-center gap-2 font-bold text-sm text-gray-800 dark:text-gray-200">
-                  <span class="text-teal-600 text-lg">🔒</span>
+                <div class="flex items-center gap-2.5 font-bold text-sm text-gray-800 dark:text-gray-200">
+                  <div class="w-7 h-7 rounded-lg bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300 flex items-center justify-center flex-shrink-0">
+                    <i data-lucide="lock" class="w-4 h-4"></i>
+                  </div>
                   <span>Avaliação Exclusiva para Compradores Verificados</span>
                 </div>
                 <p class="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
@@ -1377,7 +1398,9 @@ const App = {
     if (cart.length === 0) {
       container.innerHTML = `
         <div class="text-center py-16 animate-fade-in max-w-md mx-auto">
-          <div class="text-6xl mb-4">🛒</div>
+          <div class="w-20 h-20 mx-auto mb-4 rounded-3xl bg-teal-50 dark:bg-teal-950/50 text-teal-600 dark:text-teal-400 flex items-center justify-center shadow-inner">
+            <i data-lucide="shopping-bag" class="w-10 h-10"></i>
+          </div>
           <h2 class="text-2xl font-bold mb-2">Seu carrinho está vazio</h2>
           <p class="text-gray-500 mb-6">Explore nossos produtos sustentáveis e acumule pontos verdes.</p>
           <button type="button" onclick="App.navigateTo('search')" class="btn-primary w-full py-3 cursor-pointer">Explorar Produtos</button>
@@ -1398,7 +1421,9 @@ const App = {
         ${hasOwnItems ? `
           <div class="mb-6 p-4 bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-300 dark:border-amber-700 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm">
             <div class="flex items-center gap-3">
-              <span class="text-3xl">⚠️</span>
+              <div class="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-900/50 text-amber-600 dark:text-amber-400 flex items-center justify-center flex-shrink-0">
+                <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+              </div>
               <div>
                 <div class="font-bold text-sm text-amber-900 dark:text-amber-200">Atenção: Seu carrinho contém produtos anunciados por você</div>
                 <div class="text-xs text-amber-700 dark:text-amber-400 mt-0.5">Pelas diretrizes do Re-Store, não é permitido comprar seus próprios produtos. Remova-os para continuar.</div>
@@ -1422,8 +1447,8 @@ const App = {
                     <h3 onclick="App.navigateTo('product-detail', { productId: ${item.product_id} })" class="font-bold text-gray-900 dark:text-white text-sm line-clamp-1 hover:text-teal-600 cursor-pointer" title="Ver Detalhes">${item.name}</h3>
                     <div class="text-xs text-gray-500">Vendedor: ${item.seller_name}</div>
                     ${isItemOwner ? `
-                      <span class="inline-block mt-1 text-[10px] font-bold text-amber-800 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/60 px-2 py-0.5 rounded-full border border-amber-300 dark:border-amber-700">
-                        🚫 Seu Próprio Anúncio (Remoção Obrigatória)
+                      <span class="inline-flex items-center gap-1 mt-1 text-[10px] font-bold text-amber-800 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/60 px-2 py-0.5 rounded-full border border-amber-300 dark:border-amber-700">
+                        <i data-lucide="ban" class="w-3 h-3 inline"></i> Seu Próprio Anúncio (Remoção Obrigatória)
                       </span>
                     ` : ''}
                     <div class="text-sm font-extrabold text-teal-600 mt-1">R$ ${item.price.toFixed(2).replace('.', ',')}</div>
@@ -1475,8 +1500,9 @@ const App = {
               <div class="mb-3 p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl text-xs text-amber-800 dark:text-amber-300">
                 Remova seus próprios produtos para liberar o botão de finalização de compra.
               </div>
-              <button type="button" disabled class="btn-primary w-full py-3 text-base opacity-50 cursor-not-allowed">
-                Checkout Bloqueado 🔒
+              <button type="button" disabled class="btn-primary w-full py-3 text-base opacity-50 cursor-not-allowed inline-flex items-center justify-center gap-2">
+                <i data-lucide="lock" class="w-4 h-4"></i>
+                <span>Checkout Bloqueado</span>
               </button>
             ` : `
               <button type="button" onclick="App.navigateTo('checkout')" class="btn-primary w-full py-3 text-base cursor-pointer">
@@ -1512,7 +1538,9 @@ const App = {
     if (cart.some(item => parseInt(item.seller_id) === parseInt(user.id))) {
       container.innerHTML = `
         <div class="animate-fade-in max-w-xl mx-auto text-center py-16">
-          <div class="text-5xl mb-4">⚠️</div>
+          <div class="w-16 h-16 mx-auto mb-4 rounded-2xl bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+            <i data-lucide="alert-triangle" class="w-8 h-8"></i>
+          </div>
           <h2 class="text-2xl font-bold mb-2">Produtos Próprios no Carrinho</h2>
           <p class="text-sm text-gray-500 dark:text-gray-400 mb-6">
             Você não pode finalizar uma compra contendo itens anunciados por você mesmo. Por favor, retorne ao carrinho e remova os seus produtos.
@@ -1527,6 +1555,9 @@ const App = {
           </div>
         </div>
       `;
+      if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+      }
       return;
     }
 
@@ -1594,7 +1625,9 @@ const App = {
               ${this.appliedCouponCode && appliedCoupon ? `
                 <div class="p-3.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 rounded-2xl flex items-center justify-between mb-3">
                   <div class="flex items-center gap-3">
-                    <span class="text-2xl">🎟️</span>
+                    <div class="w-9 h-9 rounded-xl bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 flex items-center justify-center flex-shrink-0">
+                      <i data-lucide="ticket" class="w-5 h-5"></i>
+                    </div>
                     <div>
                       <div class="text-xs font-bold text-emerald-800 dark:text-emerald-200">
                         Cupom Ativo: <span class="font-mono bg-white dark:bg-gray-800 px-2 py-0.5 rounded border border-emerald-300 dark:border-emerald-700 font-extrabold">${appliedCoupon.code}</span> (${appliedCoupon.discount_type} OFF)
@@ -1604,8 +1637,9 @@ const App = {
                       </div>
                     </div>
                   </div>
-                  <button type="button" onclick="App.removeCouponCheckout()" class="text-xs text-red-500 hover:text-red-700 font-bold px-2 py-1 cursor-pointer">
-                    Remover ✕
+                  <button type="button" onclick="App.removeCouponCheckout()" class="text-xs text-red-500 hover:text-red-700 font-bold px-2 py-1 cursor-pointer inline-flex items-center gap-1">
+                    <i data-lucide="x" class="w-3.5 h-3.5"></i>
+                    <span>Remover</span>
                   </button>
                 </div>
               ` : `
@@ -1624,8 +1658,9 @@ const App = {
                     ${availableCoupons.map(c => {
       const isSelected = this.appliedCouponCode.toUpperCase() === c.code.toUpperCase();
       return `
-                        <button type="button" onclick="App.applyCouponDirect('${c.code}')" class="text-xs font-mono ${isSelected ? 'bg-teal-600 text-white font-bold shadow' : 'bg-teal-50 dark:bg-teal-950 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 hover:bg-teal-100'} px-3 py-1 rounded-full cursor-pointer transition">
-                          🏷️ ${c.code} (${c.discount_type}) ${isSelected ? '✓' : ''}
+                        <button type="button" onclick="App.applyCouponDirect('${c.code}')" class="text-xs font-mono ${isSelected ? 'bg-teal-600 text-white font-bold shadow' : 'bg-teal-50 dark:bg-teal-950 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 hover:bg-teal-100'} px-3 py-1 rounded-full cursor-pointer transition inline-flex items-center gap-1.5">
+                          <i data-lucide="tag" class="w-3.5 h-3.5"></i>
+                          <span>${c.code} (${c.discount_type}) ${isSelected ? '✓' : ''}</span>
                         </button>
                       `;
 
@@ -1642,7 +1677,7 @@ const App = {
                 <label class="flex items-center gap-3 p-3 border rounded-xl cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700">
                   <input type="radio" name="payment_method" value="pix" checked onchange="App.switchPaymentTab('pix')" class="text-teal-600">
                   <div>
-                    <div class="font-bold text-sm">⚡ PIX Simulado (Confirmação Instantânea)</div>
+                    <div class="font-bold text-sm flex items-center gap-1.5"><i data-lucide="zap" class="w-4 h-4 text-emerald-500"></i> PIX Simulado (Confirmação Instantânea)</div>
                     <div class="text-xs text-gray-500">Sem taxas de transação. Pontos creditados na hora.</div>
                   </div>
                 </label>
@@ -1663,7 +1698,7 @@ const App = {
                 <label class="flex items-center gap-3 p-3 border rounded-xl cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700">
                   <input type="radio" name="payment_method" value="credit" onchange="App.switchPaymentTab('credit')" class="text-teal-600">
                   <div>
-                    <div class="font-bold text-sm">💳 Cartão de Crédito</div>
+                    <div class="font-bold text-sm flex items-center gap-1.5"><i data-lucide="credit-card" class="w-4 h-4 text-teal-500"></i> Cartão de Crédito</div>
                     <div class="text-xs text-gray-500">Preencha os dados do cartão fictício.</div>
                   </div>
                 </label>
@@ -1700,7 +1735,7 @@ const App = {
                 <label class="flex items-center gap-3 p-3 border rounded-xl cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700">
                   <input type="radio" name="payment_method" value="boleto" onchange="App.switchPaymentTab('boleto')" class="text-teal-600">
                   <div>
-                    <div class="font-bold text-sm">📄 Boleto Ecológico Simulado</div>
+                    <div class="font-bold text-sm flex items-center gap-1.5"><i data-lucide="file-text" class="w-4 h-4 text-teal-500"></i> Boleto Ecológico Simulado</div>
                     <div class="text-xs text-gray-500">Gera código digital sem desperdício de papel.</div>
                   </div>
                 </label>
@@ -1901,7 +1936,7 @@ const App = {
       container.innerHTML = `
         <div class="max-w-4xl mx-auto space-y-6 animate-fade-in">
           <div class="flex items-center justify-between">
-            <h1 class="text-2xl font-extrabold">Meus Pedidos 📦</h1>
+            <h1 class="text-2xl font-extrabold">Meus Pedidos</h1>
             <span class="text-xs text-gray-500">Histórico de compras sustentáveis</span>
           </div>
 
@@ -1961,7 +1996,7 @@ const App = {
                   <div class="text-xs text-gray-500 space-y-1">
                     ${o.coupon_code ? `
                       <div class="text-teal-600 dark:text-teal-400 font-semibold flex items-center gap-1.5">
-                        <span>🏷️ Cupom Aplicado:</span>
+                        <span class="inline-flex items-center gap-1"><i data-lucide="tag" class="w-3.5 h-3.5"></i> Cupom Aplicado:</span>
                         <span class="font-mono bg-teal-50 dark:bg-teal-950 px-2 py-0.5 rounded border border-teal-200 dark:border-teal-800 font-bold">${o.coupon_code}</span>
                         ${parseFloat(o.discount_amount) > 0 ? `<span class="text-emerald-600">(- R$ ${parseFloat(o.discount_amount).toFixed(2).replace('.', ',')})</span>` : ''}
                       </div>
@@ -1984,7 +2019,9 @@ const App = {
             `;
       }).join('') : `
             <div class="text-center py-16 bg-white dark:bg-gray-800 rounded-3xl border dark:border-gray-800">
-              <div class="text-5xl mb-3">📦</div>
+              <div class="w-16 h-16 mx-auto mb-3 rounded-2xl bg-teal-50 dark:bg-teal-950/50 text-teal-600 dark:text-teal-400 flex items-center justify-center">
+                <i data-lucide="package" class="w-8 h-8"></i>
+              </div>
               <h2 class="text-lg font-bold mb-1">Você ainda não fez nenhum pedido</h2>
               <p class="text-xs text-gray-500 mb-4">Realize compras sustentáveis e acumule Pontos Verdes!</p>
               <button type="button" onclick="App.navigateTo('search')" class="btn-primary text-xs py-2 px-4 cursor-pointer">Explorar Loja</button>
@@ -2015,7 +2052,7 @@ const App = {
 
     container.innerHTML = `
       <div class="max-w-3xl mx-auto space-y-6 animate-fade-in">
-        <h1 class="text-2xl font-extrabold mb-4">Central de Notificações 🔔</h1>
+        <h1 class="text-2xl font-extrabold mb-4">Central de Notificações</h1>
 
         <div class="p-6 rounded-3xl border dark:border-gray-800 bg-white dark:bg-gray-800 space-y-4 shadow-sm">
           <h2 class="font-bold text-base mb-3">Últimos Alertas</h2>
@@ -2112,20 +2149,20 @@ const App = {
       const discounts = dataDiscounts.discounts || [];
       const history = dataHistory.history || [];
       const sTier = dataHistory.seller_tier || {
-        tier_name: 'Vendedor Semente 🌱',
+        tier_name: 'Vendedor Semente',
         rate_formatted: '0,30 pts / R$',
         sales_count: 0,
         progress_percent: 0,
         sales_to_next_tier: 5,
-        next_tier_name: 'Vendedor Broto 🌿',
+        next_tier_name: 'Vendedor Broto',
         next_tier_bonus: 100,
         total_seller_points: 0
       };
 
-      let levelName = 'Iniciante 🌱';
-      if (points >= 3000) levelName = 'Eco Master 👑';
-      else if (points >= 1500) levelName = 'Eco Warrior ⚔️';
-      else if (points >= 500) levelName = 'Sustentável 🌿';
+      let levelName = 'Iniciante';
+      if (points >= 3000) levelName = 'Eco Master';
+      else if (points >= 1500) levelName = 'Eco Warrior';
+      else if (points >= 500) levelName = 'Sustentável';
 
       container.innerHTML = `
         <div class="max-w-4xl mx-auto space-y-8 animate-fade-in">
@@ -2136,7 +2173,10 @@ const App = {
                 <span class="bg-white/20 px-3 py-1 rounded-full text-xs font-bold">Nível Geral: ${levelName}</span>
                 <span class="bg-emerald-400/20 text-emerald-100 border border-emerald-300/30 px-3 py-1 rounded-full text-xs font-bold">Vendedor: ${sTier.tier_name}</span>
               </div>
-              <div class="text-4xl sm:text-5xl font-extrabold">${points} Pontos Verdes 🌱</div>
+              <div class="text-4xl sm:text-5xl font-extrabold flex items-center gap-2.5">
+                <span>${points} Pontos Verdes</span>
+                <i data-lucide="sprout" class="w-10 h-10 inline text-emerald-300 pointer-events-none"></i>
+              </div>
               <div class="text-xs text-emerald-100 mt-2 max-w-lg leading-relaxed">
                 Participe da economia circular! Ganhe pontos comprando, vendendo produtos sustentáveis e avaliando compras. Troque seus pontos por cupons reais de desconto.
               </div>
@@ -2155,8 +2195,10 @@ const App = {
           <div class="p-6 rounded-3xl border border-teal-200 dark:border-teal-900 bg-teal-50/60 dark:bg-teal-950/20 shadow-sm space-y-4">
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <div class="flex items-center gap-2">
-                  <span class="text-xl">🏪</span>
+                <div class="flex items-center gap-3">
+                  <div class="w-9 h-9 rounded-xl bg-teal-100 dark:bg-teal-900/60 text-teal-700 dark:text-teal-300 flex items-center justify-center flex-shrink-0">
+                    <i data-lucide="store" class="w-5 h-5"></i>
+                  </div>
                   <h3 class="font-bold text-base text-teal-950 dark:text-teal-200">Programa de Incentivo ao Vendedor Sustentável</h3>
                 </div>
                 <p class="text-xs text-teal-700 dark:text-teal-400 mt-1">
@@ -2185,7 +2227,7 @@ const App = {
               </div>
               <div class="bg-white dark:bg-gray-800 p-3 rounded-2xl border dark:border-gray-700">
                 <div class="text-[11px] text-gray-400">Próximo Nível</div>
-                <div class="text-sm font-bold text-purple-600 dark:text-purple-400 mt-0.5">${sTier.next_tier_name || 'Nível Máximo 👑'}</div>
+                <div class="text-sm font-bold text-purple-600 dark:text-purple-400 mt-0.5">${sTier.next_tier_name || 'Nível Máximo'}</div>
               </div>
             </div>
 
@@ -2193,7 +2235,7 @@ const App = {
             <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl border dark:border-gray-700 space-y-2">
               <div class="flex justify-between items-center text-xs font-semibold">
                 <span class="text-gray-700 dark:text-gray-300">Progresso para o próximo Marco de Vendas</span>
-                <span class="text-teal-600 font-bold">${sTier.sales_to_next_tier > 0 ? `Faltam ${sTier.sales_to_next_tier} venda(s)` : 'Meta Máxima Atingida 👑'}</span>
+                <span class="text-teal-600 font-bold">${sTier.sales_to_next_tier > 0 ? `Faltam ${sTier.sales_to_next_tier} venda(s)` : 'Meta Máxima Atingida'}</span>
               </div>
               <div class="w-full bg-gray-100 dark:bg-gray-700 h-2.5 rounded-full overflow-hidden">
                 <div class="bg-gradient-to-r from-teal-500 to-emerald-500 h-full rounded-full transition-all duration-500" style="width: ${sTier.progress_percent}%"></div>
@@ -2201,7 +2243,7 @@ const App = {
               ${sTier.next_tier_bonus > 0 ? `
                 <div class="text-[11px] text-gray-500 dark:text-gray-400 flex items-center justify-between">
                   <span>Próximo nível: <strong>${sTier.next_tier_name}</strong></span>
-                  <span class="text-emerald-600 font-bold">Bônus de Incentivo: +${sTier.next_tier_bonus} Pontos 🎁</span>
+                  <span class="text-emerald-600 font-bold">Bônus de Incentivo: +${sTier.next_tier_bonus} Pontos</span>
                 </div>
               ` : `
                 <div class="text-[11px] text-emerald-600 font-semibold">
@@ -2214,33 +2256,41 @@ const App = {
           <!-- REGRAS DA ECONOMIA JUSTA DE PONTOS -->
           <div class="p-6 rounded-3xl border dark:border-gray-800 bg-white dark:bg-gray-800 shadow-sm space-y-4">
             <h2 class="text-lg font-bold flex items-center gap-2">
-              <span>⚖️</span>
+              <i data-lucide="scale" class="w-5 h-5 text-teal-600"></i>
               <span>Como Funciona o Sistema de Pontos Justo</span>
             </h2>
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div class="p-4 rounded-2xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800">
-                <div class="text-2xl mb-1">🛍️</div>
+                <div class="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-300 flex items-center justify-center mb-2">
+                  <i data-lucide="shopping-bag" class="w-5 h-5"></i>
+                </div>
                 <div class="font-bold text-xs text-emerald-900 dark:text-emerald-200">Comprando</div>
                 <div class="text-sm font-extrabold text-emerald-600 mt-1">1 pt / R$ 1,00</div>
                 <p class="text-[11px] text-emerald-800/80 dark:text-emerald-400 mt-1">A cada R$ 1,00 gasto em compras ecológicas você ganha 1 Ponto Verde direto.</p>
               </div>
 
               <div class="p-4 rounded-2xl bg-teal-50/60 dark:bg-teal-950/20 border border-teal-200 dark:border-teal-800">
-                <div class="text-2xl mb-1">🏪</div>
+                <div class="w-10 h-10 rounded-xl bg-teal-100 dark:bg-teal-900/50 text-teal-600 dark:text-teal-300 flex items-center justify-center mb-2">
+                  <i data-lucide="store" class="w-5 h-5"></i>
+                </div>
                 <div class="font-bold text-xs text-teal-900 dark:text-teal-200">Vendendo</div>
                 <div class="text-sm font-extrabold text-teal-600 mt-1">0,30 a 0,60 pts / R$</div>
                 <p class="text-[11px] text-teal-800/80 dark:text-teal-400 mt-1">Bônus por venda escalonado por nível + bonificações de até +300 pts nos marcos.</p>
               </div>
 
               <div class="p-4 rounded-2xl bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800">
-                <div class="text-2xl mb-1">✍️</div>
+                <div class="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-300 flex items-center justify-center mb-2">
+                  <i data-lucide="star" class="w-5 h-5"></i>
+                </div>
                 <div class="font-bold text-xs text-blue-900 dark:text-blue-200">Avaliando</div>
                 <div class="text-sm font-extrabold text-blue-600 mt-1">+30 Pontos Verdes</div>
                 <p class="text-[11px] text-blue-800/80 dark:text-blue-400 mt-1">Deixe sua opinião sincera sobre itens recebidos para ajudar a comunidade.</p>
               </div>
 
               <div class="p-4 rounded-2xl bg-purple-50/60 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800">
-                <div class="text-2xl mb-1">🎁</div>
+                <div class="w-10 h-10 rounded-xl bg-purple-100 dark:bg-purple-900/50 text-purple-600 dark:text-purple-300 flex items-center justify-center mb-2">
+                  <i data-lucide="gift" class="w-5 h-5"></i>
+                </div>
                 <div class="font-bold text-xs text-purple-900 dark:text-purple-200">Boas-Vindas</div>
                 <div class="text-sm font-extrabold text-purple-600 mt-1">+150 Pontos Verdes</div>
                 <p class="text-[11px] text-purple-800/80 dark:text-purple-400 mt-1">Pontos iniciais liberados ao confirmar e validar sua conta de e-mail.</p>
@@ -2251,7 +2301,7 @@ const App = {
           <!-- RESGATE DE CUPONS DE DESCONTO -->
           <div>
             <div class="flex items-center justify-between mb-4">
-              <h2 class="text-xl font-bold">Resgatar Cupons de Desconto 🎟️</h2>
+              <h2 class="text-xl font-bold">Resgatar Cupons de Desconto</h2>
               <span class="text-xs text-gray-500">Seu saldo: <strong>${points} pts</strong></span>
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -2264,7 +2314,7 @@ const App = {
               ].map(c => `
                 <div class="p-4 rounded-2xl border dark:border-gray-800 bg-white dark:bg-gray-800 flex flex-col justify-between shadow-sm">
                   <div>
-                    <div class="text-2xl font-black text-teal-600 mb-1">${c.type === 'free_shipping' ? '🚚' : c.type}</div>
+                    <div class="text-2xl font-black text-teal-600 mb-1">${c.type === 'free_shipping' ? '<i data-lucide="truck" class="w-8 h-8 text-teal-600 inline"></i>' : c.type}</div>
                     <div class="font-bold text-sm text-gray-900 dark:text-white">${c.name}</div>
                     <div class="text-[11px] text-gray-400 mt-1 leading-snug">${c.desc}</div>
                     <div class="text-xs font-semibold text-teal-700 dark:text-teal-400 mt-2">Custo: ${c.cost} Pontos</div>
@@ -2281,7 +2331,7 @@ const App = {
           <!-- SEÇÃO MEUS CUPONS RESGATADOS -->
           <div class="p-6 rounded-3xl border dark:border-gray-800 bg-white dark:bg-gray-800 shadow-sm">
             <div class="flex items-center justify-between mb-4">
-              <h2 class="text-xl font-bold">Meus Cupons Resgatados 🎟️</h2>
+              <h2 class="text-xl font-bold">Meus Cupons Resgatados</h2>
               <span class="text-xs text-gray-400">${discounts.length} cupom(ns) resgatado(s)</span>
             </div>
 
@@ -2293,7 +2343,7 @@ const App = {
                     <div class="p-4 rounded-2xl border ${isUsed ? 'border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40 opacity-60' : 'border-teal-200 dark:border-teal-900 bg-teal-50/50 dark:bg-teal-950/30'} flex flex-col justify-between">
                       <div>
                         <div class="flex items-center justify-between mb-2">
-                          <span class="font-extrabold text-sm ${isUsed ? 'text-gray-500' : 'text-teal-600 dark:text-teal-400'}">${d.discount_type === 'free_shipping' ? '🚚 Frete Grátis' : `${d.discount_type} OFF`}</span>
+                          <span class="font-extrabold text-sm ${isUsed ? 'text-gray-500' : 'text-teal-600 dark:text-teal-400'} inline-flex items-center gap-1">${d.discount_type === 'free_shipping' ? '<i data-lucide="truck" class="w-4 h-4 inline"></i> Frete Grátis' : `${d.discount_type} OFF`}</span>
                           <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${isUsed ? 'bg-gray-200 text-gray-600' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-300'}">
                             ${isUsed ? 'Utilizado' : 'Disponível ✓'}
                           </span>
@@ -2332,7 +2382,7 @@ const App = {
             <div class="flex items-center justify-between mb-4">
               <div>
                 <h2 class="text-xl font-bold flex items-center gap-2">
-                  <span>📜</span>
+                  <i data-lucide="history" class="w-5 h-5 text-teal-600"></i>
                   <span>Extrato de Movimentações</span>
                 </h2>
                 <p class="text-xs text-gray-500 mt-0.5">Histórico completo de entradas e saídas de Pontos Verdes da sua conta.</p>
@@ -2348,15 +2398,15 @@ const App = {
                   let typeBadge = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-700">Outro</span>';
                   
                   if (h.type === 'purchase') {
-                    typeBadge = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">🛍️ Compra / Bônus</span>';
+                    typeBadge = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"><i data-lucide="shopping-bag" class="w-3 h-3"></i> Compra / Bônus</span>';
                   } else if (h.type === 'sale') {
-                    typeBadge = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300">🏪 Venda Realizada</span>';
+                    typeBadge = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300"><i data-lucide="store" class="w-3 h-3"></i> Venda Realizada</span>';
                   } else if (h.type === 'review') {
-                    typeBadge = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">✍️ Avaliação</span>';
+                    typeBadge = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"><i data-lucide="star" class="w-3 h-3"></i> Avaliação</span>';
                   } else if (h.type === 'redemption') {
-                    typeBadge = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">🎟️ Resgate Cupom</span>';
+                    typeBadge = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"><i data-lucide="ticket" class="w-3 h-3"></i> Resgate Cupom</span>';
                   } else if (h.type === 'reversal' || h.type === 'sale_reversal') {
-                    typeBadge = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300">↩️ Estorno</span>';
+                    typeBadge = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300"><i data-lucide="rotate-ccw" class="w-3 h-3"></i> Estorno</span>';
                   }
 
                   const dateFormatted = h.created_at ? new Date(h.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
@@ -2422,7 +2472,7 @@ const App = {
     if (btnElement) {
       originalText = btnElement.innerText;
       btnElement.disabled = true;
-      btnElement.innerText = 'Resgatando... ⏳';
+      btnElement.innerText = 'Resgatando...';
     }
 
     try {
@@ -2480,7 +2530,7 @@ const App = {
               </h1>
               <div class="text-xs text-gray-500">${user.email} • ${user.city || 'São Paulo'}, ${user.state || 'SP'}</div>
               <div class="mt-2 flex items-center gap-2">
-                <span class="badge-points">🌱 ${user.points} Pontos Verdes</span>
+                <span class="badge-points inline-flex items-center gap-1.5"><i data-lucide="sprout" class="w-3.5 h-3.5"></i> ${user.points} Pontos Verdes</span>
                 <span class="bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200 text-xs px-2.5 py-0.5 rounded-full font-bold">Nível ${user.level}</span>
               </div>
             </div>
@@ -2726,12 +2776,12 @@ const App = {
       const metrics = metricsData.metrics || { active_products: 0, low_stock_count: 0, total_sales: 0, total_revenue: 0 };
       const products = productsData.products || [];
       const sTier = metricsData.seller_tier || {
-        tier_name: 'Vendedor Semente 🌱',
+        tier_name: 'Vendedor Semente',
         rate_formatted: '0,30 pts / R$',
         sales_count: 0,
         progress_percent: 0,
         sales_to_next_tier: 5,
-        next_tier_name: 'Vendedor Broto 🌿',
+        next_tier_name: 'Vendedor Broto',
         next_tier_bonus: 100,
         total_seller_points: 0
       };
@@ -2784,7 +2834,7 @@ const App = {
             <div class="bg-black/30 p-4 rounded-2xl border border-white/10 space-y-2">
               <div class="flex justify-between items-center text-xs font-semibold">
                 <span class="text-teal-100">Progresso para o próximo nível de vendedor</span>
-                <span class="text-emerald-300 font-bold">${sTier.sales_to_next_tier > 0 ? `Faltam ${sTier.sales_to_next_tier} venda(s) para ${sTier.next_tier_name}` : 'Nível Máximo Atingido 👑'}</span>
+                <span class="text-emerald-300 font-bold">${sTier.sales_to_next_tier > 0 ? `Faltam ${sTier.sales_to_next_tier} venda(s) para ${sTier.next_tier_name}` : 'Nível Máximo Atingido'}</span>
               </div>
               <div class="w-full bg-white/20 h-2.5 rounded-full overflow-hidden">
                 <div class="bg-gradient-to-r from-emerald-400 to-teal-300 h-full rounded-full transition-all duration-500" style="width: ${sTier.progress_percent}%"></div>
@@ -2792,11 +2842,11 @@ const App = {
               ${sTier.next_tier_bonus > 0 ? `
                 <div class="text-[11px] text-teal-200 flex items-center justify-between">
                   <span>Próximo Marco: <strong>${sTier.next_tier_name}</strong></span>
-                  <span class="text-emerald-300 font-bold">Bônus de Incentivo: +${sTier.next_tier_bonus} Pontos 🎁</span>
+                  <span class="text-emerald-300 font-bold">Bônus de Incentivo: +${sTier.next_tier_bonus} Pontos</span>
                 </div>
               ` : `
                 <div class="text-[11px] text-emerald-300 font-medium">
-                  Parabéns! Você alcançou o nível mais alto de vendedor sustentável (Eco Master Seller 👑).
+                  Parabéns! Você alcançou o nível mais alto de vendedor sustentável (Eco Master Seller).
                 </div>
               `}
             </div>
@@ -2835,18 +2885,18 @@ const App = {
                         ${parseInt(p.stock) <= 0
                           ? '<span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700">Esgotado</span>'
                           : (parseInt(p.stock) <= 3
-                            ? `<span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">⚠ Estoque baixo: ${p.stock} un.</span>`
+                            ? `<span class="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700"><i data-lucide="alert-triangle" class="w-3 h-3 inline"></i> Estoque baixo: ${p.stock} un.</span>`
                             : `<span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Estoque: ${p.stock} un.</span>`)}
                       </div>
-                      <div class="text-[11px] text-gray-400 mt-1">📍 ${p.location || 'Local não informado'}</div>
+                      <div class="text-[11px] text-gray-400 mt-1 flex items-center gap-1"><i data-lucide="map-pin" class="w-3 h-3 text-teal-600"></i> ${p.location || 'Local não informado'}</div>
                     </div>
                   </div>
                   <div class="flex items-center gap-1">
-                    <button type="button" onclick="App.navigateTo('edit-product', { productId: ${p.id} })" title="Editar Anúncio" class="text-teal-600 hover:text-teal-800 hover:bg-teal-50 dark:hover:bg-teal-950/50 p-2 rounded-lg text-sm cursor-pointer transition">
-                      ✏️
+                    <button type="button" onclick="App.navigateTo('edit-product', { productId: ${p.id} })" title="Editar Anúncio" class="text-teal-600 hover:text-teal-800 hover:bg-teal-50 dark:hover:bg-teal-950/50 p-2 rounded-lg cursor-pointer transition">
+                      <i data-lucide="pencil" class="w-4 h-4"></i>
                     </button>
-                    <button type="button" onclick="App.deleteProductSeller(${p.id})" title="Excluir Anúncio" class="text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/50 p-2 rounded-lg text-sm cursor-pointer transition">
-                      🗑️
+                    <button type="button" onclick="App.deleteProductSeller(${p.id})" title="Excluir Anúncio" class="text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/50 p-2 rounded-lg cursor-pointer transition">
+                      <i data-lucide="trash-2" class="w-4 h-4"></i>
                     </button>
                   </div>
                 </div>
@@ -3028,15 +3078,16 @@ const App = {
     const header = document.createElement('div');
     header.className = 'text-xs font-bold text-teal-700 dark:text-teal-300 mb-2 flex items-center justify-between';
     header.innerHTML = `
-      <span>📸 ${this.selectedProductImages.length}/5 foto(s) selecionada(s)</span>
+      <span class="inline-flex items-center gap-1.5"><i data-lucide="camera" class="w-3.5 h-3.5 text-teal-600 dark:text-teal-400"></i> ${this.selectedProductImages.length}/5 foto(s) selecionada(s)</span>
       <span class="text-[10px] text-gray-400 font-normal">A foto #1 será a capa</span>
     `;
+
+    previewContainer.appendChild(header);
 
     // IMPORTANTE: renderizar os ícones adicionados dinamicamente
     if (typeof lucide !== 'undefined') {
       lucide.createIcons();
     }
-    previewContainer.appendChild(header);
 
     const grid = document.createElement('div');
     grid.className = 'grid grid-cols-2 sm:grid-cols-5 gap-3';
@@ -3806,7 +3857,7 @@ const App = {
         <div class="p-2.5 mx-4 mt-3 bg-teal-500/10 dark:bg-teal-950/50 border border-teal-500/30 rounded-2xl flex items-center justify-between shadow-sm animate-fade-in">
           <div class="flex items-center gap-2.5 min-w-0">
             <div class="w-8 h-8 rounded-xl bg-teal-600 text-white flex items-center justify-center shrink-0 shadow-sm font-bold text-xs">
-              📦
+              <i data-lucide="package" class="w-4 h-4"></i>
             </div>
             <div class="min-w-0">
               <div class="text-[10px] text-teal-700 dark:text-teal-300 font-bold uppercase tracking-wider">Atendimento sobre Pedido</div>
@@ -3822,8 +3873,10 @@ const App = {
       <!-- CORPO DE MENSAGENS COM CONTRASTE EQUILIBRADO NO MODO CLARO E ESCURO -->
       <div id="chat-msgs-body" class="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 space-y-3 min-h-0 w-full chat-body-bg bg-slate-50/70 dark:bg-gray-950/40">
         ${msgs.length === 0 ? `
-          <div id="chat-empty-intro" class="text-center py-12 space-y-2 text-gray-400 dark:text-gray-500">
-            <div class="text-3xl">💬</div>
+          <div id="chat-empty-intro" class="text-center py-12 space-y-3 text-gray-400 dark:text-gray-500">
+            <div class="w-12 h-12 rounded-2xl bg-teal-50 dark:bg-teal-950 text-teal-600 dark:text-teal-400 flex items-center justify-center mx-auto shadow-sm">
+              <i data-lucide="message-square" class="w-6 h-6"></i>
+            </div>
             <div class="font-bold text-xs text-gray-700 dark:text-gray-300">Inicie uma conversa com ${this.escapeHtml(partner.name)}!</div>
             <div class="text-[11px] text-gray-500 dark:text-gray-400 max-w-xs mx-auto">Tire dúvidas sobre o produto, combine formas de entrega ou faça sua proposta.</div>
           </div>
@@ -3912,9 +3965,9 @@ const App = {
                 type="button" 
                 onclick="App.deleteChatMessage(${m.id}, ${partnerId})" 
                 title="Apagar mensagem" 
-                class="msg-delete-btn opacity-0 group-hover:opacity-100 hover:text-red-300 ml-1 transition cursor-pointer text-xs"
+                class="msg-delete-btn opacity-0 group-hover:opacity-100 hover:text-red-300 ml-1 transition cursor-pointer p-0.5 inline-flex items-center"
               >
-                🗑️
+                <svg class="w-3 h-3 fill-none stroke-current" stroke-width="2" viewBox="0 0 24 24"><path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
               </button>
             ` : ''}
           </div>
@@ -4011,8 +4064,8 @@ const App = {
             delBtn.type = 'button';
             delBtn.setAttribute('onclick', `App.deleteChatMessage(${sent.id}, ${partnerId})`);
             delBtn.title = 'Apagar mensagem';
-            delBtn.className = 'msg-delete-btn opacity-0 group-hover:opacity-100 hover:text-red-300 ml-1 transition cursor-pointer text-xs';
-            delBtn.innerText = '🗑️';
+            delBtn.className = 'msg-delete-btn opacity-0 group-hover:opacity-100 hover:text-red-300 ml-1 transition cursor-pointer p-0.5 inline-flex items-center';
+            delBtn.innerHTML = '<svg class="w-3 h-3 fill-none stroke-current" stroke-width="2" viewBox="0 0 24 24"><path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>';
             timeContainer.appendChild(delBtn);
           }
         }
@@ -4023,7 +4076,7 @@ const App = {
         const tempEl = document.getElementById(`chat-msg-${tempId}`);
         if (tempEl) {
           const statusEl = tempEl.querySelector('.msg-status');
-          if (statusEl) statusEl.innerHTML = '⚠️ Não enviada';
+          if (statusEl) statusEl.innerHTML = '<span class="text-red-300 font-semibold">Falha no envio</span>';
         }
       }
     } catch (err) {
@@ -4181,7 +4234,12 @@ const App = {
     container.innerHTML = `
       <div class="max-w-3xl mx-auto space-y-8 animate-fade-in">
         <div class="p-6 rounded-3xl border dark:border-gray-800 bg-white dark:bg-gray-800 shadow-sm">
-          <h1 class="text-2xl font-extrabold mb-4">♿ Preferências de Acessibilidade</h1>
+          <div class="flex items-center gap-3 mb-6">
+            <div class="w-10 h-10 rounded-2xl bg-teal-50 dark:bg-teal-900/40 text-teal-600 dark:text-teal-400 flex items-center justify-center shrink-0">
+              <i data-lucide="accessibility" class="w-5 h-5"></i>
+            </div>
+            <h1 class="text-2xl font-extrabold text-gray-900 dark:text-white">Preferências de Acessibilidade</h1>
+          </div>
           <div class="space-y-6">
             <div class="flex items-center justify-between pb-4 border-b dark:border-gray-700">
               <div>
@@ -4222,9 +4280,11 @@ const App = {
 
         <div class="p-6 rounded-3xl border dark:border-gray-800 bg-white dark:bg-gray-800 shadow-sm">
           <div class="flex items-center gap-3 mb-6">
-            <span class="text-3xl">❓</span>
+            <div class="w-10 h-10 rounded-2xl bg-teal-50 dark:bg-teal-900/40 text-teal-600 dark:text-teal-400 flex items-center justify-center shrink-0">
+              <i data-lucide="help-circle" class="w-5 h-5"></i>
+            </div>
             <div>
-              <h2 class="text-xl font-bold">Central de Dúvidas / FAQ</h2>
+              <h2 class="text-xl font-bold text-gray-900 dark:text-white">Central de Dúvidas / FAQ</h2>
               <p class="text-xs text-gray-500">Tudo o que você precisa saber sobre o Re-Store e a economia circular</p>
             </div>
           </div>
@@ -4232,25 +4292,25 @@ const App = {
           <div class="space-y-3">
             <details class="p-4 rounded-2xl border dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 cursor-pointer group">
               <summary class="font-bold text-sm text-gray-900 dark:text-white flex items-center justify-between">
-                <span>🌱 Como funcionam os Pontos Verdes e os Níveis?</span>
-                <span class="text-xs text-teal-600 group-open:rotate-180 transition-transform">▼</span>
+                <span>Como funcionam os Pontos Verdes e os Níveis?</span>
+                <i data-lucide="chevron-down" class="w-4 h-4 text-teal-600 dark:text-teal-400 group-open:rotate-180 transition-transform"></i>
               </summary>
               <div class="text-xs text-gray-600 dark:text-gray-300 mt-3 leading-relaxed space-y-2">
                 <p>O Re-Store adota um sistema justo, equilibrado e sustentável tanto para quem compra quanto para quem vende:</p>
                 <ul class="list-disc pl-4 space-y-1">
-                  <li><strong>🛍️ Compradores:</strong> Ganham 1 Ponto Verde por cada R$ 1,00 gasto em compras ecológicas.</li>
-                  <li><strong>🏪 Vendedores:</strong> Ganham bônus a cada produto vendido (de 0,30 a 0,60 pts por R$ 1,00 conforme o nível de vendedor: Semente 🌱, Broto 🌿, Florescer 🌸 e Eco Master 👑), além de incentivos de até +300 pts nos marcos de vendas!</li>
-                  <li><strong>✍️ Avaliações:</strong> Ganham +30 Pontos Verdes ao deixar feedback detalhado de um produto recebido.</li>
-                  <li><strong>🎁 Boas-Vindas:</strong> Ganham +150 Pontos Verdes de incentivo ao cadastrar e validar o e-mail.</li>
+                  <li><strong>Compradores:</strong> Ganham 1 Ponto Verde por cada R$ 1,00 gasto em compras ecológicas.</li>
+                  <li><strong>Vendedores:</strong> Ganham bônus a cada produto vendido (de 0,30 a 0,60 pts por R$ 1,00 conforme o nível de vendedor: Semente, Broto, Florescer e Eco Master), além de incentivos de até +300 pts nos marcos de vendas!</li>
+                  <li><strong>Avaliações:</strong> Ganham +30 Pontos Verdes ao deixar feedback detalhado de um produto recebido.</li>
+                  <li><strong>Boas-Vindas:</strong> Ganham +150 Pontos Verdes de incentivo ao cadastrar e validar o e-mail.</li>
                 </ul>
-                <p>Seus pontos acumulados aumentam seu nível de sustentabilidade geral (Iniciante 🌱, Sustentável 🌿, Eco Warrior ⚔️ e Eco Master 👑) e podem ser trocados por cupons de desconto reais na aba <em>"Extrato de Pontos"</em>.</p>
+                <p>Seus pontos acumulados aumentam seu nível de sustentabilidade geral (Iniciante, Sustentável, Eco Warrior e Eco Master) e podem ser trocados por cupons de desconto reais na aba <em>"Extrato de Pontos"</em>.</p>
               </div>
             </details>
 
             <details class="p-4 rounded-2xl border dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 cursor-pointer group">
               <summary class="font-bold text-sm text-gray-900 dark:text-white flex items-center justify-between">
-                <span>🚫 Posso comprar produtos anunciados por mim mesmo?</span>
-                <span class="text-xs text-teal-600 group-open:rotate-180 transition-transform">▼</span>
+                <span>Posso comprar produtos anunciados por mim mesmo?</span>
+                <i data-lucide="chevron-down" class="w-4 h-4 text-teal-600 dark:text-teal-400 group-open:rotate-180 transition-transform"></i>
               </summary>
               <p class="text-xs text-gray-600 dark:text-gray-300 mt-3 leading-relaxed">
                 <strong>Não.</strong> Para garantir a integridade das avaliações, manter a transparência das métricas e prevenir fraudes no sistema de bonificação de pontos, nossa plataforma bloqueia tecnicamente qualquer tentativa de um vendedor comprar seus próprios anúncios.
@@ -4259,8 +4319,8 @@ const App = {
 
             <details class="p-4 rounded-2xl border dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 cursor-pointer group">
               <summary class="font-bold text-sm text-gray-900 dark:text-white flex items-center justify-between">
-                <span>🎟️ Como resgatar e aplicar meus cupons de desconto?</span>
-                <span class="text-xs text-teal-600 group-open:rotate-180 transition-transform">▼</span>
+                <span>Como resgatar e aplicar meus cupons de desconto?</span>
+                <i data-lucide="chevron-down" class="w-4 h-4 text-teal-600 dark:text-teal-400 group-open:rotate-180 transition-transform"></i>
               </summary>
               <p class="text-xs text-gray-600 dark:text-gray-300 mt-3 leading-relaxed">
                 Acesse a aba <strong>"Extrato de Pontos"</strong> no topo da página. Na seção de cupons, escolha o desconto desejado (5%, 10%, 15% ou Frete Grátis) e clique em <em>"Resgatar Cupom"</em>. Seus cupons resgatados aparecerão na seção <strong>"Meus Cupons Resgatados"</strong>. Na hora de finalizar a compra no Checkout, você poderá aplicar o cupom com apenas 1 clique ou digitando o código correspondente.
@@ -4269,8 +4329,8 @@ const App = {
 
             <details class="p-4 rounded-2xl border dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 cursor-pointer group">
               <summary class="font-bold text-sm text-gray-900 dark:text-white flex items-center justify-between">
-                <span>🏪 Como anunciar e vender produtos no Re-Store?</span>
-                <span class="text-xs text-teal-600 group-open:rotate-180 transition-transform">▼</span>
+                <span>Como anunciar e vender produtos no Re-Store?</span>
+                <i data-lucide="chevron-down" class="w-4 h-4 text-teal-600 dark:text-teal-400 group-open:rotate-180 transition-transform"></i>
               </summary>
               <p class="text-xs text-gray-600 dark:text-gray-300 mt-3 leading-relaxed">
                 Clique em <strong>"Área Vendedor"</strong> no menu superior e selecione o botão <em>"Novo Anúncio"</em>. Preencha o nome do produto, categoria, preço, quantidade em estoque, condição (Novo, Usado ou Restaurado/Upcycled) e envie as fotos. Assim que publicado, o item fica imediatamente disponível para compra em todo o Brasil.
@@ -4279,8 +4339,8 @@ const App = {
 
             <details class="p-4 rounded-2xl border dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 cursor-pointer group">
               <summary class="font-bold text-sm text-gray-900 dark:text-white flex items-center justify-between">
-                <span>📸 Quantas fotos posso colocar por produto?</span>
-                <span class="text-xs text-teal-600 group-open:rotate-180 transition-transform">▼</span>
+                <span>Quantas fotos posso colocar por produto?</span>
+                <i data-lucide="chevron-down" class="w-4 h-4 text-teal-600 dark:text-teal-400 group-open:rotate-180 transition-transform"></i>
               </summary>
               <p class="text-xs text-gray-600 dark:text-gray-300 mt-3 leading-relaxed">
                 É obrigatório enviar pelo menos <strong>1 foto real</strong> do produto, sendo permitido anexar <strong>até 5 fotos</strong> por anúncio (formatos JPG, JPEG, PNG e WEBP). A primeira foto será a capa principal da vitrine, e as demais aparecerão em miniatura clicável na página de detalhes do produto.
@@ -4289,8 +4349,8 @@ const App = {
 
             <details class="p-4 rounded-2xl border dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 cursor-pointer group">
               <summary class="font-bold text-sm text-gray-900 dark:text-white flex items-center justify-between">
-                <span>🏢 Qual a diferença entre Pessoa Física (PF) e Empresa Verificada (PJ)?</span>
-                <span class="text-xs text-teal-600 group-open:rotate-180 transition-transform">▼</span>
+                <span>Qual a diferença entre Pessoa Física (PF) e Empresa Verificada (PJ)?</span>
+                <i data-lucide="chevron-down" class="w-4 h-4 text-teal-600 dark:text-teal-400 group-open:rotate-180 transition-transform"></i>
               </summary>
               <p class="text-xs text-gray-600 dark:text-gray-300 mt-3 leading-relaxed">
                 Qualquer pessoa pode se cadastrar como <strong>Pessoa Física (PF)</strong> para comprar e desapegar de itens. Já as lojas, cooperativas ou artesãos podem optar por <strong>Empresa Sustentável Verificada (PJ)</strong> informando um CNPJ válido de 14 dígitos. Ao ser validado, o perfil recebe o selo <em>"CNPJ Verificado ✓"</em>, gerando maior autoridade perante os clientes. É possível alternar entre PF e PJ quando quiser na tela de edição de perfil.
@@ -4299,8 +4359,8 @@ const App = {
 
             <details class="p-4 rounded-2xl border dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 cursor-pointer group">
               <summary class="font-bold text-sm text-gray-900 dark:text-white flex items-center justify-between">
-                <span>💳 Quais são os métodos de pagamento disponíveis?</span>
-                <span class="text-xs text-teal-600 group-open:rotate-180 transition-transform">▼</span>
+                <span>Quais são os métodos de pagamento disponíveis?</span>
+                <i data-lucide="chevron-down" class="w-4 h-4 text-teal-600 dark:text-teal-400 group-open:rotate-180 transition-transform"></i>
               </summary>
               <p class="text-xs text-gray-600 dark:text-gray-300 mt-3 leading-relaxed">
                 Você pode pagar via <strong>PIX instantâneo</strong> (com QR Code dinâmico e código copia-e-cola), <strong>Cartão de Crédito</strong> (com opção de parcelamento em até 3x sem juros) ou <strong>Boleto Ecológico Digital</strong> (sem impressão ou desperdício de papel).
@@ -4309,18 +4369,18 @@ const App = {
 
             <details class="p-4 rounded-2xl border dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 cursor-pointer group">
               <summary class="font-bold text-sm text-gray-900 dark:text-white flex items-center justify-between">
-                <span>💬 Como falar com o vendedor antes de comprar?</span>
-                <span class="text-xs text-teal-600 group-open:rotate-180 transition-transform">▼</span>
+                <span>Como falar com o vendedor antes de comprar?</span>
+                <i data-lucide="chevron-down" class="w-4 h-4 text-teal-600 dark:text-teal-400 group-open:rotate-180 transition-transform"></i>
               </summary>
               <p class="text-xs text-gray-600 dark:text-gray-300 mt-3 leading-relaxed">
-                Na página de qualquer produto, há um botão <em>"💬 Chat"</em> junto ao perfil do anunciante. Clicando nele, abre-se uma conversa direta e privada em tempo real onde você pode tirar dúvidas sobre dimensões, estado de conservação, frete ou negociar propostas.
+                Na página de qualquer produto, há um botão <em>"Chat"</em> junto ao perfil do anunciante. Clicando nele, abre-se uma conversa direta e privada em tempo real onde você pode tirar dúvidas sobre dimensões, estado de conservação, frete ou negociar propostas.
               </p>
             </details>
 
             <details class="p-4 rounded-2xl border dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 cursor-pointer group">
               <summary class="font-bold text-sm text-gray-900 dark:text-white flex items-center justify-between">
-                <span>📦 Como funciona a entrega e o frete dos produtos?</span>
-                <span class="text-xs text-teal-600 group-open:rotate-180 transition-transform">▼</span>
+                <span>Como funciona a entrega e o frete dos produtos?</span>
+                <i data-lucide="chevron-down" class="w-4 h-4 text-teal-600 dark:text-teal-400 group-open:rotate-180 transition-transform"></i>
               </summary>
               <p class="text-xs text-gray-600 dark:text-gray-300 mt-3 leading-relaxed">
                 O envio pode ser realizado via transportadora parceira com compensação de carbono (Frete Ecológico) ou combinado diretamente entre comprador e vendedor para retirada presencial caso ambos residam na mesma cidade/região.
@@ -4329,8 +4389,8 @@ const App = {
 
             <details class="p-4 rounded-2xl border dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 cursor-pointer group">
               <summary class="font-bold text-sm text-gray-900 dark:text-white flex items-center justify-between">
-                <span>♻️ Quais produtos se encaixam na proposta da Economia Circular?</span>
-                <span class="text-xs text-teal-600 group-open:rotate-180 transition-transform">▼</span>
+                <span>Quais produtos se encaixam na proposta da Economia Circular?</span>
+                <i data-lucide="chevron-down" class="w-4 h-4 text-teal-600 dark:text-teal-400 group-open:rotate-180 transition-transform"></i>
               </summary>
               <p class="text-xs text-gray-600 dark:text-gray-300 mt-3 leading-relaxed">
                 Priorizamos itens usados em bom estado de uso, produtos restaurados (upcycling), artesanatos com reaproveitamento de materiais recicláveis, móveis reformados, eletrônicos revisados e utilidades reutilizáveis (como ecobags e garrafas térmicas inox), diminuindo a geração de lixo nos aterros sanitários.
@@ -4339,8 +4399,8 @@ const App = {
 
             <details class="p-4 rounded-2xl border dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 cursor-pointer group">
               <summary class="font-bold text-sm text-gray-900 dark:text-white flex items-center justify-between">
-                <span>🔒 Como meus dados e senhas são protegidos?</span>
-                <span class="text-xs text-teal-600 group-open:rotate-180 transition-transform">▼</span>
+                <span>Como meus dados e senhas são protegidos?</span>
+                <i data-lucide="chevron-down" class="w-4 h-4 text-teal-600 dark:text-teal-400 group-open:rotate-180 transition-transform"></i>
               </summary>
               <p class="text-xs text-gray-600 dark:text-gray-300 mt-3 leading-relaxed">
                 Todas as senhas são armazenadas com hash criptográfico irreversível (Bcrypt). Números de telefone e CNPJs são validados por algoritmos estritos de integridade de dados e as sessões são protegidas com autenticação segura contra acessos indevidos.
@@ -4388,22 +4448,22 @@ const App = {
 
     const stepsContent = [
       {
-        icon: '♻️',
+        iconName: 'recycle',
         title: 'Passo 1: Bem-vindo ao Re-Store!',
         desc: 'O Re-Store é o marketplace de economia circular onde você pode comprar, vender e trocar produtos sustentáveis, reutilizáveis e artesanais.'
       },
       {
-        icon: '🌱',
+        iconName: 'sprout',
         title: 'Passo 2: Ganhe & Troque Pontos Verdes',
         desc: 'A cada compra ou cadastro você acumula Pontos Verdes. Troque seus pontos na aba "Recompensas" por cupons de até 15% OFF ou Frete Grátis!'
       },
       {
-        icon: '💳',
+        iconName: 'credit-card',
         title: 'Passo 3: Checkout Rápido & PIX',
         desc: 'Compre de forma segura via PIX Copia-e-Cola com QR Code instantâneo, Cartão de Crédito parcelado ou Boleto Ecológico.'
       },
       {
-        icon: '🏪',
+        iconName: 'store',
         title: 'Passo 4: Anuncie Seus Produtos & Chat',
         desc: 'Crie seu perfil de vendedor para publicar itens parados na sua casa. Negocie detalhes e tire dúvidas pelo Chat em tempo real.'
       }
@@ -4421,7 +4481,9 @@ const App = {
           `).join('')}
         </div>
 
-        <div class="text-6xl mb-4 animate-bounce">${currentStep.icon}</div>
+        <div class="w-16 h-16 rounded-2xl bg-teal-50 dark:bg-teal-950/60 text-teal-600 dark:text-teal-400 flex items-center justify-center mx-auto mb-4 shadow-sm">
+          <i data-lucide="${currentStep.iconName}" class="w-8 h-8"></i>
+        </div>
         <h2 class="text-xl font-extrabold mb-2 text-gray-900 dark:text-white">${currentStep.title}</h2>
         <p class="text-xs text-gray-600 dark:text-gray-300 mb-8 leading-relaxed max-w-xs mx-auto">${currentStep.desc}</p>
 
@@ -4432,7 +4494,7 @@ const App = {
           ${step < 4 ? `
             <button type="button" onclick="App.showTutorialModal(${step + 1})" class="btn-primary flex-1 py-2.5 text-xs cursor-pointer">Próximo Passo →</button>
           ` : `
-            <button type="button" onclick="document.getElementById('auth-modal').remove(); ToastManager.show('Tutorial concluído! Bom proveito!', 'success');" class="btn-primary flex-1 py-2.5 text-xs cursor-pointer">Concluir Tutorial 🎉</button>
+            <button type="button" onclick="document.getElementById('auth-modal').remove(); ToastManager.show('Tutorial concluído! Bom proveito!', 'success');" class="btn-primary flex-1 py-2.5 text-xs cursor-pointer">Concluir Tutorial</button>
           `}
         </div>
       </div>
@@ -4457,7 +4519,8 @@ const App = {
         <button type="button" onclick="document.getElementById('auth-modal').remove()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold cursor-pointer">✕</button>
 
         <div class="p-2.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded-xl mb-4 flex items-center gap-2 text-xs text-emerald-800 dark:text-emerald-300">
-          <span>🔒</span> <span>Proteção de dados com criptografia end-to-end.</span>
+          <i data-lucide="shield-check" class="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0"></i>
+          <span>Proteção de dados com criptografia de ponta a ponta.</span>
         </div>
 
         <h2 class="text-2xl font-bold mb-1 text-gray-900 dark:text-white">Entrar no Re-Store</h2>
@@ -4496,7 +4559,7 @@ const App = {
         </div>
 
         <details class="mt-4 p-3 bg-gray-50 dark:bg-gray-700/40 rounded-xl border dark:border-gray-700 text-xs text-gray-600 dark:text-gray-300">
-          <summary class="font-bold cursor-pointer text-teal-600">🌱 O que é o Sistema de Pontos Re-Store?</summary>
+          <summary class="font-bold cursor-pointer text-teal-600 flex items-center gap-1.5"><i data-lucide="sprout" class="w-3.5 h-3.5"></i> O que é o Sistema de Pontos Re-Store?</summary>
           <p class="mt-2 leading-relaxed">Ganhe pontos verdes a cada produto comprado, vendido ou avaliado. Troque por cupons de desconto exclusivos!</p>
         </details>
 
@@ -4700,19 +4763,23 @@ const App = {
       <div class="bg-white dark:bg-gray-800 rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl relative max-h-[90vh] overflow-y-auto">
         <button type="button" onclick="document.getElementById('auth-modal').remove()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold cursor-pointer">✕</button>
 
-        <span class="inline-block bg-emerald-100 text-emerald-800 text-[11px] font-bold px-2.5 py-0.5 rounded-full mb-2">🎁 Bônus de 150 Pontos Verdes</span>
+        <span class="inline-flex items-center gap-1.5 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 text-[11px] font-bold px-2.5 py-0.5 rounded-full mb-2"><i data-lucide="gift" class="w-3.5 h-3.5"></i> Bônus de 150 Pontos Verdes</span>
         <h2 class="text-2xl font-bold mb-1 text-gray-900 dark:text-white">Criar Nova Conta</h2>
         <p class="text-xs text-gray-500 mb-3">Preencha seus dados para validar seu e-mail e receber seus pontos.</p>
 
         <div class="grid grid-cols-2 gap-3 mb-4">
           <button type="button" onclick="App.setRole('buyer')" id="role-btn-buyer" class="${roleVal === 'buyer' ? 'p-3 border-2 border-teal-500 bg-teal-50 dark:bg-teal-950/40 rounded-2xl text-center cursor-pointer' : 'p-3 border-2 border-gray-200 dark:border-gray-700 rounded-2xl text-center cursor-pointer'}">
-            <span class="text-2xl block pointer-events-none">🛍️</span>
-            <div class="font-bold text-xs mt-1 pointer-events-none">Comprador</div>
+            <div class="w-8 h-8 rounded-xl bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 flex items-center justify-center mx-auto mb-1 pointer-events-none">
+              <i data-lucide="shopping-bag" class="w-4 h-4"></i>
+            </div>
+            <div class="font-bold text-xs pointer-events-none">Comprador</div>
             <div class="text-[10px] text-gray-500 pointer-events-none">Compre e ganhe pontos</div>
           </button>
           <button type="button" onclick="App.setRole('seller')" id="role-btn-seller" class="${roleVal === 'seller' ? 'p-3 border-2 border-teal-500 bg-teal-50 dark:bg-teal-950/40 rounded-2xl text-center cursor-pointer' : 'p-3 border-2 border-gray-200 dark:border-gray-700 rounded-2xl text-center cursor-pointer'}">
-            <span class="text-2xl block pointer-events-none">🏪</span>
-            <div class="font-bold text-xs mt-1 pointer-events-none">Vendedor</div>
+            <div class="w-8 h-8 rounded-xl bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 flex items-center justify-center mx-auto mb-1 pointer-events-none">
+              <i data-lucide="store" class="w-4 h-4"></i>
+            </div>
+            <div class="font-bold text-xs pointer-events-none">Vendedor</div>
             <div class="text-[10px] text-gray-500 pointer-events-none">Anuncie produtos eco</div>
           </button>
         </div>
@@ -4728,8 +4795,8 @@ const App = {
               <span id="reg-email-check" class="text-xs text-emerald-500 font-bold ${emailVal ? '' : 'hidden'}">✓ Formato Correto</span>
             </div>
             <input type="email" id="reg-email" oninput="App.validateEmailInput(this)" required value="${this.escapeHtml(emailVal)}" placeholder="seu@email.com" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 dark:border-gray-600 text-sm">
-            <div class="text-[10px] text-teal-700 dark:text-teal-400 mt-1 flex items-center gap-1 font-medium">
-              <span>📧</span> <span>Enviaremos um código de 6 dígitos para validar este e-mail.</span>
+            <div class="text-[10px] text-teal-700 dark:text-teal-400 mt-1 flex items-center gap-1.5 font-medium">
+              <i data-lucide="mail" class="w-3.5 h-3.5 shrink-0"></i> <span>Enviaremos um código de 6 dígitos para validar este e-mail.</span>
             </div>
           </div>
           <div>
@@ -4937,7 +5004,7 @@ const App = {
     if (btn) {
       btn.disabled = true;
       btn.innerHTML = `
-        <span class="inline-block animate-spin mr-2">⏳</span>
+        <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
         <span>Enviando código de verificação...</span>
       `;
     }
@@ -4981,8 +5048,8 @@ const App = {
           <div class="w-14 h-14 bg-teal-100 dark:bg-teal-900/50 text-teal-600 dark:text-teal-400 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-inner">
             <i data-lucide="mail-check" class="w-7 h-7"></i>
           </div>
-          <span class="inline-block bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300 text-[11px] font-bold px-2.5 py-0.5 rounded-full mb-1">
-            🔒 Validação Obrigatória
+          <span class="inline-flex items-center gap-1.5 bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300 text-[11px] font-bold px-2.5 py-0.5 rounded-full mb-1">
+            <i data-lucide="shield-check" class="w-3.5 h-3.5"></i> Validação Obrigatória
           </span>
           <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Confirme seu E-mail</h2>
           <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 max-w-xs mx-auto">
@@ -5014,7 +5081,7 @@ const App = {
             id="btn-reg-verify-submit" 
             class="btn-primary w-full py-3 text-sm cursor-pointer shadow-lg shadow-teal-600/20"
           >
-            Confirmar e Criar Conta 🎉
+            Confirmar e Criar Conta
           </button>
 
           <div class="space-y-2 pt-2 text-center text-xs">
@@ -5041,7 +5108,7 @@ const App = {
         </form>
 
         <div class="mt-4 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-xl text-[11px] text-amber-800 dark:text-amber-300 flex items-start gap-2">
-          <span>💡</span>
+          <i data-lucide="info" class="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5"></i>
           <span>Dica: Caso não encontre em sua caixa de entrada, verifique também as pastas de <strong>Spam</strong> ou <strong>Lixo Eletrônico</strong>.</span>
         </div>
       </div>
@@ -5078,7 +5145,7 @@ const App = {
     if (btn) {
       btn.disabled = true;
       btn.innerHTML = `
-        <span class="inline-block animate-spin mr-2">⏳</span>
+        <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
         <span>Validando e criando conta...</span>
       `;
     }
@@ -5115,7 +5182,7 @@ const App = {
       } else {
         if (btn) {
           btn.disabled = false;
-          btn.innerHTML = 'Confirmar e Criar Conta 🎉';
+          btn.innerHTML = 'Confirmar e Criar Conta';
         }
         ToastManager.show(res.error || 'Código incorreto ou expirado.', 'error');
         if (codeInput) {
@@ -5127,7 +5194,7 @@ const App = {
       console.error('Erro na criação de conta:', err);
       if (btn) {
         btn.disabled = false;
-        btn.innerHTML = 'Confirmar e Criar Conta 🎉';
+        btn.innerHTML = 'Confirmar e Criar Conta';
       }
       ToastManager.show('Erro de conexão ao validar código. Tente novamente.', 'error');
     }
@@ -5389,8 +5456,9 @@ const App = {
       <div class="space-y-6 animate-fade-in max-w-7xl mx-auto">
         <div class="flex items-center justify-between">
           <div>
-            <h1 class="text-2xl font-extrabold flex items-center gap-2">
-              <span>Meus Produtos Favoritos</span> <span class="text-red-500">❤️</span>
+            <h1 class="text-2xl font-extrabold flex items-center gap-2.5 text-gray-900 dark:text-white">
+              <i data-lucide="heart" class="w-6 h-6 text-red-500 fill-red-500"></i>
+              <span>Meus Produtos Favoritos</span>
             </h1>
             <p class="text-xs text-gray-500 mt-1">Produtos sustentáveis salvos para você comprar no seu ritmo.</p>
           </div>
@@ -5421,7 +5489,9 @@ const App = {
       } else {
         grid.innerHTML = `
           <div class="col-span-full text-center py-16 bg-white dark:bg-gray-800 rounded-3xl border dark:border-gray-800">
-            <div class="text-6xl mb-3">🤍</div>
+            <div class="w-16 h-16 rounded-2xl bg-red-50 dark:bg-red-950/40 text-red-500 flex items-center justify-center mx-auto mb-4">
+              <i data-lucide="heart" class="w-8 h-8"></i>
+            </div>
             <h2 class="text-xl font-bold mb-1">Sua lista de favoritos está vazia</h2>
             <p class="text-xs text-gray-500 mb-6 max-w-sm mx-auto">Clique no ícone de coração de qualquer produto para salvá-lo nesta lista especial.</p>
             <button type="button" onclick="App.navigateTo('search')" class="btn-primary text-xs py-2 px-6 cursor-pointer">Ver Vitrine de Produtos</button>
@@ -5454,14 +5524,16 @@ const App = {
     if (data.success) {
       if (data.is_favorite) {
         if (!this.favoriteIds.includes(productId)) this.favoriteIds.push(productId);
-        ToastManager.show('Produto adicionado aos Favoritos! ❤️', 'success');
+        ToastManager.show('Produto adicionado aos Favoritos!', 'success');
       } else {
         this.favoriteIds = this.favoriteIds.filter(id => id !== productId);
         ToastManager.show('Produto removido dos Favoritos.', 'info');
       }
 
       if (btnElement) {
-        btnElement.innerHTML = data.is_favorite ? '❤️' : '🤍';
+        btnElement.innerHTML = data.is_favorite 
+          ? `<svg class="w-4 h-4 text-red-500 fill-current" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>`
+          : `<svg class="w-4 h-4 text-gray-400 stroke-current fill-none" stroke-width="2" viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>`;
         if (data.is_favorite) {
           btnElement.className = 'absolute top-2 right-2 p-2 rounded-full transition shadow backdrop-blur bg-red-50 dark:bg-red-950/60 border border-red-200 cursor-pointer';
         } else {
@@ -5498,11 +5570,12 @@ const App = {
               </select>
             </div>
             <div>
-              <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">📍 Localização / Geolocalização</label>
+              <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1 flex items-center gap-1.5"><i data-lucide="map-pin" class="w-3.5 h-3.5 text-teal-600 dark:text-teal-400"></i> Localização / Região</label>
               <div class="flex gap-2">
                 <input type="text" id="srch-location" placeholder="Cidade ou UF (ex: São Paulo)" value="${this.searchLocation}" class="flex-1 px-3 py-2 border rounded-xl dark:bg-gray-700 text-sm">
-                <button type="button" onclick="App.simulateGeoLocation()" title="Detectar Minha Localização" class="px-3 py-2 bg-teal-50 dark:bg-teal-950 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 rounded-xl text-xs font-bold hover:bg-teal-100 cursor-pointer">
-                  📍 Detectar
+                <button type="button" onclick="App.simulateGeoLocation()" title="Detectar Minha Localização" class="px-3 py-2 bg-teal-50 dark:bg-teal-950 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 rounded-xl text-xs font-bold hover:bg-teal-100 dark:hover:bg-teal-900 transition flex items-center gap-1.5 cursor-pointer">
+                  <i data-lucide="crosshair" class="w-3.5 h-3.5"></i>
+                  <span>Detectar</span>
                 </button>
               </div>
             </div>
@@ -5511,14 +5584,14 @@ const App = {
           <div class="flex flex-wrap items-center justify-between gap-3 pt-3 border-t dark:border-gray-700">
             <div class="flex flex-wrap gap-2 text-xs">
               <span class="font-bold text-gray-500 py-1">Atributos Ecológicos:</span>
-              <label class="px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-full cursor-pointer hover:bg-teal-50">
-                <input type="checkbox" class="mr-1"> ♻️ Reciclado
+              <label class="px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-full cursor-pointer hover:bg-teal-50 dark:hover:bg-teal-950 transition inline-flex items-center gap-1.5">
+                <input type="checkbox" class="accent-teal-600"> <span class="font-medium text-xs">Reciclado</span>
               </label>
-              <label class="px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-full cursor-pointer hover:bg-teal-50">
-                <input type="checkbox" class="mr-1"> 🌱 Algodão Orgânico
+              <label class="px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-full cursor-pointer hover:bg-teal-50 dark:hover:bg-teal-950 transition inline-flex items-center gap-1.5">
+                <input type="checkbox" class="accent-teal-600"> <span class="font-medium text-xs">Algodão Orgânico</span>
               </label>
-              <label class="px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-full cursor-pointer hover:bg-teal-50">
-                <input type="checkbox" class="mr-1"> 🎨 Upcycled
+              <label class="px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-full cursor-pointer hover:bg-teal-50 dark:hover:bg-teal-950 transition inline-flex items-center gap-1.5">
+                <input type="checkbox" class="accent-teal-600"> <span class="font-medium text-xs">Upcycled</span>
               </label>
             </div>
             <div class="flex gap-2">
@@ -5547,7 +5620,7 @@ const App = {
     if (locInput) {
       locInput.value = 'São Paulo, SP';
       this.searchLocation = 'São Paulo, SP';
-      ToastManager.show('📍 Geolocalização detectada: São Paulo, SP', 'success');
+      ToastManager.show('Geolocalização detectada: São Paulo, SP', 'success');
       this.applySearchFilter();
     }
   },
@@ -5624,7 +5697,7 @@ const App = {
         }
         if (btnElement) {
           const originalHTML = btnElement.innerHTML;
-          btnElement.innerHTML = `<span>✓</span> Adicionado!`;
+          btnElement.innerHTML = `<span class="inline-flex items-center gap-1"><svg class="w-3.5 h-3.5 inline" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg> Adicionado!</span>`;
           btnElement.classList.add('bg-emerald-600');
           setTimeout(() => {
             btnElement.innerHTML = originalHTML;
@@ -5647,7 +5720,7 @@ const App = {
           }
           if (btnElement) {
             const originalHTML = btnElement.innerHTML;
-            btnElement.innerHTML = `<span>✓</span> Adicionado!`;
+            btnElement.innerHTML = `<span class="inline-flex items-center gap-1"><svg class="w-3.5 h-3.5 inline" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg> Adicionado!</span>`;
             btnElement.classList.add('bg-emerald-600');
             setTimeout(() => {
               btnElement.innerHTML = originalHTML;

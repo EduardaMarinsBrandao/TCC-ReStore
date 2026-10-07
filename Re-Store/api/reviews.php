@@ -541,7 +541,7 @@ if ($method === 'POST' && $action === 'create') {
         $photoMsg = $photosSaved > 0 ? " com {$photosSaved} foto(s) anexada(s)" : "";
         echo json_encode([
             'success' => true, 
-            'message' => "Avaliação publicada com sucesso{$photoMsg}! Você ganhou +{$reviewBonusPoints} Pontos Verdes 🌱",
+            'message' => "Avaliação publicada com sucesso{$photoMsg}! Você ganhou +{$reviewBonusPoints} Pontos Verdes.",
             'review_id' => $reviewId
         ]);
         exit;

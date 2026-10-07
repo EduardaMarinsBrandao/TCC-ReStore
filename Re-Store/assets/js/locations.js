@@ -91,7 +91,7 @@
           <input type="hidden" id="${hiddenInputId}" name="location" value="${canonicalInitial.replace(/"/g, '&quot;')}" ${required ? 'required' : ''}>
           
           <div class="relative flex items-center">
-            <span class="absolute left-3.5 text-gray-400 pointer-events-none select-none text-sm">📍</span>
+            <svg class="w-4 h-4 text-teal-600 dark:text-teal-400 absolute left-3.5 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 21s-8-4.5-8-11.8A8 8 0 0112 2a8 8 0 018 7.2c0 7.3-8 11.8-8 11.8z"/><circle cx="12" cy="10" r="3"/></svg>
             
             <input 
               type="text" 
@@ -124,8 +124,8 @@
             </div>
           </div>
 
-          <div id="${errorId}" class="hidden text-xs text-red-500 font-medium mt-1.5 flex items-center gap-1">
-            <span>⚠️</span>
+          <div id="${errorId}" class="hidden text-xs text-red-500 font-medium mt-1.5 flex items-center gap-1.5">
+            <svg class="w-4 h-4 text-red-500 inline-block flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
             <span>Por favor, selecione um município/UF pré-determinado da lista.</span>
           </div>
 
@@ -170,7 +170,7 @@
         if (!items || items.length === 0) {
           listEl.innerHTML = `
             <li class="px-4 py-6 text-center text-xs text-gray-400 select-none">
-              <span class="text-base block mb-1">🔍</span>
+              <svg class="w-6 h-6 mx-auto mb-1 text-gray-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35"/></svg>
               Nenhum município encontrado para essa busca.<br>
               <strong class="text-gray-500 dark:text-gray-300">Apenas municípios oficiais pré-determinados são válidos.</strong>
             </li>
@@ -201,7 +201,7 @@
               }"
             >
               <div class="flex items-center gap-2 truncate">
-                <span class="text-xs opacity-60">📍</span>
+                <svg class="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 flex-shrink-0 opacity-70" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 21s-8-4.5-8-11.8A8 8 0 0112 2a8 8 0 018 7.2c0 7.3-8 11.8-8 11.8z"/><circle cx="12" cy="10" r="3"/></svg>
                 <span class="truncate">${city}</span>
               </div>
               <span class="ml-2 px-2 py-0.5 text-[11px] font-bold rounded-md ${
