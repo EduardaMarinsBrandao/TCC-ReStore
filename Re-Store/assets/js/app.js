@@ -1,5 +1,200 @@
 /* assets/js/app.js - Controlador Principal Re-Store (TODAS AS TELAS E COMPONENTES IMPLEMENTADOS) */
 
+/* =========================================================================
+   DATE HELPER: SINCRONIZAÇÃO E ALINHAMENTO DE HORÁRIOS COM O USUÁRIO
+   Converte datas/horas armazenadas em UTC no backend para o fuso horário
+   local exato e formato nativo do dispositivo do usuário (Intl / pt-BR).
+   ========================================================================= */
+const DateHelper = {
+  /**
+   * Converte qualquer timestamp do backend (UTC no SQLite/MySQL ou ISO)
+   * em um objeto Date do JavaScript devidamente sincronizado com o fuso local do usuário.
+   */
+  parseServerDate(val) {
+    if (!val) return null;
+    if (val instanceof Date) return isNaN(val.getTime()) ? null : val;
+    if (typeof val === 'number') {
+      const d = new Date(val);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    if (typeof val !== 'string') return null;
+
+    const s = val.trim();
+    if (!s) return null;
+
+    // Detecta padrão SQL "YYYY-MM-DD HH:mm:ss" ou "YYYY-MM-DDTHH:mm:ss" sem fuso.
+    // O SQLite CURRENT_TIMESTAMP e MySQL gravam em UTC puro sem sufixo "Z".
+    // Construímos a Date com Date.UTC para que o navegador aplique automaticamente o fuso horário local do usuário.
+    const sqlMatch = s.match(/^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?$/);
+    if (sqlMatch) {
+      const [, year, month, day, hours, minutes, seconds] = sqlMatch;
+      return new Date(Date.UTC(
+        parseInt(year, 10),
+        parseInt(month, 10) - 1,
+        parseInt(day, 10),
+        parseInt(hours, 10),
+        parseInt(minutes, 10),
+        parseInt(seconds || '0', 10)
+      ));
+    }
+
+    // Se já contiver 'Z' ou offset explícito (+03:00, -03:00, etc.)
+    const parsed = new Date(s);
+    if (!isNaN(parsed.getTime())) {
+      return parsed;
+    }
+
+    return null;
+  },
+
+  /**
+   * Retorna o identificador do fuso horário detectado no dispositivo do usuário (ex: "America/Sao_Paulo")
+   */
+  getUserTimeZone() {
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Sao_Paulo';
+    } catch {
+      return 'America/Sao_Paulo';
+    }
+  },
+
+  /**
+   * Formata Data e Hora completas: "07/10/2026 às 11:22"
+   */
+  formatDateTime(val, fallback = '') {
+    const d = this.parseServerDate(val);
+    if (!d) return fallback || String(val || '');
+    const dateStr = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const timeStr = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    return `${dateStr} às ${timeStr}`;
+  },
+
+  /**
+   * Formata apenas a Data: "07/10/2026"
+   */
+  formatDate(val, fallback = '') {
+    const d = this.parseServerDate(val);
+    if (!d) return fallback || String(val || '');
+    return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  },
+
+  /**
+   * Formata apenas o Horário: "11:22"
+   */
+  formatTime(val, fallback = '') {
+    const d = this.parseServerDate(val);
+    if (!d) return fallback || String(val || '');
+    return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  },
+
+  /**
+   * Horário local para balão de chat (HH:mm)
+   */
+  formatChatTime(val) {
+    return this.formatTime(val, '');
+  },
+
+  /**
+   * Horário inteligente para a lista de conversas da barra lateral:
+   * - Hoje: "11:22"
+   * - Ontem: "Ontem"
+   * - Últimos 6 dias: "Seg", "Ter", etc.
+   * - Ano atual: "05/10"
+   * - Anos anteriores: "12/08/2025"
+   */
+  formatConversationTime(val) {
+    const d = this.parseServerDate(val);
+    if (!d) return '';
+
+    const now = new Date();
+    const isSameYear = d.getFullYear() === now.getFullYear();
+
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfTarget = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const diffDays = Math.round((startOfToday - startOfTarget) / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) {
+      return this.formatTime(d);
+    }
+    if (diffDays === 1) {
+      return 'Ontem';
+    }
+    if (diffDays > 1 && diffDays < 7) {
+      const weekdays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+      return weekdays[d.getDay()];
+    }
+    if (isSameYear) {
+      return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+    }
+    return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  },
+
+  /**
+   * Divisor de dia para o corpo do chat (ex: "Hoje", "Ontem", "5 de outubro")
+   */
+  formatChatDayHeader(val) {
+    const d = this.parseServerDate(val);
+    if (!d) return '';
+
+    const now = new Date();
+    const isSameYear = d.getFullYear() === now.getFullYear();
+
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfTarget = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const diffDays = Math.round((startOfToday - startOfTarget) / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) return 'Hoje';
+    if (diffDays === 1) return 'Ontem';
+
+    if (isSameYear) {
+      const day = d.getDate();
+      const monthName = d.toLocaleDateString('pt-BR', { month: 'long' });
+      return `${day} de ${monthName}`;
+    }
+
+    return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+  },
+
+  /**
+   * Tempo relativo amigável (para notificações, avisos e atividades recentes):
+   * "Agora mesmo", "Há 5 min", "Hoje às 11:22", "Ontem às 19:40", "07/10/2026 às 11:22"
+   */
+  formatRelativeTime(val) {
+    const d = this.parseServerDate(val);
+    if (!d) return String(val || '');
+
+    const now = new Date();
+    const diffSec = Math.floor((now.getTime() - d.getTime()) / 1000);
+
+    if (diffSec < 45) {
+      return 'Agora mesmo';
+    }
+    if (diffSec < 3600) {
+      const mins = Math.max(1, Math.floor(diffSec / 60));
+      return `Há ${mins} min`;
+    }
+
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfTarget = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const diffDays = Math.round((startOfToday - startOfTarget) / (1000 * 60 * 60 * 24));
+
+    const timeStr = this.formatTime(d);
+    if (diffDays === 0) {
+      return `Hoje às ${timeStr}`;
+    }
+    if (diffDays === 1) {
+      return `Ontem às ${timeStr}`;
+    }
+    if (diffDays > 1 && diffDays < 7) {
+      return `Há ${diffDays} dias às ${timeStr}`;
+    }
+
+    return this.formatDateTime(d);
+  }
+};
+
+window.DateHelper = DateHelper;
+
 const App = {
   currentScreen: 'home',
   selectedCategory: '',
@@ -11,6 +206,31 @@ const App = {
   selectedRole: 'buyer', // 'buyer' ou 'seller'
   currentChatPartnerId: null,
   currentChatView: 'sidebar', // 'sidebar' ou 'chat'
+  DateHelper: DateHelper,
+
+  formatDateTime(val, fallback = '') {
+    return DateHelper.formatDateTime(val, fallback);
+  },
+
+  formatDate(val, fallback = '') {
+    return DateHelper.formatDate(val, fallback);
+  },
+
+  formatTime(val, fallback = '') {
+    return DateHelper.formatTime(val, fallback);
+  },
+
+  formatRelativeTime(val) {
+    return DateHelper.formatRelativeTime(val);
+  },
+
+  formatConversationTime(val) {
+    return DateHelper.formatConversationTime(val);
+  },
+
+  formatChatDayHeader(val) {
+    return DateHelper.formatChatDayHeader(val);
+  },
 
   confirm(options) {
     return ModalDialog.confirm(options);
@@ -1033,7 +1253,7 @@ const App = {
                   <div class="pt-2">
                     <div class="flex items-center justify-between mb-1">
                       <span class="text-amber-400 text-sm font-bold">${'★'.repeat(Math.max(1, Math.min(5, parseInt(myReview.rating || 5, 10))))}${'☆'.repeat(5 - Math.max(1, Math.min(5, parseInt(myReview.rating || 5, 10))))}</span>
-                      <span class="text-[11px] text-gray-400">${myReview.created_at || 'Recente'}</span>
+                      <span class="text-[11px] text-gray-400" title="${DateHelper.formatDateTime(myReview.created_at)}">${DateHelper.formatDateTime(myReview.created_at) || 'Recente'}</span>
                     </div>
                     <p class="text-xs text-gray-700 dark:text-gray-300">${myReview.comment || 'Sem comentário por escrito.'}</p>
                     ${myReview.images && myReview.images.length > 0 ? `
@@ -1261,7 +1481,7 @@ const App = {
                       </div>
 
                       <div class="flex items-center justify-between pt-2 border-t dark:border-gray-700">
-                        <span class="text-[11px] text-gray-400">${r.created_at || 'Recente'}</span>
+                        <span class="text-[11px] text-gray-400" title="${DateHelper.formatDateTime(r.created_at)}">${DateHelper.formatDateTime(r.created_at) || 'Recente'}</span>
                         
                         <div class="flex items-center gap-3">
                           <!-- Botão Útil (+1) -->
@@ -2419,7 +2639,7 @@ const App = {
                 <div class="flex flex-wrap items-center justify-between gap-2 border-b dark:border-gray-700 pb-3">
                   <div>
                     <span class="font-bold text-sm text-teal-600">Pedido #${o.order_number}</span>
-                    <span class="text-xs text-gray-400 ml-2">Data: ${o.created_at}</span>
+                    <span class="text-xs text-gray-400 ml-2" title="${DateHelper.formatDateTime(o.created_at)}">Data: ${DateHelper.formatDateTime(o.created_at)}</span>
                   </div>
                   <div>${statusBadge}</div>
                 </div>
@@ -2585,9 +2805,11 @@ const App = {
       };
       list.innerHTML = items.map(n => `
         <div class="p-3 border rounded-2xl ${styles[n.type] || styles.info}">
-          <div class="font-bold text-xs">${esc(n.title)}</div>
-          <div class="text-[11px] opacity-90">${esc(n.message)}</div>
-          <div class="text-[10px] opacity-60 mt-1">${esc(n.time)}</div>
+          <div class="flex items-center justify-between gap-2">
+            <div class="font-bold text-xs">${esc(n.title)}</div>
+            <div class="text-[10px] opacity-70 shrink-0 font-medium" title="${DateHelper.formatDateTime(n.time)}">${DateHelper.formatRelativeTime(n.time)}</div>
+          </div>
+          <div class="text-[11px] opacity-90 mt-1">${esc(n.message)}</div>
         </div>
       `).join('');
 
@@ -2883,7 +3105,7 @@ const App = {
                     typeBadge = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300"><i data-lucide="rotate-ccw" class="w-3 h-3"></i> Estorno</span>';
                   }
 
-                  const dateFormatted = h.created_at ? new Date(h.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+                  const dateFormatted = DateHelper.formatDateTime(h.created_at);
 
                   return `
                     <div class="py-3.5 flex items-center justify-between gap-4">
@@ -3002,7 +3224,7 @@ const App = {
                 ${user.name}
                 ${isPJ ? '<span class="text-xs bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200 px-2 py-0.5 rounded-full font-bold">CNPJ Verificado ✓</span>' : ''}
               </h1>
-              <div class="text-xs text-gray-500">${user.email} • ${user.city || 'São Paulo'}, ${user.state || 'SP'}</div>
+              <div class="text-xs text-gray-500">${user.email} • ${user.city || 'São Paulo'}, ${user.state || 'SP'}${user.created_at ? ' • Membro desde ' + DateHelper.formatDate(user.created_at) : ''}</div>
               <div class="mt-2 flex items-center gap-2">
                 <span class="badge-points inline-flex items-center gap-1.5"><i data-lucide="sprout" class="w-3.5 h-3.5"></i> ${user.points} Pontos Verdes</span>
                 <span class="bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200 text-xs px-2.5 py-0.5 rounded-full font-bold">Nível ${user.level}</span>
@@ -3104,7 +3326,7 @@ const App = {
                           </button>
                           <div class="flex items-center gap-2 mt-0.5">
                             <span class="text-amber-400 text-xs font-bold">${'★'.repeat(r.rating)}${'☆'.repeat(5 - r.rating)}</span>
-                            <span class="text-[11px] text-gray-400">• ${r.created_at || 'Recente'}</span>
+                            <span class="text-[11px] text-gray-400" title="${DateHelper.formatDateTime(r.created_at)}">• ${DateHelper.formatDateTime(r.created_at) || 'Recente'}</span>
                             <span class="text-[10px] text-emerald-700 bg-emerald-50 dark:bg-emerald-950 px-2 py-0.2 rounded-full font-bold">✓ Compra Verificada</span>
                           </div>
                         </div>
@@ -3249,6 +3471,7 @@ const App = {
 
       const metrics = metricsData.metrics || { active_products: 0, low_stock_count: 0, total_sales: 0, total_revenue: 0 };
       const products = productsData.products || [];
+      const recentSales = metricsData.recent_sales || [];
       const sTier = metricsData.seller_tier || {
         tier_name: 'Vendedor Semente',
         rate_formatted: '0,30 pts / R$',
@@ -3343,6 +3566,58 @@ const App = {
               <div class="text-xs text-gray-500 font-semibold">Estoque Baixo (≤ 3)</div>
               <div class="text-2xl font-bold text-amber-500 mt-1">${metrics.low_stock_count}</div>
             </div>
+          </div>
+
+          <!-- ÚLTIMAS VENDAS REALIZADAS COM HORÁRIO SINCRONIZADO -->
+          <div class="p-6 rounded-3xl border dark:border-gray-800 bg-white dark:bg-gray-800 shadow-sm space-y-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <h2 class="text-lg font-bold flex items-center gap-2">
+                  <i data-lucide="receipt" class="w-5 h-5 text-teal-600"></i>
+                  <span>Últimas Vendas Realizadas</span>
+                </h2>
+                <p class="text-xs text-gray-500 mt-0.5">Histórico recente de pedidos com horário sincronizado em tempo real com o seu dispositivo.</p>
+              </div>
+              <span class="text-xs text-teal-600 font-bold bg-teal-50 dark:bg-teal-950/60 px-3 py-1 rounded-full border border-teal-200 dark:border-teal-800">
+                ${recentSales.length} registro(s)
+              </span>
+            </div>
+
+            ${recentSales.length > 0 ? `
+              <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs">
+                  <thead>
+                    <tr class="border-b dark:border-gray-700 text-gray-500 uppercase tracking-wider text-[10px]">
+                      <th class="py-2.5 font-bold">Pedido</th>
+                      <th class="py-2.5 font-bold">Produto</th>
+                      <th class="py-2.5 font-bold">Comprador</th>
+                      <th class="py-2.5 font-bold">Valor</th>
+                      <th class="py-2.5 font-bold text-right">Data & Horário Local</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y dark:divide-gray-700/60 font-medium">
+                    ${recentSales.map(s => `
+                      <tr class="hover:bg-gray-50/70 dark:hover:bg-gray-700/30 transition">
+                        <td class="py-3 font-bold text-teal-600">#${this.escapeHtml(s.order_number)}</td>
+                        <td class="py-3 text-gray-900 dark:text-white">${this.escapeHtml(s.product_name)} <span class="text-gray-400">(${s.quantity}x)</span></td>
+                        <td class="py-3 text-gray-600 dark:text-gray-300">${this.escapeHtml(s.buyer_name || 'Comprador')}</td>
+                        <td class="py-3 font-bold text-emerald-600">R$ ${parseFloat(s.price * s.quantity).toFixed(2).replace('.', ',')}</td>
+                        <td class="py-3 text-right text-gray-500 dark:text-gray-400" title="${DateHelper.formatDateTime(s.order_date)}">
+                          <span class="inline-flex items-center gap-1 font-semibold text-gray-700 dark:text-gray-300">
+                            <i data-lucide="clock" class="w-3.5 h-3.5 text-teal-600 inline"></i>
+                            ${DateHelper.formatDateTime(s.order_date)}
+                          </span>
+                        </td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
+              </div>
+            ` : `
+              <div class="text-center py-6 text-gray-400 dark:text-gray-500 text-xs">
+                Nenhuma venda registrada até o momento. As novas vendas aparecerão aqui com data e horário em tempo real.
+              </div>
+            `}
           </div>
 
           <div>
@@ -4092,14 +4367,7 @@ const App = {
   },
 
   formatChatTime(dateStr) {
-    if (!dateStr) return '';
-    try {
-      const d = new Date(dateStr.replace(' ', 'T'));
-      if (isNaN(d.getTime())) return dateStr;
-      return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    } catch {
-      return '';
-    }
+    return DateHelper.formatChatTime(dateStr);
   },
 
   async renderChatScreen(container) {
@@ -4356,7 +4624,26 @@ const App = {
           </div>
         ` : ''}
 
-        ${msgs.map(m => this.renderMessageBubbleHTML(m, currentUserId, partnerId)).join('')}
+        ${(() => {
+          let lastDayKey = '';
+          return msgs.map(m => {
+            const d = DateHelper.parseServerDate(m.created_at);
+            const dayKey = d ? `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}` : '';
+            let separatorHTML = '';
+            if (dayKey && dayKey !== lastDayKey) {
+              lastDayKey = dayKey;
+              const headerTitle = DateHelper.formatChatDayHeader(d);
+              separatorHTML = `
+                <div class="flex items-center justify-center my-3 select-none chat-day-divider" data-day="${dayKey}">
+                  <span class="px-3 py-1 rounded-full text-[10px] font-bold bg-gray-200/90 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-300/60 dark:border-gray-700/80 shadow-xs">
+                    ${headerTitle}
+                  </span>
+                </div>
+              `;
+            }
+            return separatorHTML + this.renderMessageBubbleHTML(m, currentUserId, partnerId);
+          }).join('');
+        })()}
       </div>
 
       <!-- SUGESTÕES RÁPIDAS -->
@@ -4421,10 +4708,11 @@ const App = {
   renderMessageBubbleHTML(m, currentUserId, partnerId) {
     const isMe = parseInt(m.sender_id, 10) === currentUserId;
     const timeFormatted = this.formatChatTime(m.created_at);
+    const fullDateTime = DateHelper.formatDateTime(m.created_at);
     const bubbleId = `chat-msg-${m.id}`;
 
     return `
-      <div id="${bubbleId}" class="flex w-full ${isMe ? 'justify-end' : 'justify-start'} group animate-fade-in">
+      <div id="${bubbleId}" class="flex w-full ${isMe ? 'justify-end' : 'justify-start'} group animate-fade-in" data-created-at="${this.escapeHtml(m.created_at || '')}">
         <div class="relative max-w-[85%] sm:max-w-md px-4 py-2.5 rounded-2xl text-sm shadow-sm break-words overflow-hidden ${
           isMe 
             ? 'chat-bubble-me bg-teal-600 text-white rounded-br-sm' 
@@ -4432,7 +4720,7 @@ const App = {
         }">
           <div class="break-words leading-relaxed whitespace-pre-wrap">${this.escapeHtml(m.message)}</div>
           <div class="flex items-center justify-end gap-1.5 mt-1 text-[10px] ${isMe ? 'text-teal-100' : 'text-gray-500 dark:text-gray-400'}">
-            <span>${timeFormatted}</span>
+            <span title="${fullDateTime}">${timeFormatted}</span>
             ${isMe ? `<span class="msg-status font-bold">${m.is_read ? '✓✓' : '✓'}</span>` : ''}
             ${isMe ? `
               <button 
@@ -4463,6 +4751,24 @@ const App = {
 
     newMessages.forEach(m => {
       if (document.getElementById(`chat-msg-${m.id}`)) return;
+
+      const d = DateHelper.parseServerDate(m.created_at);
+      const dayKey = d ? `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}` : '';
+      if (dayKey) {
+        const lastDivider = body.querySelector('.chat-day-divider:last-of-type');
+        const lastDividerKey = lastDivider ? lastDivider.getAttribute('data-day') : '';
+        if (lastDividerKey !== dayKey) {
+          const divHeader = document.createElement('div');
+          divHeader.className = 'flex items-center justify-center my-3 select-none chat-day-divider';
+          divHeader.setAttribute('data-day', dayKey);
+          divHeader.innerHTML = `
+            <span class="px-3 py-1 rounded-full text-[10px] font-bold bg-gray-200/90 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-300/60 dark:border-gray-700/80 shadow-xs">
+              ${DateHelper.formatChatDayHeader(d)}
+            </span>
+          `;
+          body.appendChild(divHeader);
+        }
+      }
 
       const tempHolder = document.createElement('div');
       tempHolder.innerHTML = this.renderMessageBubbleHTML(m, currentUserId, partnerId);
@@ -4496,17 +4802,33 @@ const App = {
 
     const body = document.getElementById('chat-msgs-body');
     const tempId = 'temp_' + Date.now();
-    const nowTime = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const nowTime = DateHelper.formatChatTime(new Date());
+    const fullNow = DateHelper.formatDateTime(new Date());
 
     // Inserção otimista instantânea na tela
     if (body) {
+      const today = new Date();
+      const todayKey = `${today.getFullYear()}-${today.getMonth()}-${today.getDate()}`;
+      const lastDivider = body.querySelector('.chat-day-divider:last-of-type');
+      if (!lastDivider || lastDivider.getAttribute('data-day') !== todayKey) {
+        const divHeader = document.createElement('div');
+        divHeader.className = 'flex items-center justify-center my-3 select-none chat-day-divider';
+        divHeader.setAttribute('data-day', todayKey);
+        divHeader.innerHTML = `
+          <span class="px-3 py-1 rounded-full text-[10px] font-bold bg-gray-200/90 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-300/60 dark:border-gray-700/80 shadow-xs">
+            Hoje
+          </span>
+        `;
+        body.appendChild(divHeader);
+      }
+
       const tempHolder = document.createElement('div');
       tempHolder.innerHTML = `
         <div id="chat-msg-${tempId}" class="flex w-full justify-end group animate-fade-in">
           <div class="relative max-w-[85%] sm:max-w-md px-4 py-2.5 rounded-2xl text-sm shadow-sm break-words overflow-hidden chat-bubble-me bg-teal-600 text-white rounded-br-sm">
             <div class="break-words leading-relaxed whitespace-pre-wrap">${this.escapeHtml(text)}</div>
             <div class="flex items-center justify-end gap-1.5 mt-1 text-[10px] text-teal-100">
-              <span>${nowTime}</span>
+              <span title="${fullNow}">${nowTime}</span>
               <span class="msg-status">Enviando...</span>
             </div>
           </div>
@@ -4531,6 +4853,12 @@ const App = {
           tempEl.id = `chat-msg-${sent.id}`;
           const statusEl = tempEl.querySelector('.msg-status');
           if (statusEl) statusEl.innerHTML = '✓';
+
+          const timeSpan = tempEl.querySelector('.text-\\[10px\\] span:first-child');
+          if (timeSpan && sent.created_at) {
+            timeSpan.innerText = DateHelper.formatChatTime(sent.created_at);
+            timeSpan.title = DateHelper.formatDateTime(sent.created_at);
+          }
 
           const timeContainer = tempEl.querySelector('.text-\\[10px\\]');
           if (timeContainer) {
@@ -4629,7 +4957,8 @@ const App = {
       const isActive = activePartnerId && parseInt(c.user.id, 10) === parseInt(activePartnerId, 10);
       const avatar = c.user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(c.user.name)}&background=0d9488&color=fff&size=60`;
       const lastMsgText = c.last_message ? this.escapeHtml(c.last_message.message) : 'Iniciou a conversa';
-      const time = c.last_message ? this.formatChatTime(c.last_message.created_at) : '';
+      const time = c.last_message ? DateHelper.formatConversationTime(c.last_message.created_at) : '';
+      const fullTime = c.last_message ? DateHelper.formatDateTime(c.last_message.created_at) : '';
 
       return `
         <div 
@@ -4654,7 +4983,7 @@ const App = {
               <div class="font-bold text-xs text-gray-900 dark:text-white truncate">
                 ${this.escapeHtml(c.user.name)}
               </div>
-              <span class="text-[10px] text-gray-500 dark:text-gray-400 shrink-0">${time}</span>
+              <span class="text-[10px] text-gray-500 dark:text-gray-400 shrink-0 font-medium" title="${fullTime}">${time}</span>
             </div>
             <div class="text-[11px] text-gray-600 dark:text-gray-300 truncate ${c.unread_count > 0 ? 'font-bold text-gray-900 dark:text-white' : ''}">
               ${lastMsgText}

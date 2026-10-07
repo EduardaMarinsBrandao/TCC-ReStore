@@ -1,6 +1,11 @@
 <?php
 // config/database.php
 
+// Padronização universal de Fuso Horário (UTC para backend e banco de dados)
+if (function_exists('date_default_timezone_set')) {
+    date_default_timezone_set('UTC');
+}
+
 // Carrega credenciais locais (se existirem)
 if (file_exists(__DIR__ . '/credentials.local.php')) {
     require_once __DIR__ . '/credentials.local.php';
@@ -59,7 +64,7 @@ function getDbConnection() {
         $options = [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8mb4",
+            PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8mb4, time_zone = '+00:00'",
             PDO::ATTR_TIMEOUT => 3
         ];
         
