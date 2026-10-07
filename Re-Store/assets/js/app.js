@@ -12,17 +12,21 @@ const App = {
   currentChatPartnerId: null,
   currentChatView: 'sidebar', // 'sidebar' ou 'chat'
 
+  confirm(options) {
+    return ModalDialog.confirm(options);
+  },
+
+  alert(options) {
+    return ModalDialog.alert(options);
+  },
+
   submitReview: async function(productId, formElement) {
     const formData = new FormData(formElement);
     formData.append('product_id', productId);
     const comment = formData.get('comment');
 
     if (!comment || !comment.trim()) {
-      if (typeof ToastManager !== 'undefined') {
-        ToastManager.show("Por favor, escreva um comentário antes de enviar.", "warning");
-      } else {
-        alert("Por favor, escreva um comentário antes de enviar.");
-      }
+      ToastManager.show("Por favor, escreva um comentário antes de enviar.", "warning");
       return;
     }
 
@@ -39,21 +43,13 @@ const App = {
       });
       const data = await response.json();
       if (data.success) {
-        if (typeof ToastManager !== 'undefined') {
-          ToastManager.show(data.message || "Avaliação enviada com sucesso!", "success");
-        } else {
-          alert(data.message || "Avaliação enviada com sucesso!");
-        }
+        ToastManager.show(data.message || "Avaliação enviada com sucesso!", "success");
         formElement.reset();
         await AuthManager.checkAuth();
         App.updateHeaderUI();
         App.renderCurrentScreen();
       } else {
-        if (typeof ToastManager !== 'undefined') {
-          ToastManager.show(data.error || "Erro ao enviar avaliação.", "error");
-        } else {
-          alert(data.error || "Erro ao enviar avaliação.");
-        }
+        ToastManager.show(data.error || "Erro ao enviar avaliação.", "error");
       }
     } catch (error) {
       console.error("Erro no envio:", error);
@@ -103,11 +99,7 @@ const App = {
           btnElement.classList.add('text-gray-500');
         }
       } else {
-        if (typeof ToastManager !== 'undefined') {
-          ToastManager.show(data.error || 'Erro ao votar.', 'error');
-        } else {
-          alert(data.error || 'Erro ao votar.');
-        }
+        ToastManager.show(data.error || 'Erro ao votar.', 'error');
       }
     } catch (err) {
       console.error('Erro na requisição:', err);
@@ -116,7 +108,15 @@ const App = {
 
   // Excluir Avaliação
   deleteReview: async function(reviewId) {
-    if (!confirm('Tem certeza que deseja excluir sua avaliação e as fotos anexadas?')) return;
+    const confirmed = await ModalDialog.confirm({
+      title: 'Excluir Avaliação',
+      message: 'Tem certeza que deseja excluir sua avaliação e as fotos anexadas? Esta ação não pode ser desfeita.',
+      confirmText: 'Sim, Excluir',
+      cancelText: 'Cancelar',
+      type: 'danger',
+      icon: 'trash'
+    });
+    if (!confirmed) return;
 
     try {
       const res = await fetch('api/reviews.php?action=delete', {
@@ -126,19 +126,14 @@ const App = {
       });
       const data = await res.json();
       if (data.success) {
-        if (typeof ToastManager !== 'undefined') {
-          ToastManager.show(data.message || 'Avaliação removida com sucesso!', 'info');
-        }
+        ToastManager.show(data.message || 'Avaliação removida com sucesso!', 'info');
         App.renderCurrentScreen();
       } else {
-        if (typeof ToastManager !== 'undefined') {
-          ToastManager.show(data.error || 'Erro ao excluir.', 'error');
-        } else {
-          alert(data.error || 'Erro ao excluir.');
-        }
+        ToastManager.show(data.error || 'Erro ao excluir.', 'error');
       }
     } catch (err) {
       console.error(err);
+      ToastManager.show('Erro ao excluir avaliação.', 'error');
     }
   },
 
@@ -173,11 +168,11 @@ const App = {
     const files = Array.from(input.files || []);
 
     if (files.length > maxAllowed) {
-      if (typeof ToastManager !== 'undefined') {
-        ToastManager.show(`Limite máximo de 3 fotos. Você pode adicionar no máximo ${maxAllowed} nova(s) foto(s).`, 'warning');
-      } else {
-        alert(`Limite máximo de 3 fotos. Você pode adicionar no máximo ${maxAllowed} nova(s) foto(s).`);
-      }
+      ModalDialog.alert({
+        title: 'Limite de Fotos',
+        message: `Limite máximo de 3 fotos. Você pode adicionar no máximo ${maxAllowed} nova(s) foto(s).`,
+        type: 'warning'
+      });
       input.value = '';
       return;
     }
@@ -270,18 +265,10 @@ const App = {
       });
       const data = await res.json();
       if (data.success) {
-        if (typeof ToastManager !== 'undefined') {
-          ToastManager.show(data.message || 'Avaliação atualizada com sucesso!', 'success');
-        } else {
-          alert(data.message || 'Avaliação atualizada com sucesso!');
-        }
+        ToastManager.show(data.message || 'Avaliação atualizada com sucesso!', 'success');
         App.renderCurrentScreen();
       } else {
-        if (typeof ToastManager !== 'undefined') {
-          ToastManager.show(data.error || 'Erro ao atualizar avaliação.', 'error');
-        } else {
-          alert(data.error || 'Erro ao atualizar avaliação.');
-        }
+        ToastManager.show(data.error || 'Erro ao atualizar avaliação.', 'error');
       }
     } catch (err) {
       console.error('Erro ao atualizar:', err);
@@ -2421,6 +2408,15 @@ const App = {
       return;
     }
 
+    const confirmed = await ModalDialog.confirm({
+      title: 'Resgatar Recompensa',
+      message: 'Deseja utilizar seus Pontos Verdes acumulados para resgatar este cupom de benefício?',
+      confirmText: 'Confirmar Resgate',
+      cancelText: 'Cancelar',
+      type: 'success'
+    });
+    if (!confirmed) return;
+
     this.isRedeemingCoupon = true;
     let originalText = '';
     if (btnElement) {
@@ -2867,6 +2863,30 @@ const App = {
 
     } catch (e) {
       container.innerHTML = `<div class="text-center py-12 text-red-500">Erro ao carregar área do vendedor.</div>`;
+    }
+  },
+
+  async deleteProductSeller(productId) {
+    const confirmed = await ModalDialog.confirm({
+      title: 'Excluir Anúncio',
+      message: 'Tem certeza de que deseja excluir este anúncio? O produto sairá do catálogo do marketplace e a ação não poderá ser desfeita.',
+      confirmText: 'Sim, Excluir Anúncio',
+      cancelText: 'Cancelar',
+      type: 'danger',
+      icon: 'trash'
+    });
+    if (!confirmed) return;
+
+    const res = await SellerManager.deleteProduct(productId);
+    if (res.success) {
+      ToastManager.show('Anúncio excluído com sucesso.', 'info');
+      this.renderSellerScreen(document.getElementById('main-content'));
+    } else {
+      ModalDialog.alert({
+        title: 'Erro ao Excluir Anúncio',
+        message: res.error || 'Não foi possível excluir o anúncio.',
+        type: 'danger'
+      });
     }
   },
 
@@ -4013,7 +4033,15 @@ const App = {
   },
 
   async deleteChatMessage(msgId, partnerId) {
-    if (!confirm('Deseja apagar esta mensagem enviada?')) return;
+    const confirmed = await ModalDialog.confirm({
+      title: 'Apagar Mensagem',
+      message: 'Deseja realmente apagar esta mensagem enviada? Ela será removida da conversa.',
+      confirmText: 'Sim, Apagar',
+      cancelText: 'Cancelar',
+      type: 'danger',
+      icon: 'trash'
+    });
+    if (!confirmed) return;
 
     const res = await ChatManager.deleteMessage(msgId);
     if (res.success) {
@@ -5563,9 +5591,17 @@ const App = {
   },
 
   // UTILS
-  removeOwnCartItems() {
+  async removeOwnCartItems() {
     const user = AuthManager.currentUser;
     if (!user) return;
+    const confirmed = await ModalDialog.confirm({
+      title: 'Remover Seus Produtos',
+      message: 'Deseja remover do carrinho todos os produtos que foram anunciados por você?',
+      confirmText: 'Remover Produtos',
+      cancelText: 'Cancelar',
+      type: 'warning'
+    });
+    if (!confirmed) return;
     const cart = CartManager.getCart();
     const filtered = cart.filter(item => parseInt(item.seller_id) !== parseInt(user.id));
     CartManager.saveCart(filtered);
@@ -5660,33 +5696,49 @@ const App = {
     this.renderCartScreen(document.getElementById('main-content'));
   },
 
-  removeCartItem(id) {
+  async removeCartItem(id) {
+    const confirmed = await ModalDialog.confirm({
+      title: 'Remover do Carrinho',
+      message: 'Deseja remover este produto do seu carrinho de compras?',
+      confirmText: 'Remover',
+      cancelText: 'Manter no Carrinho',
+      type: 'warning'
+    });
+    if (!confirmed) return;
+
     CartManager.removeItem(id);
-    ToastManager.show('Item removido do carrinho', 'info');
+    ToastManager.show('Item removido do carrinho.', 'info');
     this.renderCartScreen(document.getElementById('main-content'));
   },
 
 
   async cancelOrder(orderId) {
-    if (confirm('Deseja realmente solicitar o cancelamento deste pedido? Se você utilizou um cupom de desconto, ele será reativado para a sua conta.')) {
-      try {
-        const res = await fetch('api/orders.php', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'cancel', order_id: orderId })
-        });
-        const data = await res.json();
-        if (data.success) {
-          ToastManager.show(data.message || 'Pedido cancelado com sucesso!', 'info', 6000);
-          await AuthManager.checkAuth();
-          this.updateHeaderUI();
-          this.renderOrdersScreen(document.getElementById('main-content'));
-        } else {
-          ToastManager.show(data.error || 'Erro ao cancelar pedido.', 'error');
-        }
-      } catch (e) {
-        ToastManager.show('Erro de conexão ao cancelar pedido.', 'error');
+    const confirmed = await ModalDialog.confirm({
+      title: 'Cancelar Pedido',
+      message: 'Deseja realmente solicitar o cancelamento deste pedido? Se você utilizou um cupom de desconto, ele será reativado para a sua conta.',
+      confirmText: 'Sim, Cancelar Pedido',
+      cancelText: 'Voltar',
+      type: 'warning'
+    });
+    if (!confirmed) return;
+
+    try {
+      const res = await fetch('api/orders.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'cancel', order_id: orderId })
+      });
+      const data = await res.json();
+      if (data.success) {
+        ToastManager.show(data.message || 'Pedido cancelado com sucesso!', 'info', 6000);
+        await AuthManager.checkAuth();
+        this.updateHeaderUI();
+        this.renderOrdersScreen(document.getElementById('main-content'));
+      } else {
+        ToastManager.show(data.error || 'Erro ao cancelar pedido.', 'error');
       }
+    } catch (e) {
+      ToastManager.show('Erro de conexão ao cancelar pedido.', 'error');
     }
   },
 
@@ -5696,34 +5748,51 @@ const App = {
     document.getElementById('pay-box-boleto').className = tab === 'boleto' ? 'p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl border dark:border-gray-600 space-y-3' : 'hidden';
   },
 
-  confirmLogout() {
-    if (confirm('Deseja realmente encerrar sua sessão no Re-Store?')) {
-      AuthManager.logout().then(() => {
-        ToastManager.show('Sessão encerrada com sucesso.', 'info');
-        this.updateHeaderUI();
-        this.navigateTo('home');
-      });
-    }
+  async confirmLogout() {
+    const confirmed = await ModalDialog.confirm({
+      title: 'Encerrar Sessão',
+      message: 'Deseja realmente sair da sua conta no Re-Store?',
+      confirmText: 'Sim, Sair',
+      cancelText: 'Permanecer Conectado',
+      type: 'info',
+      icon: 'logout'
+    });
+    if (!confirmed) return;
+
+    await AuthManager.logout();
+    ToastManager.show('Sessão encerrada com sucesso.', 'info');
+    this.updateHeaderUI();
+    this.navigateTo('home');
   },
 
-  confirmDeleteAccount() {
-    if (confirm('ATENÇÃO: Deseja excluir permanentemente sua conta? Esta ação apagará todos os seus dados e não poderá ser desfeita.')) {
-      fetch('api/auth.php', {
+  async confirmDeleteAccount() {
+    const confirmed = await ModalDialog.confirm({
+      title: 'Excluir Conta Permanentemente',
+      message: 'ATENÇÃO: Esta ação é definitiva e irreversível! Todos os seus dados cadastrais, pedidos, anúncios e pontos verdes acumulados serão permanentemente apagados.',
+      confirmText: 'Sim, Excluir Minha Conta',
+      cancelText: 'Cancelar',
+      type: 'danger',
+      icon: 'trash'
+    });
+    if (!confirmed) return;
+
+    try {
+      const res = await fetch('api/auth.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'delete_account' })
-      })
-        .then(res => res.json())
-        .then(data => {
-          if (data.success) {
-            ToastManager.show(data.message, 'info');
-            AuthManager.currentUser = null;
-            this.updateHeaderUI();
-            this.navigateTo('home');
-          } else {
-            ToastManager.show(data.error, 'error');
-          }
-        });
+      });
+      const data = await res.json();
+      if (data.success) {
+        ToastManager.show(data.message, 'info');
+        AuthManager.currentUser = null;
+        this.updateHeaderUI();
+        this.navigateTo('home');
+      } else {
+        ToastManager.show(data.error, 'error');
+      }
+    } catch (e) {
+      ToastManager.show('Erro ao processar exclusão de conta.', 'error');
     }
   },
 

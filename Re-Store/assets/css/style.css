@@ -319,6 +319,35 @@ html.dark .header-glass {
   animation: toastSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+/* Animações dos Modais & Pop-ups Personalizados (Heurística Nielsen #1 & #5) */
+@keyframes modalScaleIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.93) translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes modalBackdropFadeIn {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.animate-modal-in {
+  animation: modalScaleIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-backdrop-in {
+  animation: modalBackdropFadeIn 0.2s ease-out forwards;
+}
+
 .skeleton-box {
   background-color: #E5E7EB;
   animation: skeletonPulse 1.5s ease-in-out infinite;
