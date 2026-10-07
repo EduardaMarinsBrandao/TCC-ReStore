@@ -2925,8 +2925,8 @@ const App = {
           </div>
 
           <div>
-            <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Local de Venda (Cidade, UF) *</label>
-            <input type="text" id="prod-location" required value="${((AuthManager.currentUser && AuthManager.currentUser.city) ? AuthManager.currentUser.city + (AuthManager.currentUser.state ? ', ' + AuthManager.currentUser.state : '') : '').replace(/"/g, '&quot;')}" placeholder="Ex: São Paulo, SP" class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 text-sm">
+            <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Local de Venda (Município, UF) *</label>
+            <div id="add-prod-location-wrapper"></div>
           </div>
 
           <div>
@@ -2950,6 +2950,21 @@ const App = {
         </form>
       </div>
     `;
+
+    // Inicialização da Seleção em Lista Pré-determinada de Municípios/UF
+    const defaultUserLoc = ((AuthManager.currentUser && AuthManager.currentUser.city)
+      ? AuthManager.currentUser.city + (AuthManager.currentUser.state ? ', ' + AuthManager.currentUser.state : '')
+      : 'São Paulo, SP');
+
+    if (window.LocationPicker) {
+      window.LocationPicker.mount({
+        containerId: 'add-prod-location-wrapper',
+        hiddenInputId: 'prod-location',
+        initialValue: defaultUserLoc,
+        placeholder: 'Digite para buscar município ou selecione na lista...',
+        required: true
+      });
+    }
 
     // IMPORTANTE: renderizar os ícones adicionados dinamicamente
     if (typeof lucide !== 'undefined') {
@@ -3055,11 +3070,21 @@ const App = {
     const condition = document.getElementById('prod-condition').value;
     const stock = parseInt(document.getElementById('prod-stock').value) || 1;
     const material = document.getElementById('prod-material').value.trim();
-    const location = document.getElementById('prod-location').value.trim();
+    const location = document.getElementById('prod-location') ? document.getElementById('prod-location').value.trim() : '';
     const description = document.getElementById('prod-desc').value.trim();
 
     if (!name || !description || isNaN(price) || price <= 0 || !category) {
       ToastManager.show('Por favor, preencha todos os campos obrigatórios do produto.', 'error');
+      return;
+    }
+
+    if (!location || (window.LocationPicker && !window.LocationPicker.isValid(location))) {
+      ToastManager.show('Por favor, selecione um município/UF válido da lista pré-determinada.', 'error');
+      const searchInput = document.querySelector('#add-prod-location-wrapper input[type="text"]');
+      if (searchInput) {
+        searchInput.focus();
+        searchInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
       return;
     }
 
@@ -3203,8 +3228,8 @@ const App = {
             </div>
 
             <div>
-              <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Local de Venda (Cidade, UF) *</label>
-              <input type="text" id="edit-prod-location" required value="${(p.location || '').replace(/"/g, '&quot;')}" placeholder="Ex: São Paulo, SP" class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 text-sm">
+              <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Local de Venda (Município, UF) *</label>
+              <div id="edit-prod-location-wrapper"></div>
             </div>
 
             <div>
@@ -3245,6 +3270,17 @@ const App = {
           </form>
         </div>
       `;
+
+      // Inicialização da Seleção em Lista Pré-determinada de Municípios/UF
+      if (window.LocationPicker) {
+        window.LocationPicker.mount({
+          containerId: 'edit-prod-location-wrapper',
+          hiddenInputId: 'edit-prod-location',
+          initialValue: p.location || '',
+          placeholder: 'Digite para buscar município ou selecione na lista...',
+          required: true
+        });
+      }
 
       // IMPORTANTE: renderizar os ícones adicionados dinamicamente
       if (typeof lucide !== 'undefined') {
@@ -3377,11 +3413,21 @@ const App = {
     const condition = document.getElementById('edit-prod-condition').value;
     const stock = parseInt(document.getElementById('edit-prod-stock').value) || 0;
     const material = document.getElementById('edit-prod-material').value.trim();
-    const location = document.getElementById('edit-prod-location').value.trim();
+    const location = document.getElementById('edit-prod-location') ? document.getElementById('edit-prod-location').value.trim() : '';
     const description = document.getElementById('edit-prod-desc').value.trim();
 
     if (!name || !description || isNaN(price) || price <= 0 || !category) {
       ToastManager.show('Preencha todos os campos obrigatórios do produto.', 'error');
+      return;
+    }
+
+    if (!location || (window.LocationPicker && !window.LocationPicker.isValid(location))) {
+      ToastManager.show('Por favor, selecione um município/UF válido da lista pré-determinada.', 'error');
+      const searchInput = document.querySelector('#edit-prod-location-wrapper input[type="text"]');
+      if (searchInput) {
+        searchInput.focus();
+        searchInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
       return;
     }
 

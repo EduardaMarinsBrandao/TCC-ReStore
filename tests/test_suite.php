@@ -93,6 +93,9 @@ runTest('Verificação de arquivos fundamentais do projeto', function() {
         $baseDir . DIRECTORY_SEPARATOR . 'api' . DIRECTORY_SEPARATOR . 'messenger.php',
         $baseDir . DIRECTORY_SEPARATOR . 'api' . DIRECTORY_SEPARATOR . 'dashboard.php',
         $baseDir . DIRECTORY_SEPARATOR . 'api' . DIRECTORY_SEPARATOR . 'points.php',
+        $baseDir . DIRECTORY_SEPARATOR . 'config' . DIRECTORY_SEPARATOR . 'locations.php',
+        $baseDir . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'data' . DIRECTORY_SEPARATOR . 'locations.json',
+        $baseDir . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'js' . DIRECTORY_SEPARATOR . 'locations.js',
         $baseDir . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'css' . DIRECTORY_SEPARATOR . 'style.css',
         $baseDir . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'js' . DIRECTORY_SEPARATOR . 'app.js'
     ];
@@ -510,6 +513,70 @@ runTest('API: Listagem de pedidos com identificação de itens avaliados (api/or
 
     return true;
 });
+
+runTest('Validação da lista oficial pré-determinada de municípios/UF em ordem alfabética', function() {
+    require_once dirname(__DIR__) . '/Re-Store/config/locations.php';
+    
+    $locations = getBrazilLocations();
+    if (count($locations) < 5500) {
+        throw new Exception("Lista de municípios incompleta: " . count($locations) . " encontrados");
+    }
+
+    // Verificar se capitais e cidades principais estão presentes
+    $checkList = ['São Paulo, SP', 'Rio de Janeiro, RJ', 'Belo Horizonte, MG', 'Curitiba, PR', 'Brasília, DF', 'Salvador, BA', 'Campinas, SP'];
+    foreach ($checkList as $city) {
+        if (!isValidBrazilLocation($city)) {
+            throw new Exception("Município oficial não validado: {$city}");
+        }
+    }
+
+    // Verificar se valores arbitrários são estritamente rejeitados
+    $invalidList = ['Qualquer coisa', '12345', 'Minha Cidade', 'São Paulo', 'São Paulo, XX', ''];
+    foreach ($invalidList as $inv) {
+        if (isValidBrazilLocation($inv)) {
+            throw new Exception("Valor inválido foi erroneamente aceito como município: '{$inv}'");
+        }
+    }
+
+    return true;
+});
+
+runTest('API: Bloqueio de município/UF inválido e aceitação de pré-determinado (api/products.php)', function() {
+    // 1. Tentar atualizar produto com local inválido (deve ser rejeitado)
+    $outInvalid = callApiIsolated('api/products.php', [
+        'action' => 'update',
+        'id' => 1,
+        'name' => 'Garrafa Térmica Reutilizável de Inox',
+        'description' => 'Descrição válida de produto sustentável',
+        'price' => 49.90,
+        'category' => 'Utilidades',
+        'location' => 'Lugar Inventado Qualquer'
+    ], 'POST', ['user_id' => 1]);
+    $jsonInvalid = json_decode($outInvalid, true);
+
+    if (!empty($jsonInvalid['success'])) {
+        throw new Exception("A API aceitou um local arbitrário ('Lugar Inventado Qualquer') que não consta na lista pré-determinada");
+    }
+
+    // 2. Tentar atualizar com local pré-determinado válido (deve ser aceito)
+    $outValid = callApiIsolated('api/products.php', [
+        'action' => 'update',
+        'id' => 1,
+        'name' => 'Garrafa Térmica Reutilizável de Inox',
+        'description' => 'Descrição válida de produto sustentável',
+        'price' => 49.90,
+        'category' => 'Utilidades',
+        'location' => 'Curitiba, PR'
+    ], 'POST', ['user_id' => 1]);
+    $jsonValid = json_decode($outValid, true);
+
+    if (empty($jsonValid['success'])) {
+        throw new Exception("A API rejeitou um município pré-determinado válido ('Curitiba, PR'): " . ($jsonValid['error'] ?? ''));
+    }
+
+    return true;
+});
+
 
 
 // Limpeza de arquivos temporários do teste

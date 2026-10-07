@@ -309,6 +309,12 @@ if ($method === 'POST' && ($action === 'create' || $action === 'add')) {
         exit;
     }
 
+    require_once __DIR__ . '/../config/locations.php';
+    if (!isValidBrazilLocation($location)) {
+        echo json_encode(['success' => false, 'error' => 'Por favor, selecione um município/UF válido da lista pré-determinada.']);
+        exit;
+    }
+
     // Cálculo automático de pontos verdes sustentáveis (1 ponto por cada R$ 1,00)
     $points = max(1, (int)round($price * BUYER_POINTS_PER_REAL));
 
@@ -426,6 +432,12 @@ if ($method === 'POST' && ($action === 'update' || $action === 'edit')) {
 
     $location = trim($_POST['location'] ?? '');
     if ($location === '') $location = $existingProduct['location'] ?? 'São Paulo, SP';
+
+    require_once __DIR__ . '/../config/locations.php';
+    if (!isValidBrazilLocation($location)) {
+        echo json_encode(['success' => false, 'error' => 'Por favor, selecione um município/UF válido da lista pré-determinada.']);
+        exit;
+    }
 
     $upStmt = $db->prepare("UPDATE products SET 
         name = ?, description = ?, price = ?, category = ?, product_condition = ?, material = ?, stock = ?, location = ?, points = ? 
