@@ -968,6 +968,7 @@ const App = {
           <img src="${p.primary_image}" alt="${p.name}" class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy">
           <div class="absolute top-2 left-2 flex flex-col gap-1 items-start">
             ${conditionBadge}
+            ${parseInt(p.stock !== undefined ? p.stock : 999) <= 0 ? '<span class="bg-red-500 text-white px-2 py-0.5 rounded text-[11px] font-semibold shadow-sm">Esgotado</span>' : ''}
           </div>
           <button type="button" id="fav-btn-${p.id}" onclick="event.stopPropagation(); App.toggleFavorite(${p.id}, this)" title="${isFav ? 'Remover dos Favoritos' : 'Favoritar Produto'}" 
             class="absolute top-2 right-2 p-2 rounded-full transition shadow backdrop-blur cursor-pointer ${isFav ? 'bg-red-50 dark:bg-red-950/60 border border-red-200' : 'bg-white/80 dark:bg-gray-800/80 text-gray-400 hover:text-red-500'}">
@@ -1003,6 +1004,11 @@ const App = {
                 <button type="button" onclick="App.navigateTo('product-detail', { productId: ${p.id} })" class="btn-outline text-xs py-1.5 px-3 cursor-pointer text-teal-600 border-teal-500 hover:bg-teal-50 dark:hover:bg-teal-950/40 inline-flex items-center gap-1.5" title="Você é o anunciante deste produto">
                   <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                   <span>Seu Anúncio</span>
+                </button>
+              ` : parseInt(p.stock !== undefined ? p.stock : 999) <= 0 ? `
+                <button type="button" onclick="App.addToCartDirect(${p.id}, this)" class="text-xs py-1.5 px-3 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 cursor-not-allowed inline-flex items-center gap-1.5 border border-gray-200 dark:border-gray-700" title="Produto esgotado">
+                  <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+                  <span>Esgotado</span>
                 </button>
               ` : `
                 <button type="button" onclick="App.addToCartDirect(${p.id}, this)" class="btn-primary text-xs py-1.5 px-3 cursor-pointer inline-flex items-center gap-1.5">
@@ -1186,6 +1192,13 @@ const App = {
                       <span>Área do Vendedor</span>
                     </button>
                   </div>
+                </div>
+              ` : parseInt(p.stock !== undefined ? p.stock : 999) <= 0 ? `
+                <div class="flex gap-4">
+                  <button type="button" disabled class="flex-1 py-3 text-base rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 cursor-not-allowed inline-flex items-center justify-center gap-2 border border-gray-200 dark:border-gray-700 font-semibold">
+                    <i data-lucide="slash" class="w-5 h-5 pointer-events-none"></i>
+                    <span>Produto Esgotado</span>
+                  </button>
                 </div>
               ` : `
                 <div class="flex gap-4">
@@ -6503,24 +6516,33 @@ const App = {
   addToCartDirect(productId, btnElement = null) {
     const user = AuthManager.currentUser;
 
+    const handleProduct = (prod) => {
+      if (user && parseInt(user.id) === parseInt(prod.seller_id)) {
+        ToastManager.show('Você não pode comprar produtos anunciados por você mesmo!', 'warning');
+        return;
+      }
+
+      const added = CartManager.addItem(prod);
+      if (!added) {
+        return;
+      }
+
+      if (btnElement) {
+        const originalHTML = btnElement.innerHTML;
+        btnElement.innerHTML = `<span class="inline-flex items-center gap-1"><svg class="w-3.5 h-3.5 inline" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg> Adicionado!</span>`;
+        btnElement.classList.add('bg-emerald-600');
+        setTimeout(() => {
+          btnElement.innerHTML = originalHTML;
+          btnElement.classList.remove('bg-emerald-600');
+        }, 1500);
+      }
+      ToastManager.show(`"${prod.name}" adicionado ao carrinho!`, 'success');
+    };
+
     if (this.productsCache) {
       const p = this.productsCache.find(item => item.id === productId);
       if (p) {
-        if (user && parseInt(user.id) === parseInt(p.seller_id)) {
-          ToastManager.show('Você não pode comprar produtos anunciados por você mesmo!', 'warning');
-          return;
-        }
-        if (btnElement) {
-          const originalHTML = btnElement.innerHTML;
-          btnElement.innerHTML = `<span class="inline-flex items-center gap-1"><svg class="w-3.5 h-3.5 inline" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg> Adicionado!</span>`;
-          btnElement.classList.add('bg-emerald-600');
-          setTimeout(() => {
-            btnElement.innerHTML = originalHTML;
-            btnElement.classList.remove('bg-emerald-600');
-          }, 1500);
-        }
-        CartManager.addItem(p);
-        ToastManager.show(`"${p.name}" adicionado ao carrinho!`, 'success');
+        handleProduct(p);
         return;
       }
     }
@@ -6529,21 +6551,7 @@ const App = {
       .then(res => res.json())
       .then(data => {
         if (data.success && data.product) {
-          if (user && parseInt(user.id) === parseInt(data.product.seller_id)) {
-            ToastManager.show('Você não pode comprar produtos anunciados por você mesmo!', 'warning');
-            return;
-          }
-          if (btnElement) {
-            const originalHTML = btnElement.innerHTML;
-            btnElement.innerHTML = `<span class="inline-flex items-center gap-1"><svg class="w-3.5 h-3.5 inline" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg> Adicionado!</span>`;
-            btnElement.classList.add('bg-emerald-600');
-            setTimeout(() => {
-              btnElement.innerHTML = originalHTML;
-              btnElement.classList.remove('bg-emerald-600');
-            }, 1500);
-          }
-          CartManager.addItem(data.product);
-          ToastManager.show(`"${data.product.name}" adicionado ao carrinho!`, 'success');
+          handleProduct(data.product);
         }
       });
   },
@@ -6559,15 +6567,19 @@ const App = {
       } catch (e) {}
     }
 
-    if (p && user && parseInt(user.id) === parseInt(p.seller_id)) {
+    if (!p) {
+      ToastManager.show('Produto não encontrado.', 'error');
+      return;
+    }
+
+    if (user && parseInt(user.id) === parseInt(p.seller_id)) {
       ToastManager.show('Você não pode comprar produtos anunciados por você mesmo!', 'warning');
       return;
     }
 
-    if (p) {
-      CartManager.addItem(p);
-    } else {
-      this.addToCartDirect(productId);
+    const added = CartManager.addItem(p);
+    if (!added) {
+      return;
     }
 
     if (!user) {

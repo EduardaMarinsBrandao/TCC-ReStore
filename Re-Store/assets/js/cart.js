@@ -23,7 +23,7 @@ const CartManager = {
         if (typeof ToastManager !== 'undefined') {
           ToastManager.show('Você não pode comprar produtos anunciados por você mesmo!', 'warning');
         }
-        return cart;
+        return false;
       }
     }
 
@@ -31,15 +31,25 @@ const CartManager = {
     const availableStock = parseInt(product.stock !== undefined ? product.stock : 999);
 
     if (availableStock <= 0) {
-      ToastManager.show(`Este produto está esgotado!`, 'error');
-      return cart;
+      if (typeof ToastManager !== 'undefined') {
+        ToastManager.show(`Este produto está esgotado!`, 'error');
+      }
+      return false;
     }
 
     if (existingIndex > -1) {
       const currentQty = cart[existingIndex].quantity;
+      if (currentQty >= availableStock) {
+        if (typeof ToastManager !== 'undefined') {
+          ToastManager.show(`Estoque máximo atingido! Disponível: ${availableStock} un.`, 'info');
+        }
+        return false;
+      }
       if (currentQty + quantity > availableStock) {
         cart[existingIndex].quantity = availableStock;
-        ToastManager.show(`Estoque máximo atingido! Disponível: ${availableStock} un.`, 'info');
+        if (typeof ToastManager !== 'undefined') {
+          ToastManager.show(`Estoque máximo atingido! Disponível: ${availableStock} un.`, 'info');
+        }
       } else {
         cart[existingIndex].quantity += quantity;
       }
@@ -57,7 +67,9 @@ const CartManager = {
         quantity: initialQty
       });
       if (initialQty < quantity) {
-        ToastManager.show(`Apenas ${availableStock} un. disponíveis em estoque.`, 'info');
+        if (typeof ToastManager !== 'undefined') {
+          ToastManager.show(`Apenas ${availableStock} un. disponíveis em estoque.`, 'info');
+        }
       }
     }
 
