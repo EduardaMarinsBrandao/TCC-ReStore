@@ -180,6 +180,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'me') {
                 is_verified_business,
                 business_name,
                 cnpj,
+                is_admin,
                 created_at
             FROM users
             WHERE id = ?
@@ -189,6 +190,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'me') {
         $user = $stmt->fetch();
 
         if ($user) {
+            $user['is_admin'] = isUserAdmin($db, $user['id']) ? 1 : 0;
             echo json_encode([
                 'success' => true,
                 'logged_in' => true,
@@ -345,6 +347,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['user_name'] = $user['name'];
 
             unset($user['password_hash']);
+            $user['is_admin'] = isUserAdmin($db, $user['id']) ? 1 : 0;
 
             echo json_encode([
                 'success' => true,
@@ -662,6 +665,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 is_verified_business,
                 business_name,
                 cnpj,
+                is_admin,
                 created_at
             FROM users
             WHERE id = ?
@@ -669,6 +673,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $userStmt->execute([$userId]);
         $newUser = $userStmt->fetch();
+        if ($newUser) {
+            $newUser['is_admin'] = isUserAdmin($db, $newUser['id']) ? 1 : 0;
+        }
 
         echo json_encode([
             'success' => true,

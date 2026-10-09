@@ -66,8 +66,27 @@ foreach ($unreadMsgs as $m) {
     ];
 }
 
+// 4. Notificações de Moderação Oficial / Avisos Administrativos
+try {
+    $unStmt = $db->prepare("SELECT * FROM user_notifications WHERE user_id = ? ORDER BY id DESC LIMIT 15");
+    $unStmt->execute([$userId]);
+    $modNotifs = $unStmt->fetchAll();
+    foreach ($modNotifs as $un) {
+        $notifications[] = [
+            'id' => 'mod_' . $un['id'],
+            'title' => $un['title'],
+            'message' => $un['message'],
+            'reason' => $un['reason'] ?? '',
+            'product_name' => $un['product_name'] ?? '',
+            'type' => $un['type'] ?: 'moderation',
+            'time' => $un['created_at']
+        ];
+    }
+} catch (Exception $e) {}
+
 usort($notifications, function ($a, $b) {
     return strcmp((string)$b['time'], (string)$a['time']);
 });
 
 echo json_encode(['success' => true, 'notifications' => $notifications]);
+

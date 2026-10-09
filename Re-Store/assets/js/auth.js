@@ -3,6 +3,12 @@
 const AuthManager = {
   currentUser: null,
 
+  isAdmin() {
+    if (!this.currentUser) return false;
+    return parseInt(this.currentUser.is_admin, 10) === 1 || 
+           (this.currentUser.email && this.currentUser.email.toLowerCase().trim() === 'tccdssuporte@gmail.com');
+  },
+
   async checkAuth() {
     try {
       const res = await fetch('api/auth.php?action=me');

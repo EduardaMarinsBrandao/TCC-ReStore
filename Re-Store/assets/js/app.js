@@ -632,6 +632,18 @@ const App = {
       Área Vendedor
     </button>
 
+    ${(user.is_admin || (typeof AuthManager !== 'undefined' && AuthManager.isAdmin())) ? `
+    <button 
+      type="button" 
+      onclick="App.navigateTo('admin-users')" 
+      title="Painel de Administração e Moderação (Suporte)" 
+      class="text-xs font-bold text-amber-700 bg-amber-50 dark:bg-amber-950/70 dark:text-amber-300 border border-amber-300 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900 px-2.5 py-1.5 rounded-full cursor-pointer pointer-events-auto flex items-center gap-1.5 transition shadow-xs"
+    >
+      <i data-lucide="shield-check" class="w-3.5 h-3.5 pointer-events-none text-amber-600 dark:text-amber-400"></i>
+      <span class="pointer-events-none">Admin</span>
+    </button>
+    ` : ''}
+
     <button 
       type="button" 
       onclick="App.navigateTo('profile')" 
@@ -679,11 +691,17 @@ const App = {
   editNewImages: [],
 
   navigateTo(screen, params = {}) {
-    const protectedScreens = ['checkout', 'orders', 'notifications', 'profile', 'my-reviews', 'points', 'seller', 'add-product', 'edit-product', 'chat', 'favorites'];
+    const protectedScreens = ['checkout', 'orders', 'notifications', 'profile', 'my-reviews', 'points', 'seller', 'add-product', 'edit-product', 'chat', 'favorites', 'admin-users'];
     if (protectedScreens.includes(screen) && !AuthManager.currentUser) {
       this.redirectAfterLogin = { screen, params };
       ToastManager.show('Faça login para acessar esta funcionalidade.', 'info');
       this.showLoginModal();
+      return;
+    }
+
+    if (screen === 'admin-users' && (!AuthManager.currentUser || !AuthManager.isAdmin())) {
+      ToastManager.show('Acesso restrito ao Suporte/Administrador.', 'error');
+      this.navigateTo('home');
       return;
     }
 
@@ -702,6 +720,7 @@ const App = {
     if (params.category !== undefined) this.selectedCategory = params.category;
     if (params.search !== undefined) this.searchQuery = params.search;
     if (params.location !== undefined) this.searchLocation = params.location;
+    if (params.openUserId !== undefined) this.adminOpenUserId = params.openUserId;
     const prodId = params.productId !== undefined && params.productId !== null ? params.productId : params.id;
     if (prodId !== undefined && prodId !== null) {
       this.selectedProductId = parseInt(prodId, 10);
@@ -717,7 +736,7 @@ const App = {
     const main = document.getElementById('main-content');
     if (!main) return;
 
-    const protectedScreens = ['checkout', 'orders', 'notifications', 'profile', 'my-reviews', 'points', 'seller', 'add-product', 'edit-product', 'chat', 'favorites'];
+    const protectedScreens = ['checkout', 'orders', 'notifications', 'profile', 'my-reviews', 'points', 'seller', 'add-product', 'edit-product', 'chat', 'favorites', 'admin-users'];
     if (protectedScreens.includes(this.currentScreen) && !AuthManager.currentUser) {
       this.redirectAfterLogin = { screen: this.currentScreen, params: {} };
       this.currentScreen = 'home';
@@ -762,6 +781,9 @@ const App = {
         break;
       case 'seller':
         await this.renderSellerScreen(main);
+        break;
+      case 'admin-users':
+        await this.renderAdminUsersScreen(main);
         break;
       case 'add-product':
         this.renderAddProductScreen(main);
@@ -1076,10 +1098,10 @@ const App = {
       container.innerHTML = `
         <div class="animate-fade-in max-w-4xl mx-auto">
           <div class="mb-4 flex items-center justify-between">
-            <button type="button" onclick="App.navigateTo('home')" class="text-sm font-semibold text-teal-600 hover:underline flex items-center gap-1 cursor-pointer">
+            <button type="button" onclick="App.navigateTo('home')" class="text-xs sm:text-sm font-bold text-teal-600 hover:text-teal-700 dark:hover:text-teal-400 flex items-center gap-1.5 py-1.5 px-2.5 -ml-2 rounded-xl active:bg-gray-100 dark:active:bg-gray-800 transition cursor-pointer">
               ← Voltar para a loja
             </button>
-            <span class="text-xs text-gray-400">Pressione <kbd class="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded">Esc</kbd> para voltar</span>
+            <span class="hidden md:inline-flex text-xs text-gray-400 items-center gap-1">Pressione <kbd class="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-[11px] font-mono">Esc</kbd> para voltar</span>
           </div>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
@@ -1216,6 +1238,33 @@ const App = {
                   </button>
                 </div>
               `}
+
+              ${(typeof AuthManager !== 'undefined' && AuthManager.isAdmin()) ? `
+                <div class="mt-4 p-4 bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-300 dark:border-amber-700/80 rounded-2xl space-y-3">
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                      <div class="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0">
+                        <i data-lucide="shield-check" class="w-4 h-4"></i>
+                      </div>
+                      <div>
+                        <div class="font-bold text-xs text-amber-900 dark:text-amber-200">Painel de Moderação (Suporte / Admin)</div>
+                        <div class="text-[11px] text-amber-700 dark:text-amber-300">Privilégios especiais para gerenciar ou moderar este anúncio.</div>
+                      </div>
+                    </div>
+                    <span class="text-[10px] font-bold bg-amber-200 dark:bg-amber-900 text-amber-900 dark:text-amber-200 px-2 py-0.5 rounded-full">Acesso Oficial</span>
+                  </div>
+                  <div class="flex flex-col sm:flex-row gap-2 sm:gap-2.5 pt-1">
+                    <button type="button" onclick="App.navigateTo('edit-product', { productId: ${p.id} })" class="btn-primary w-full sm:flex-1 py-2.5 sm:py-2 text-xs font-bold cursor-pointer flex items-center justify-center gap-1.5 active:scale-98">
+                      <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
+                      <span>Editar Anúncio</span>
+                    </button>
+                    <button type="button" onclick="App.promptDeleteProductAsAdmin(${p.id}, '${(p.name || '').replace(/'/g, "\\'")}', ${p.seller_id})" class="bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold text-xs py-2.5 sm:py-2 px-3 w-full sm:flex-1 flex items-center justify-center gap-1.5 transition cursor-pointer shadow-sm active:scale-98">
+                      <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                      <span>Excluir Anúncio (Moderação)</span>
+                    </button>
+                  </div>
+                </div>
+              ` : ''}
             </div>
           </div>
 
@@ -3496,23 +3545,95 @@ const App = {
         total_seller_points: 0
       };
 
+      let moderationNotices = [];
+      if (typeof AdminManager !== 'undefined') {
+        try {
+          const nData = await AdminManager.getModerationNotices();
+          if (nData && nData.success && Array.isArray(nData.notices)) {
+            moderationNotices = nData.notices;
+          }
+        } catch (e) {}
+      }
+
       container.innerHTML = `
         <div class="space-y-8 animate-fade-in">
-          <div class="flex items-center justify-between">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h1 class="text-2xl font-extrabold">Painel da Área do Vendedor</h1>
-              <p class="text-xs text-gray-500 mt-1">Gerencie seu catálogo sustentável, monitore vendas e acompanhe suas recompensas.</p>
+              <h1 class="text-xl sm:text-2xl font-extrabold">Painel da Área do Vendedor</h1>
+              <p class="text-xs text-gray-500 mt-0.5">Gerencie seu catálogo sustentável, monitore vendas e acompanhe suas recompensas.</p>
             </div>
-            <div class="flex items-center gap-2">
-              <button type="button" onclick="App.navigateTo('chat')" class="btn-outline text-sm py-2 px-4 cursor-pointer flex items-center gap-1.5">
+            <div class="flex items-center gap-2 w-full sm:w-auto">
+              <button type="button" onclick="App.navigateTo('chat')" class="btn-outline flex-1 sm:flex-initial text-xs sm:text-sm py-2 px-3 sm:px-4 cursor-pointer flex items-center justify-center gap-1.5 active:scale-95">
                 <i data-lucide="message-circle" class="w-4 h-4"></i>
                 <span>Mensagens</span>
               </button>
-              <button type="button" onclick="App.navigateTo('add-product')" class="btn-primary text-sm py-2 px-4 cursor-pointer">
-                + Cadastrar Novo Produto
+              <button type="button" onclick="App.navigateTo('add-product')" class="btn-primary flex-1 sm:flex-initial text-xs sm:text-sm py-2 px-3 sm:px-4 cursor-pointer text-center active:scale-95">
+                + Novo Produto
               </button>
             </div>
           </div>
+
+          ${(typeof AuthManager !== 'undefined' && AuthManager.isAdmin()) ? `
+            <div class="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-900/70 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0">
+                  <i data-lucide="shield-check" class="w-5 h-5"></i>
+                </div>
+                <div>
+                  <span class="text-xs font-bold text-amber-900 dark:text-amber-200 block">Você possui Privilégios de Administrador / Suporte</span>
+                  <p class="text-[11px] text-amber-700 dark:text-amber-300">Acesse o painel para visualizar todos os usuários cadastrados e gerenciar produtos globalmente.</p>
+                </div>
+              </div>
+              <button type="button" onclick="App.navigateTo('admin-users')" class="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition cursor-pointer shrink-0 shadow-xs flex items-center justify-center gap-1.5 active:scale-95">
+                <i data-lucide="users" class="w-3.5 h-3.5"></i>
+                <span>Abrir Painel Admin</span>
+              </button>
+            </div>
+          ` : ''}
+
+          ${moderationNotices.length > 0 ? `
+            <!-- AVISOS DA MODERAÇÃO DE ANÚNCIOS -->
+            <div class="p-5 rounded-3xl bg-red-50/90 dark:bg-red-950/40 border-2 border-red-300 dark:border-red-900 shadow-sm space-y-4">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2.5">
+                  <div class="w-8 h-8 rounded-xl bg-red-100 dark:bg-red-900/70 text-red-600 dark:text-red-300 flex items-center justify-center shrink-0">
+                    <i data-lucide="shield-alert" class="w-4 h-4"></i>
+                  </div>
+                  <div>
+                    <h2 class="text-sm font-bold text-red-900 dark:text-red-200">Avisos da Moderação de Anúncios</h2>
+                    <p class="text-[11px] text-red-700 dark:text-red-300">Notificações oficiais do Suporte Re-Store sobre produtos retirados do marketplace.</p>
+                  </div>
+                </div>
+                <span class="text-xs font-bold bg-red-200 dark:bg-red-900 text-red-800 dark:text-red-200 px-2.5 py-0.5 rounded-full">${moderationNotices.length} aviso(s)</span>
+              </div>
+
+              <div class="space-y-3">
+                ${moderationNotices.map(n => `
+                  <div id="seller-mod-notice-${n.id}" class="p-4 rounded-2xl bg-white dark:bg-gray-800 border border-red-200 dark:border-red-900/50 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+                    <div class="space-y-1">
+                      <div class="flex items-center gap-2">
+                        <span class="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300">Anúncio Excluído</span>
+                        <span class="text-xs font-bold text-gray-900 dark:text-white">Produto: "${(n.product_name || 'Produto').replace(/"/g, '&quot;')}"</span>
+                        <span class="text-[11px] text-gray-400 dark:text-gray-500">• ${DateHelper.formatDateTime(n.created_at)}</span>
+                      </div>
+                      <p class="text-xs text-red-800 dark:text-red-300 leading-relaxed">
+                        <strong>Motivo informado pela moderação:</strong> ${n.reason || n.message}
+                      </p>
+                    </div>
+                    <div class="flex items-center gap-2 shrink-0">
+                      <button type="button" onclick="App.openChatWithUser(9)" class="btn-primary text-xs py-1.5 px-3 flex items-center gap-1.5 cursor-pointer">
+                        <i data-lucide="message-circle" class="w-3.5 h-3.5"></i>
+                        <span>Falar com o Suporte</span>
+                      </button>
+                      <button type="button" onclick="App.dismissModerationNotice(${n.id})" title="Dispensar este aviso" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer transition">
+                        <i data-lucide="x" class="w-4 h-4"></i>
+                      </button>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          ` : ''}
 
           <!-- CARD DE GAMIFICAÇÃO & NÍVEL DO VENDEDOR -->
           <div class="p-6 rounded-3xl bg-gradient-to-r from-teal-800 via-teal-900 to-emerald-900 text-white shadow-xl space-y-4">
@@ -3699,6 +3820,703 @@ const App = {
         message: res.error || 'Não foi possível excluir o anúncio.',
         type: 'danger'
       });
+    }
+  },
+
+  async dismissModerationNotice(noticeId) {
+    const card = document.getElementById(`seller-mod-notice-${noticeId}`);
+    if (card) card.remove();
+    if (typeof AdminManager !== 'undefined') {
+      await AdminManager.dismissNotice(noticeId);
+    }
+    ToastManager.show('Aviso de moderação dispensado.', 'info');
+  },
+
+  // ----------------------------------------------------
+  // GESTÃO DE MODAIS ADMIN & MODERAÇÃO COM FECHAMENTO GARANTIDO
+  // ----------------------------------------------------
+  closeAdminModal(modalId) {
+    const modal = typeof modalId === 'string' ? document.getElementById(modalId) : modalId;
+    if (modal) {
+      modal.remove();
+    }
+    const anyModalLeft = document.querySelector('#admin-delete-modal, #admin-user-products-modal');
+    if (!anyModalLeft) {
+      document.body.classList.remove('modal-open');
+      document.documentElement.classList.remove('modal-open');
+    }
+  },
+
+  promptDeleteProductAsAdmin(productId, productName, sellerId = null) {
+    const existing = document.getElementById('admin-delete-modal');
+    if (existing) existing.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'admin-delete-modal';
+    modal.className = 'fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-xs animate-fade-in select-none';
+    
+    document.body.classList.add('modal-open');
+    document.documentElement.classList.add('modal-open');
+
+    // Fechar ao clicar fora (backdrop)
+    modal.onclick = (e) => {
+      if (e.target === modal) {
+        App.closeAdminModal('admin-delete-modal');
+      }
+    };
+
+    // Fechar com Escape no teclado
+    const onKeyEsc = (e) => {
+      if (e.key === 'Escape') {
+        App.closeAdminModal('admin-delete-modal');
+        window.removeEventListener('keydown', onKeyEsc);
+      }
+    };
+    window.addEventListener('keydown', onKeyEsc);
+
+    modal.innerHTML = `
+      <div class="relative w-full max-w-lg max-h-[92vh] bg-white dark:bg-gray-900 rounded-2xl sm:rounded-3xl overflow-hidden shadow-2xl flex flex-col select-auto animate-modal-in">
+        <!-- TOPO DO MODAL -->
+        <div class="px-4 py-3.5 sm:px-6 sm:py-4 border-b dark:border-gray-800 flex items-center justify-between bg-red-50/70 dark:bg-red-950/40">
+          <div class="flex items-center gap-2.5 sm:gap-3">
+            <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-red-100 dark:bg-red-900/60 text-red-600 dark:text-red-300 flex items-center justify-center shrink-0">
+              <i data-lucide="shield-alert" class="w-4 h-4 sm:w-5 sm:h-5"></i>
+            </div>
+            <div>
+              <h3 class="text-sm sm:text-base font-extrabold text-red-900 dark:text-red-200">Excluir Anúncio por Moderação</h3>
+              <p class="text-[11px] sm:text-xs text-red-700 dark:text-red-300">Ação oficial do Suporte Re-Store</p>
+            </div>
+          </div>
+          <button 
+            type="button" 
+            onclick="App.closeAdminModal('admin-delete-modal')"
+            class="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 p-2 sm:p-2.5 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 active:scale-95 transition cursor-pointer"
+            title="Fechar"
+            aria-label="Fechar"
+          >
+            <i data-lucide="x" class="w-5 h-5"></i>
+          </button>
+        </div>
+
+        <!-- FORMULÁRIO RESPONSIVO -->
+        <form onsubmit="App.submitAdminDeleteProduct(event, ${productId}, ${sellerId})" class="p-4 sm:p-6 space-y-3.5 sm:space-y-4 overflow-y-auto flex-1">
+          <div class="p-3 bg-gray-50 dark:bg-gray-800 rounded-xl sm:rounded-2xl border dark:border-gray-700 text-xs">
+            <span class="text-gray-500 block">Produto a ser excluído:</span>
+            <strong class="text-gray-900 dark:text-white text-xs sm:text-sm block mt-0.5 line-clamp-2">${productName}</strong>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+              Selecione o Motivo da Exclusão *
+            </label>
+            <select 
+              id="admin-del-preset-reason" 
+              onchange="App.onAdminReasonChange(this.value)"
+              class="w-full px-3 py-2.5 sm:py-2 border rounded-xl dark:bg-gray-800 dark:border-gray-700 text-xs sm:text-sm font-medium focus:ring-2 focus:ring-red-500"
+              required
+            >
+              <option value="Produto não atende às diretrizes de sustentabilidade e reuso da comunidade Re-Store.">Produto não atende às diretrizes de sustentabilidade da plataforma</option>
+              <option value="Informações incorretas ou enganosas no título, descrição ou valor do produto.">Informações incorretas ou enganosas no anúncio</option>
+              <option value="Fotos de baixa qualidade, impróprias ou contendo marcas de terceiros sem autorização.">Fotos impróprias ou de baixa qualidade</option>
+              <option value="Item danificado além do aceitável ou proibido para comercialização segundo nossos termos.">Item proibido ou impróprio para comercialização</option>
+              <option value="Tentativa de transação fora da plataforma ou conteúdo classificado como spam.">Tentativa de golpe, spam ou transação externa</option>
+              <option value="__custom__">Outro motivo específico (digitar abaixo)...</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+              Justificativa Detalhada para o Vendedor *
+            </label>
+            <textarea 
+              id="admin-del-reason-text" 
+              rows="3" 
+              required
+              placeholder="Descreva o motivo que o vendedor verá na Área do Vendedor..."
+              class="w-full px-3 py-2.5 sm:py-2 border rounded-xl dark:bg-gray-800 dark:border-gray-700 text-xs sm:text-sm focus:ring-2 focus:ring-red-500 leading-relaxed"
+            >Produto não atende às diretrizes de sustentabilidade e reuso da comunidade Re-Store.</textarea>
+            <span class="text-[11px] text-gray-400 block mt-1 leading-snug">
+              ℹ️ Esta justificativa chegará instantaneamente como notificação e mensagem na <strong>Área do Vendedor</strong> do anunciante.
+            </span>
+          </div>
+
+          <!-- BOTÕES RESPONSIVOS -->
+          <div class="flex flex-col-reverse sm:flex-row gap-2.5 sm:gap-3 pt-2">
+            <button 
+              type="button" 
+              onclick="App.closeAdminModal('admin-delete-modal')"
+              class="btn-outline w-full sm:flex-1 py-2.5 text-xs sm:text-sm font-bold cursor-pointer text-center"
+            >
+              Cancelar
+            </button>
+            <button 
+              type="submit" 
+              id="btn-admin-del-submit" 
+              class="bg-red-600 hover:bg-red-700 text-white rounded-xl w-full sm:flex-1 py-2.5 text-xs sm:text-sm font-bold transition cursor-pointer flex items-center justify-center gap-1.5 shadow-sm active:scale-98"
+            >
+              <i data-lucide="trash-2" class="w-4 h-4"></i>
+              <span>Excluir e Notificar</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+  },
+
+  onAdminReasonChange(val) {
+    const txt = document.getElementById('admin-del-reason-text');
+    if (!txt) return;
+    if (val === '__custom__') {
+      txt.value = '';
+      txt.placeholder = 'Digite aqui o motivo detalhado da exclusão para orientar o vendedor...';
+      txt.focus();
+    } else {
+      txt.value = val;
+    }
+  },
+
+  async submitAdminDeleteProduct(e, productId, sellerId) {
+    e.preventDefault();
+    const btn = document.getElementById('btn-admin-del-submit');
+    const reasonInput = document.getElementById('admin-del-reason-text');
+    const reason = reasonInput ? reasonInput.value.trim() : '';
+
+    if (!reason) {
+      ToastManager.show('Por favor, informe a justificativa da exclusão para o vendedor.', 'warning');
+      return;
+    }
+
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = 'Excluindo... ⏳';
+    }
+
+    try {
+      const res = await AdminManager.deleteProductAsAdmin(productId, reason);
+      this.closeAdminModal('admin-delete-modal');
+
+      if (res && res.success) {
+        ToastManager.show(res.message || 'Anúncio removido e vendedor notificado na Área do Vendedor!', 'success', 5000);
+
+        // Se o modal de produtos do usuário estiver aberto, recarrega ele
+        const uProdModal = document.getElementById('admin-user-products-modal');
+        if (uProdModal && sellerId) {
+          uProdModal.remove();
+          this.openAdminUserProducts(sellerId, 'Usuário');
+        }
+
+        if (this.currentScreen === 'admin-users') {
+          const main = document.getElementById('main-content');
+          if (main) this.renderAdminUsersScreen(main);
+        } else if (this.currentScreen === 'product-detail') {
+          this.navigateTo('admin-users');
+        } else if (this.currentScreen === 'seller') {
+          const main = document.getElementById('main-content');
+          if (main) this.renderSellerScreen(main);
+        }
+      } else {
+        ToastManager.show(res.error || 'Erro ao excluir anúncio.', 'error');
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = 'Excluir e Notificar';
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      ToastManager.show('Erro ao processar solicitação de moderação.', 'error');
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = 'Excluir e Notificar';
+      }
+    }
+  },
+
+  // ----------------------------------------------------
+  // TELA ADMIN: PAINEL DE GESTÃO DE USUÁRIOS E MODERAÇÃO
+  // ----------------------------------------------------
+  async renderAdminUsersScreen(container) {
+    if (!AuthManager.currentUser || !AuthManager.isAdmin()) {
+      ToastManager.show('Acesso restrito ao Suporte/Administrador.', 'error');
+      this.navigateTo('home');
+      return;
+    }
+
+    container.innerHTML = `
+      <div class="max-w-7xl mx-auto space-y-4 sm:space-y-6">
+        <div class="skeleton-box h-24 w-full rounded-2xl"></div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+          <div class="skeleton-box h-24 rounded-2xl"></div>
+          <div class="skeleton-box h-24 rounded-2xl"></div>
+          <div class="skeleton-box h-24 rounded-2xl"></div>
+        </div>
+        <div class="skeleton-box h-96 w-full rounded-2xl"></div>
+      </div>
+    `;
+
+    try {
+      const data = await AdminManager.listUsers();
+      if (!data.success) {
+        container.innerHTML = `<div class="text-center py-12 text-red-500">${data.error || 'Erro ao carregar painel de administração.'}</div>`;
+        return;
+      }
+
+      const users = data.users || [];
+      const stats = data.stats || {
+        total_users: users.length,
+        total_products: 0,
+        active_products: 0
+      };
+
+      container.innerHTML = `
+        <div class="space-y-4 sm:space-y-6 animate-fade-in max-w-7xl mx-auto pb-8">
+          <!-- CABEÇALHO DO PAINEL ADMIN -->
+          <div class="p-4 sm:p-6 rounded-2xl sm:rounded-3xl bg-gradient-to-r from-amber-700 via-amber-800 to-amber-900 text-white shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div class="space-y-1.5">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="bg-white/20 text-white text-[11px] sm:text-xs font-bold px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full flex items-center gap-1.5">
+                  <i data-lucide="shield-check" class="w-3.5 h-3.5"></i>
+                  <span>Painel Oficial do Suporte</span>
+                </span>
+                <span class="bg-amber-400/20 text-amber-200 text-[11px] sm:text-xs font-bold px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full border border-amber-300/30">
+                  Acesso Total de Administrador
+                </span>
+              </div>
+              <h1 class="text-xl sm:text-2xl md:text-3xl font-black mt-1">Gestão de Usuários e Moderação</h1>
+              <p class="text-xs sm:text-sm text-amber-100 max-w-xl leading-relaxed">
+                Supervisione os usuários cadastrados, consulte o catálogo de cada anunciante, edite produtos e modere anúncios com justificativa enviada automaticamente para o vendedor.
+              </p>
+            </div>
+            <div class="flex items-center gap-2 w-full sm:w-auto">
+              <button type="button" onclick="App.navigateTo('seller')" class="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs transition cursor-pointer border border-white/20 flex items-center justify-center gap-1.5 active:scale-98">
+                <i data-lucide="store" class="w-4 h-4"></i>
+                <span>Minha Área do Vendedor</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- CARDS DE ESTATÍSTICAS -->
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+            <div class="p-4 sm:p-5 rounded-2xl bg-white dark:bg-gray-800 border dark:border-gray-800 shadow-xs flex items-center gap-3.5 sm:gap-4">
+              <div class="w-11 h-11 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-teal-50 dark:bg-teal-950/60 text-teal-600 dark:text-teal-400 flex items-center justify-center shrink-0">
+                <i data-lucide="users" class="w-5 h-5 sm:w-6 sm:h-6"></i>
+              </div>
+              <div>
+                <span class="text-[11px] sm:text-xs text-gray-500 uppercase tracking-wider font-bold">Usuários Cadastrados</span>
+                <div class="text-xl sm:text-2xl font-black text-gray-900 dark:text-white">${stats.total_users}</div>
+              </div>
+            </div>
+
+            <div class="p-4 sm:p-5 rounded-2xl bg-white dark:bg-gray-800 border dark:border-gray-800 shadow-xs flex items-center gap-3.5 sm:gap-4">
+              <div class="w-11 h-11 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                <i data-lucide="package" class="w-5 h-5 sm:w-6 sm:h-6"></i>
+              </div>
+              <div>
+                <span class="text-[11px] sm:text-xs text-gray-500 uppercase tracking-wider font-bold">Total de Anúncios</span>
+                <div class="text-xl sm:text-2xl font-black text-gray-900 dark:text-white">${stats.total_products}</div>
+              </div>
+            </div>
+
+            <div class="p-4 sm:p-5 rounded-2xl bg-white dark:bg-gray-800 border dark:border-gray-800 shadow-xs flex items-center gap-3.5 sm:gap-4">
+              <div class="w-11 h-11 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                <i data-lucide="shield-alert" class="w-5 h-5 sm:w-6 sm:h-6"></i>
+              </div>
+              <div>
+                <span class="text-[11px] sm:text-xs text-gray-500 uppercase tracking-wider font-bold">Moderação Ativa</span>
+                <div class="text-xl sm:text-2xl font-black text-amber-600 dark:text-amber-400">Proteção 100%</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- BARRA DE PESQUISA & FILTRO -->
+          <div class="p-3.5 sm:p-4 rounded-2xl bg-white dark:bg-gray-800 border dark:border-gray-800 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+            <div class="relative w-full sm:max-w-md">
+              <input 
+                type="text" 
+                id="admin-user-search-input" 
+                placeholder="Buscar por nome, email, cidade ou loja..." 
+                oninput="App.filterAdminUsersList(this.value)"
+                class="w-full pl-9 pr-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-700 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+              >
+              <i data-lucide="search" class="w-4 h-4 text-gray-400 absolute left-3 top-2.5"></i>
+            </div>
+            <div class="text-xs text-gray-500 text-right sm:text-left" id="admin-users-count">
+              Exibindo <strong>${users.length}</strong> usuário(s)
+            </div>
+          </div>
+
+          <!-- LISTA / TABELA DE USUÁRIOS (RESPONSIVA: CARDS NO CELULAR, TABELA NO DESKTOP) -->
+          <div class="bg-white dark:bg-gray-800 rounded-2xl sm:rounded-3xl border dark:border-gray-800 shadow-xs overflow-hidden">
+            
+            <!-- VISÃO MOBILE: CARDS DINÂMICOS (< 768px) -->
+            <div class="block md:hidden divide-y dark:divide-gray-800" id="admin-users-mobile-list">
+              ${this.renderAdminUsersMobileCardsHTML(users)}
+            </div>
+
+            <!-- VISÃO DESKTOP: TABELA CLÁSSICA (>= 768px) -->
+            <div class="hidden md:block overflow-x-auto">
+              <table class="w-full text-left text-xs">
+                <thead class="bg-gray-50 dark:bg-gray-900/60 border-b dark:border-gray-800 text-gray-500 uppercase text-[11px] font-bold">
+                  <tr>
+                    <th class="py-3.5 px-4">Usuário</th>
+                    <th class="py-3.5 px-4">Contato / Localização</th>
+                    <th class="py-3.5 px-4">Tipo / Nível</th>
+                    <th class="py-3.5 px-4 text-center">Produtos Cadastrados</th>
+                    <th class="py-3.5 px-4 text-right">Ações de Gestão</th>
+                  </tr>
+                </thead>
+                <tbody id="admin-users-tbody" class="divide-y dark:divide-gray-800">
+                  ${this.renderAdminUsersRowsHTML(users)}
+                </tbody>
+              </table>
+            </div>
+
+          </div>
+        </div>
+      `;
+
+      if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+      }
+
+      if (this.adminOpenUserId) {
+        const targetU = users.find(u => parseInt(u.id) === parseInt(this.adminOpenUserId));
+        this.adminOpenUserId = null;
+        if (targetU) {
+          this.openAdminUserProducts(targetU.id, targetU.name);
+        }
+      }
+
+    } catch (e) {
+      console.error(e);
+      container.innerHTML = `<div class="text-center py-12 text-red-500">Erro ao carregar dados do painel administrativo.</div>`;
+    }
+  },
+
+  renderAdminUsersMobileCardsHTML(users) {
+    if (!users || users.length === 0) {
+      return `<div class="p-8 text-center text-gray-400 text-xs">Nenhum usuário cadastrado encontrado.</div>`;
+    }
+
+    return users.map(u => {
+      const isSupportUser = (parseInt(u.is_admin) === 1 || (u.email || '').toLowerCase() === 'tccdssuporte@gmail.com');
+      const locationStr = [u.city, u.state].filter(Boolean).join(', ') || 'Local não informado';
+
+      return `
+        <div class="p-4 space-y-3 admin-user-item hover:bg-gray-50/50 dark:hover:bg-gray-700/30 transition" data-name="${(u.name || '').toLowerCase()}" data-email="${(u.email || '').toLowerCase()}" data-city="${(u.city || '').toLowerCase()}">
+          <!-- CABEÇALHO DO CARD -->
+          <div class="flex items-center gap-3">
+            <img src="${u.avatar}" class="w-11 h-11 rounded-full object-cover border border-gray-200 dark:border-gray-700 shrink-0" alt="Avatar">
+            <div class="min-w-0 flex-1">
+              <div class="font-bold text-sm text-gray-900 dark:text-white flex items-center flex-wrap gap-1.5">
+                <span class="truncate">${u.name}</span>
+                ${isSupportUser ? '<span class="text-[10px] bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-bold px-2 py-0.5 rounded-full border border-amber-300 dark:border-amber-800 shrink-0">🛡️ Suporte</span>' : ''}
+                ${u.is_verified_business ? '<span class="text-[10px] bg-teal-100 dark:bg-teal-950 text-teal-800 dark:text-teal-300 font-bold px-2 py-0.5 rounded-full shrink-0">🏢 Empresa</span>' : ''}
+              </div>
+              <div class="text-[11px] text-gray-400 font-mono truncate">ID #${u.id} • ${u.email}</div>
+            </div>
+          </div>
+
+          <!-- DETALHES -->
+          <div class="grid grid-cols-2 gap-2 text-xs pt-1">
+            <div class="p-2 rounded-xl bg-gray-50 dark:bg-gray-700/50 border dark:border-gray-700 space-y-0.5">
+              <span class="text-[10px] uppercase font-bold text-gray-400 block">Localização</span>
+              <div class="text-gray-800 dark:text-gray-200 font-medium truncate flex items-center gap-1">
+                <i data-lucide="map-pin" class="w-3 h-3 text-teal-600 shrink-0"></i>
+                <span class="truncate">${locationStr}</span>
+              </div>
+            </div>
+
+            <div class="p-2 rounded-xl bg-gray-50 dark:bg-gray-700/50 border dark:border-gray-700 space-y-0.5">
+              <span class="text-[10px] uppercase font-bold text-gray-400 block">Nível & Pontos</span>
+              <div class="text-gray-800 dark:text-gray-200 font-semibold truncate">
+                ${u.points || 0} pts (Nv. ${u.level || 1})
+              </div>
+            </div>
+          </div>
+
+          <!-- PRODUTOS E AÇÕES -->
+          <div class="flex items-center justify-between gap-2 pt-1">
+            <span class="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-bold ${u.total_products > 0 ? 'bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800' : 'bg-gray-100 dark:bg-gray-700 text-gray-400'}">
+              ${u.total_products} anúncio(s)
+            </span>
+
+            <div class="flex items-center gap-2">
+              <button 
+                type="button" 
+                onclick="App.openAdminUserProducts(${u.id}, '${(u.name || '').replace(/'/g, "\\'")}')" 
+                class="px-3 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 transition"
+              >
+                <i data-lucide="package" class="w-3.5 h-3.5"></i>
+                <span>Ver Produtos</span>
+              </button>
+              <button 
+                type="button" 
+                onclick="App.openChatWithUser(${u.id})" 
+                title="Conversar pelo chat"
+                class="p-2 rounded-xl text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 active:scale-95 transition cursor-pointer"
+              >
+                <i data-lucide="message-circle" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  },
+
+  renderAdminUsersRowsHTML(users) {
+    if (!users || users.length === 0) {
+      return `<tr><td colspan="5" class="py-8 text-center text-gray-400">Nenhum usuário cadastrado encontrado.</td></tr>`;
+    }
+
+    return users.map(u => {
+      const isSupportUser = (parseInt(u.is_admin) === 1 || (u.email || '').toLowerCase() === 'tccdssuporte@gmail.com');
+      const locationStr = [u.city, u.state].filter(Boolean).join(', ') || 'Local não informado';
+
+      return `
+        <tr class="hover:bg-gray-50/50 dark:hover:bg-gray-700/30 transition admin-user-item" data-name="${(u.name || '').toLowerCase()}" data-email="${(u.email || '').toLowerCase()}" data-city="${(u.city || '').toLowerCase()}">
+          <td class="py-3.5 px-4">
+            <div class="flex items-center gap-3">
+              <img src="${u.avatar}" class="w-9 h-9 rounded-full object-cover border border-gray-200 dark:border-gray-700 shrink-0" alt="Avatar">
+              <div>
+                <div class="font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
+                  <span>${u.name}</span>
+                  ${isSupportUser ? '<span class="text-[10px] bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-bold px-2 py-0.5 rounded-full border border-amber-300 dark:border-amber-800">🛡️ Suporte</span>' : ''}
+                  ${u.is_verified_business ? '<span class="text-[10px] bg-teal-100 dark:bg-teal-950 text-teal-800 dark:text-teal-300 font-bold px-2 py-0.5 rounded-full">🏢 Empresa</span>' : ''}
+                </div>
+                <div class="text-[11px] text-gray-400 font-mono">ID #${u.id} • ${u.email}</div>
+              </div>
+            </div>
+          </td>
+          <td class="py-3.5 px-4">
+            <div class="text-gray-700 dark:text-gray-300 flex items-center gap-1">
+              <i data-lucide="map-pin" class="w-3.5 h-3.5 text-teal-600"></i>
+              <span>${locationStr}</span>
+            </div>
+            ${u.phone ? `<div class="text-[11px] text-gray-400">${u.phone}</div>` : ''}
+          </td>
+          <td class="py-3.5 px-4">
+            <div class="font-semibold text-gray-800 dark:text-gray-200">${u.points || 0} pts (Nível ${u.level || 1})</div>
+            <div class="text-[11px] text-gray-400">${u.business_name ? u.business_name : 'Pessoa Física'}</div>
+          </td>
+          <td class="py-3.5 px-4 text-center">
+            <span class="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-bold ${u.total_products > 0 ? 'bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800' : 'bg-gray-100 dark:bg-gray-700 text-gray-400'}">
+              ${u.total_products} produto(s)
+            </span>
+          </td>
+          <td class="py-3.5 px-4 text-right">
+            <div class="inline-flex items-center gap-1.5 justify-end">
+              <button 
+                type="button" 
+                onclick="App.openAdminUserProducts(${u.id}, '${(u.name || '').replace(/'/g, "\\'")}')" 
+                title="Ver produtos deste usuário"
+                class="px-2.5 py-1.5 rounded-xl bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 hover:bg-teal-100 transition font-bold text-xs inline-flex items-center gap-1 cursor-pointer active:scale-95"
+              >
+                <i data-lucide="package" class="w-3.5 h-3.5"></i>
+                <span>Ver Produtos (${u.total_products})</span>
+              </button>
+              <button 
+                type="button" 
+                onclick="App.openChatWithUser(${u.id})" 
+                title="Conversar pelo chat de suporte"
+                class="p-1.5 rounded-xl text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition cursor-pointer active:scale-95"
+              >
+                <i data-lucide="message-circle" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  },
+
+  filterAdminUsersList(term) {
+    term = (term || '').toLowerCase().trim();
+    const items = document.querySelectorAll('.admin-user-item');
+    let visibleCount = 0;
+    items.forEach(el => {
+      const name = el.getAttribute('data-name') || '';
+      const email = el.getAttribute('data-email') || '';
+      const city = el.getAttribute('data-city') || '';
+      if (!term || name.includes(term) || email.includes(term) || city.includes(term)) {
+        el.style.display = '';
+        if (el.tagName.toLowerCase() === 'tr') {
+          visibleCount++;
+        }
+      } else {
+        el.style.display = 'none';
+      }
+    });
+
+    // Se estiver no mobile onde não há TRs, conta os cards
+    if (visibleCount === 0 && items.length > 0) {
+      items.forEach(el => {
+        if (el.style.display !== 'none' && el.tagName.toLowerCase() !== 'tr') {
+          visibleCount++;
+        }
+      });
+    }
+
+    const counter = document.getElementById('admin-users-count');
+    if (counter) {
+      counter.innerHTML = `Exibindo <strong>${visibleCount}</strong> usuário(s)`;
+    }
+  },
+
+  async openAdminUserProducts(userId, userName) {
+    const existing = document.getElementById('admin-user-products-modal');
+    if (existing) existing.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'admin-user-products-modal';
+    modal.className = 'fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/80 backdrop-blur-xs animate-fade-in select-none';
+    
+    document.body.classList.add('modal-open');
+    document.documentElement.classList.add('modal-open');
+
+    // Fechar ao clicar fora (backdrop)
+    modal.onclick = (e) => {
+      if (e.target === modal) {
+        App.closeAdminModal('admin-user-products-modal');
+      }
+    };
+
+    // Fechar com Escape no teclado
+    const onKeyEsc = (e) => {
+      if (e.key === 'Escape') {
+        App.closeAdminModal('admin-user-products-modal');
+        window.removeEventListener('keydown', onKeyEsc);
+      }
+    };
+    window.addEventListener('keydown', onKeyEsc);
+
+    modal.innerHTML = `
+      <div class="relative w-full max-w-4xl max-h-[92vh] sm:max-h-[90vh] bg-white dark:bg-gray-900 rounded-2xl sm:rounded-3xl overflow-hidden shadow-2xl flex flex-col select-auto animate-modal-in">
+        <!-- CABEÇALHO DO MODAL -->
+        <div class="flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 border-b dark:border-gray-800 bg-gray-50/70 dark:bg-gray-800/50">
+          <div class="flex items-center gap-2.5 sm:gap-3 min-w-0 pr-2">
+            <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-teal-50 dark:bg-teal-950 text-teal-600 dark:text-teal-400 flex items-center justify-center shrink-0">
+              <i data-lucide="package-search" class="w-4 h-4 sm:w-5 sm:h-5"></i>
+            </div>
+            <div class="min-w-0">
+              <h3 class="text-sm sm:text-base font-extrabold text-gray-900 dark:text-white truncate">Produtos de ${userName}</h3>
+              <p class="text-[11px] sm:text-xs text-gray-500 truncate">Gerencie e modere os anúncios cadastrados por este usuário</p>
+            </div>
+          </div>
+          <button 
+            type="button" 
+            onclick="App.closeAdminModal('admin-user-products-modal')"
+            class="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 p-2 sm:p-2.5 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 active:scale-95 transition cursor-pointer shrink-0"
+            title="Fechar"
+            aria-label="Fechar"
+          >
+            <i data-lucide="x" class="w-5 h-5"></i>
+          </button>
+        </div>
+
+        <!-- CONTEÚDO DO MODAL (RESPONSIVO COM ROLAGEM SUAVE) -->
+        <div class="p-3.5 sm:p-6 overflow-y-auto space-y-4 flex-1" id="admin-user-prods-container">
+          <div class="text-center py-12 text-gray-500 text-xs sm:text-sm">Carregando anúncios do usuário... ⏳</div>
+        </div>
+
+        <!-- RODAPÉ DO MODAL -->
+        <div class="px-4 py-3 sm:px-6 sm:py-3.5 border-t dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 flex justify-between items-center text-xs text-gray-500">
+          <span class="truncate pr-2">Moderação ativa • Suporte Re-Store</span>
+          <button 
+            type="button" 
+            onclick="App.closeAdminModal('admin-user-products-modal')"
+            class="px-4 py-2 rounded-xl bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 font-bold transition cursor-pointer shrink-0 active:scale-95"
+          >
+            Fechar
+          </button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+
+    try {
+      const data = await AdminManager.getUserProducts(userId);
+      const container = document.getElementById('admin-user-prods-container');
+      if (!container) return;
+
+      if (!data.success) {
+        container.innerHTML = `<div class="text-center py-12 text-red-500 text-xs sm:text-sm">${data.error || 'Erro ao carregar produtos.'}</div>`;
+        return;
+      }
+
+      const products = data.products || [];
+      if (products.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-12 space-y-2">
+            <i data-lucide="package-open" class="w-12 h-12 text-gray-300 mx-auto"></i>
+            <p class="text-sm font-semibold text-gray-500">Este usuário não possui produtos ativos no momento.</p>
+          </div>
+        `;
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+        return;
+      }
+
+      container.innerHTML = `
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5 sm:gap-4">
+          ${products.map(p => `
+            <div class="rounded-2xl border dark:border-gray-800 bg-white dark:bg-gray-800 p-3 shadow-xs flex flex-col justify-between space-y-3">
+              <div>
+                <div class="aspect-square rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-700 relative mb-2">
+                  <img src="${p.primary_image}" class="w-full h-full object-cover" alt="${(p.name || '').replace(/"/g, '&quot;')}" loading="lazy">
+                  <span class="absolute top-2 left-2 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-black/60 text-white backdrop-blur">
+                    ${p.category}
+                  </span>
+                </div>
+                <h4 class="font-bold text-sm text-gray-900 dark:text-white line-clamp-1" title="${(p.name || '').replace(/"/g, '&quot;')}">${p.name}</h4>
+                <div class="flex items-center justify-between mt-1 text-xs">
+                  <span class="font-extrabold text-teal-600 dark:text-teal-400">R$ ${parseFloat(p.price).toFixed(2).replace('.', ',')}</span>
+                  <span class="text-gray-400 font-medium">Estoque: ${p.stock} un.</span>
+                </div>
+              </div>
+
+              <!-- AÇÕES DE MODERAÇÃO NO PRODUTO (BOTÕES COM BOM ALVO DE TOQUE PARA CELULAR) -->
+              <div class="pt-2 border-t dark:border-gray-700 space-y-2">
+                <div class="grid grid-cols-2 gap-2">
+                  <button 
+                    type="button" 
+                    onclick="App.closeAdminModal('admin-user-products-modal'); App.navigateTo('product-detail', { id: ${p.id} });" 
+                    class="btn-outline py-2 text-xs font-bold flex items-center justify-center gap-1 cursor-pointer active:scale-95"
+                  >
+                    <i data-lucide="eye" class="w-3.5 h-3.5"></i>
+                    <span>Ver</span>
+                  </button>
+                  <button 
+                    type="button" 
+                    onclick="App.closeAdminModal('admin-user-products-modal'); App.navigateTo('edit-product', { productId: ${p.id} });" 
+                    class="btn-primary py-2 text-xs font-bold flex items-center justify-center gap-1 cursor-pointer active:scale-95"
+                  >
+                    <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
+                    <span>Editar</span>
+                  </button>
+                </div>
+                <button 
+                  type="button" 
+                  onclick="App.promptDeleteProductAsAdmin(${p.id}, '${(p.name || '').replace(/'/g, "\\'")}', ${userId});" 
+                  class="w-full py-2.5 text-xs rounded-xl bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/50 border border-red-200 dark:border-red-900 font-bold transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-98"
+                >
+                  <i data-lucide="trash-2" class="w-4 h-4"></i>
+                  <span>Excluir Anúncio (Moderação)</span>
+                </button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+
+    } catch (e) {
+      console.error(e);
     }
   },
 
@@ -4005,7 +4823,9 @@ const App = {
       }
 
       const p = data.product;
-      if (parseInt(p.seller_id) !== parseInt(user.id)) {
+      const isAdmin = (typeof AuthManager !== 'undefined' && AuthManager.isAdmin());
+      const isOwner = (parseInt(p.seller_id) === parseInt(user.id));
+      if (!isOwner && !isAdmin) {
         ToastManager.show('Você não tem permissão para editar este anúncio.', 'error');
         this.navigateTo('seller');
         return;
@@ -4017,7 +4837,20 @@ const App = {
 
       container.innerHTML = `
         <div class="max-w-2xl mx-auto animate-fade-in">
-          <button type="button" onclick="App.navigateTo('seller')" class="text-sm text-teal-600 font-semibold hover:underline mb-4 block cursor-pointer">← Voltar para Área do Vendedor</button>
+          <button type="button" onclick="${!isOwner && isAdmin ? "App.navigateTo('admin-users')" : "App.navigateTo('seller')"}" class="text-sm text-teal-600 font-semibold hover:underline mb-4 block cursor-pointer">← ${!isOwner && isAdmin ? 'Voltar para Painel Admin' : 'Voltar para Área do Vendedor'}</button>
+          
+          ${!isOwner && isAdmin ? `
+            <div class="mb-4 p-3.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-2xl flex items-center gap-3 text-xs text-amber-900 dark:text-amber-200 shadow-xs">
+              <div class="w-8 h-8 rounded-xl bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0">
+                <i data-lucide="shield-alert" class="w-4 h-4"></i>
+              </div>
+              <div>
+                <div class="font-bold">Modo de Moderação Suporte/Admin</div>
+                <div>Você está editando este anúncio com privilégios de moderação. Anunciante original: <strong>${p.seller_name || 'ID #' + p.seller_id}</strong>.</div>
+              </div>
+            </div>
+          ` : ''}
+
           <div class="flex items-center justify-between mb-6">
             <h1 class="text-2xl font-extrabold">Editar Produto Sustentável</h1>
             <span class="text-xs bg-teal-50 dark:bg-teal-950 text-teal-700 dark:text-teal-300 font-mono px-2 py-1 rounded border border-teal-200 dark:border-teal-800">ID #${p.id}</span>
@@ -4293,7 +5126,11 @@ const App = {
       if (res.success) {
         ToastManager.show(res.message || 'Produto atualizado com sucesso!', 'success', 4000);
         this.productsCache = null;
-        this.navigateTo('seller');
+        if (typeof AuthManager !== 'undefined' && AuthManager.isAdmin()) {
+          this.navigateTo('admin-users');
+        } else {
+          this.navigateTo('seller');
+        }
       } else {
         if (btn) {
           btn.disabled = false;
@@ -6378,18 +7215,42 @@ const App = {
   // ----------------------------------------------------
   // TELA 6: BUSCA E FILTROS
   // ----------------------------------------------------
+  // ----------------------------------------------------
+  // TELA: BUSCA AVANÇADA COM FILTROS E GEOLOCALIZAÇÃO REAL
+  // ----------------------------------------------------
   async renderSearchScreen(container) {
     container.innerHTML = `
       <div class="space-y-6 animate-fade-in max-w-7xl mx-auto">
-        <div class="p-6 bg-white dark:bg-gray-800 rounded-3xl border dark:border-gray-800 shadow-sm space-y-4">
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <!-- PAINEL DE BUSCA E FILTROS -->
+        <div class="p-6 bg-white dark:bg-gray-800 rounded-3xl border dark:border-gray-800 shadow-sm space-y-5">
+          
+          <!-- LINHA PRINCIPAL: PALAVRA-CHAVE, CATEGORIA E LOCALIZAÇÃO COM DETECTAR -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3.5">
             <div>
-              <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Palavra-chave</label>
-              <input type="text" id="srch-query" placeholder="Buscar produto... (Pressione /)" value="${this.searchQuery}" class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 text-sm">
+              <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1 flex items-center gap-1.5">
+                <i data-lucide="search" class="w-3.5 h-3.5 text-teal-600 dark:text-teal-400"></i>
+                <span>Palavra-chave ou Termo</span>
+              </label>
+              <input 
+                type="text" 
+                id="srch-query" 
+                placeholder="Buscar produto sustentável... (ex: Bambu, Inox)" 
+                value="${(this.searchQuery || '').replace(/"/g, '&quot;')}" 
+                onkeyup="if(event.key==='Enter') App.applySearchFilter()"
+                class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 dark:border-gray-600 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+              >
             </div>
+
             <div>
-              <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Categoria</label>
-              <select id="srch-category" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 text-sm">
+              <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1 flex items-center gap-1.5">
+                <i data-lucide="layout-grid" class="w-3.5 h-3.5 text-teal-600 dark:text-teal-400"></i>
+                <span>Categoria</span>
+              </label>
+              <select 
+                id="srch-category" 
+                onchange="App.applySearchFilter()"
+                class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 dark:border-gray-600 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+              >
                 <option value="">Todas as Categorias</option>
                 <option value="Utilidades" ${this.selectedCategory === 'Utilidades' ? 'selected' : ''}>Utilidades</option>
                 <option value="Moda & Acessórios" ${this.selectedCategory === 'Moda & Acessórios' ? 'selected' : ''}>Moda & Acessórios</option>
@@ -6397,11 +7258,28 @@ const App = {
                 <option value="Eletrônicos Eco" ${this.selectedCategory === 'Eletrônicos Eco' ? 'selected' : ''}>Eletrônicos Eco</option>
               </select>
             </div>
+
             <div>
-              <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1 flex items-center gap-1.5"><i data-lucide="map-pin" class="w-3.5 h-3.5 text-teal-600 dark:text-teal-400"></i> Localização / Região</label>
+              <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1 flex items-center gap-1.5">
+                <i data-lucide="map-pin" class="w-3.5 h-3.5 text-teal-600 dark:text-teal-400"></i>
+                <span>Localização / Região</span>
+              </label>
               <div class="flex gap-2">
-                <input type="text" id="srch-location" placeholder="Cidade ou UF (ex: São Paulo)" value="${this.searchLocation}" class="flex-1 px-3 py-2 border rounded-xl dark:bg-gray-700 text-sm">
-                <button type="button" onclick="App.simulateGeoLocation()" title="Detectar Minha Localização" class="px-3 py-2 bg-teal-50 dark:bg-teal-950 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 rounded-xl text-xs font-bold hover:bg-teal-100 dark:hover:bg-teal-900 transition flex items-center gap-1.5 cursor-pointer">
+                <input 
+                  type="text" 
+                  id="srch-location" 
+                  placeholder="Cidade ou UF (ex: São Paulo, SP)" 
+                  value="${(this.searchLocation || '').replace(/"/g, '&quot;')}" 
+                  onkeyup="if(event.key==='Enter') App.applySearchFilter()"
+                  class="flex-1 px-3 py-2 border rounded-xl dark:bg-gray-700 dark:border-gray-600 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                >
+                <button 
+                  type="button" 
+                  id="btn-detect-location"
+                  onclick="App.detectLocation()" 
+                  title="Detectar Minha Localização via GPS" 
+                  class="px-3.5 py-2 bg-teal-50 dark:bg-teal-950 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 rounded-xl text-xs font-bold hover:bg-teal-100 dark:hover:bg-teal-900 transition flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 shrink-0"
+                >
                   <i data-lucide="crosshair" class="w-3.5 h-3.5"></i>
                   <span>Detectar</span>
                 </button>
@@ -6409,33 +7287,135 @@ const App = {
             </div>
           </div>
 
-          <div class="flex flex-wrap items-center justify-between gap-3 pt-3 border-t dark:border-gray-700">
-            <div class="flex flex-wrap gap-2 text-xs">
-              <span class="font-bold text-gray-500 py-1">Atributos Ecológicos:</span>
-              <label class="px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-full cursor-pointer hover:bg-teal-50 dark:hover:bg-teal-950 transition inline-flex items-center gap-1.5">
-                <input type="checkbox" class="accent-teal-600"> <span class="font-medium text-xs">Reciclado</span>
-              </label>
-              <label class="px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-full cursor-pointer hover:bg-teal-50 dark:hover:bg-teal-950 transition inline-flex items-center gap-1.5">
-                <input type="checkbox" class="accent-teal-600"> <span class="font-medium text-xs">Algodão Orgânico</span>
-              </label>
-              <label class="px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-full cursor-pointer hover:bg-teal-50 dark:hover:bg-teal-950 transition inline-flex items-center gap-1.5">
-                <input type="checkbox" class="accent-teal-600"> <span class="font-medium text-xs">Upcycled</span>
-              </label>
+          <!-- LINHA DE FILTROS AVANÇADOS COM CHIPS ESTILIZADOS -->
+          <div class="pt-3 border-t dark:border-gray-700/80 space-y-3.5">
+            
+            <!-- ATRIBUTOS ECOLÓGICOS -->
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-bold text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+                  <i data-lucide="leaf" class="w-3.5 h-3.5 text-emerald-600"></i>
+                  <span>Atributos Ecológicos & Materiais Sustentáveis:</span>
+                </span>
+                <span class="text-[11px] text-gray-400">Filtro em tempo real</span>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <label class="filter-checkbox-chip">
+                  <input type="checkbox" name="srch-materials" value="Reciclado" onchange="App.onFilterCheckboxChange(this)">
+                  <span class="custom-checkbox-indicator">
+                    <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+                  </span>
+                  <span class="filter-chip-text">Reciclado</span>
+                </label>
+
+                <label class="filter-checkbox-chip">
+                  <input type="checkbox" name="srch-materials" value="Orgânico" onchange="App.onFilterCheckboxChange(this)">
+                  <span class="custom-checkbox-indicator">
+                    <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+                  </span>
+                  <span class="filter-chip-text">Algodão Orgânico</span>
+                </label>
+
+                <label class="filter-checkbox-chip">
+                  <input type="checkbox" name="srch-materials" value="Upcycled" onchange="App.onFilterCheckboxChange(this)">
+                  <span class="custom-checkbox-indicator">
+                    <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+                  </span>
+                  <span class="filter-chip-text">Upcycled</span>
+                </label>
+
+                <label class="filter-checkbox-chip">
+                  <input type="checkbox" name="srch-materials" value="Biodegradável" onchange="App.onFilterCheckboxChange(this)">
+                  <span class="custom-checkbox-indicator">
+                    <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+                  </span>
+                  <span class="filter-chip-text">Biodegradável</span>
+                </label>
+
+                <label class="filter-checkbox-chip">
+                  <input type="checkbox" name="srch-materials" value="Bambu" onchange="App.onFilterCheckboxChange(this)">
+                  <span class="custom-checkbox-indicator">
+                    <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+                  </span>
+                  <span class="filter-chip-text">Bambu</span>
+                </label>
+
+                <label class="filter-checkbox-chip">
+                  <input type="checkbox" name="srch-materials" value="Madeira" onchange="App.onFilterCheckboxChange(this)">
+                  <span class="custom-checkbox-indicator">
+                    <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+                  </span>
+                  <span class="filter-chip-text">Madeira Certificada</span>
+                </label>
+              </div>
             </div>
-            <div class="flex gap-2">
-              <button type="button" onclick="App.applySearchFilter()" class="btn-primary text-xs px-5 py-2 cursor-pointer">Filtrar Produtos</button>
-              <button type="button" onclick="App.clearSearchFilter()" class="btn-outline text-xs px-4 py-2 cursor-pointer">Limpar</button>
+
+            <!-- CONDIÇÃO DO PRODUTO & ORDENAÇÃO -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="text-xs font-bold text-gray-700 dark:text-gray-300 flex items-center gap-1.5 mr-1">
+                  <i data-lucide="tag" class="w-3.5 h-3.5 text-teal-600"></i>
+                  <span>Condição:</span>
+                </span>
+                
+                <label class="filter-checkbox-chip">
+                  <input type="checkbox" name="srch-condition" value="new" onchange="App.onFilterCheckboxChange(this)">
+                  <span class="custom-checkbox-indicator">
+                    <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+                  </span>
+                  <span class="filter-chip-text">Novo</span>
+                </label>
+
+                <label class="filter-checkbox-chip">
+                  <input type="checkbox" name="srch-condition" value="used" onchange="App.onFilterCheckboxChange(this)">
+                  <span class="custom-checkbox-indicator">
+                    <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+                  </span>
+                  <span class="filter-chip-text">Usado</span>
+                </label>
+
+                <label class="filter-checkbox-chip">
+                  <input type="checkbox" name="srch-condition" value="restored" onchange="App.onFilterCheckboxChange(this)">
+                  <span class="custom-checkbox-indicator">
+                    <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+                  </span>
+                  <span class="filter-chip-text">Restaurado</span>
+                </label>
+              </div>
+
+              <div class="flex items-center gap-2 self-end sm:self-center">
+                <div class="flex items-center gap-1.5 text-xs text-gray-500">
+                  <i data-lucide="arrow-down-up" class="w-3.5 h-3.5 text-teal-600"></i>
+                  <select id="srch-sort" onchange="App.applySearchFilter()" class="px-2.5 py-1.5 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-700 text-xs text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-teal-500">
+                    <option value="recent">Mais Recentes</option>
+                    <option value="price_asc">Menor Preço</option>
+                    <option value="price_desc">Maior Preço</option>
+                    <option value="rating">Melhor Avaliados</option>
+                    <option value="popular">Mais Populares</option>
+                  </select>
+                </div>
+
+                <button type="button" onclick="App.applySearchFilter()" class="btn-primary text-xs px-4 py-2 cursor-pointer inline-flex items-center gap-1 shadow-xs">
+                  <i data-lucide="filter" class="w-3.5 h-3.5"></i>
+                  <span>Filtrar</span>
+                </button>
+                <button type="button" onclick="App.clearSearchFilter()" class="btn-outline text-xs px-3.5 py-2 cursor-pointer inline-flex items-center gap-1">
+                  <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+                  <span>Limpar</span>
+                </button>
+              </div>
             </div>
+
           </div>
         </div>
 
+        <!-- GRADE DE RESULTADOS -->
         <div id="search-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
           ${this.getSkeletonCardsHTML(4)}
         </div>
       </div>
     `;
 
-    // IMPORTANTE: renderizar os ícones adicionados dinamicamente
     if (typeof lucide !== 'undefined') {
       lucide.createIcons();
     }
@@ -6443,46 +7423,234 @@ const App = {
     this.applySearchFilter();
   },
 
-  simulateGeoLocation() {
-    const locInput = document.getElementById('srch-location');
-    if (locInput) {
-      locInput.value = 'São Paulo, SP';
-      this.searchLocation = 'São Paulo, SP';
-      ToastManager.show('Geolocalização detectada: São Paulo, SP', 'success');
-      this.applySearchFilter();
+  onFilterCheckboxChange(inputEl) {
+    if (!inputEl) return;
+    const label = inputEl.closest('.filter-checkbox-chip');
+    if (label) {
+      if (inputEl.checked) {
+        label.classList.add('active');
+      } else {
+        label.classList.remove('active');
+      }
     }
+    this.applySearchFilter();
+  },
+
+  async detectLocation() {
+    const btn = document.getElementById('btn-detect-location');
+    const locInput = document.getElementById('srch-location');
+    
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = `
+        <svg class="animate-spin w-3.5 h-3.5" viewBox="0 0 24 24" fill="none">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <span>Detectando...</span>
+      `;
+    }
+
+    const resetBtn = () => {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = `
+          <i data-lucide="crosshair" class="w-3.5 h-3.5"></i>
+          <span>Detectar</span>
+        `;
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+      }
+    };
+
+    const applyDetectedLocation = (cityState, isFallback = false) => {
+      if (locInput) locInput.value = cityState;
+      this.searchLocation = cityState;
+      resetBtn();
+      ToastManager.show(
+        isFallback 
+          ? `Localização estimada: ${cityState}` 
+          : `Localização detectada com sucesso: ${cityState} 📍`, 
+        isFallback ? 'info' : 'success'
+      );
+      this.applySearchFilter();
+    };
+
+    const fallbackToProfileOrDefault = () => {
+      const u = (typeof AuthManager !== 'undefined') ? AuthManager.currentUser : null;
+      if (u && (u.city || u.state)) {
+        const profLoc = [u.city, u.state].filter(Boolean).join(', ');
+        if (profLoc) {
+          applyDetectedLocation(profLoc, true);
+          return;
+        }
+      }
+      applyDetectedLocation('São Paulo, SP', true);
+    };
+
+    if (!navigator.geolocation) {
+      fallbackToProfileOrDefault();
+      return;
+    }
+
+    const geoOptions = {
+      enableHighAccuracy: true,
+      timeout: 8000,
+      maximumAge: 60000
+    };
+
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+
+        try {
+          const res = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=pt`);
+          const data = await res.json();
+
+          let city = data.locality || data.city || data.principalSubdivision || '';
+          let state = '';
+
+          if (data.principalSubdivisionCode) {
+            const parts = data.principalSubdivisionCode.split('-');
+            state = parts[parts.length - 1];
+          }
+
+          if (city && state) {
+            let formatted = `${city}, ${state}`;
+            if (window.BRAZIL_LOCATIONS && Array.isArray(window.BRAZIL_LOCATIONS)) {
+              const exact = window.BRAZIL_LOCATIONS.find(l => l.toLowerCase() === formatted.toLowerCase());
+              if (exact) {
+                formatted = exact;
+              } else {
+                const cityMatch = window.BRAZIL_LOCATIONS.find(l => l.toLowerCase().startsWith(city.toLowerCase() + ','));
+                if (cityMatch) formatted = cityMatch;
+              }
+            }
+            applyDetectedLocation(formatted, false);
+            return;
+          }
+
+          const nomRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&addressdetails=1`);
+          const nomData = await nomRes.json();
+          if (nomData && nomData.address) {
+            city = nomData.address.city || nomData.address.town || nomData.address.municipality || nomData.address.village || '';
+            state = nomData.address.state || '';
+            if (city) {
+              const formatted = state ? `${city}, ${state}` : city;
+              applyDetectedLocation(formatted, false);
+              return;
+            }
+          }
+
+          fallbackToProfileOrDefault();
+        } catch (err) {
+          console.warn('Erro na geocodificação reversa:', err);
+          fallbackToProfileOrDefault();
+        }
+      },
+      (err) => {
+        console.warn('Geolocalização não disponível ou permissão recusada:', err.message);
+        fallbackToProfileOrDefault();
+      },
+      geoOptions
+    );
+  },
+
+  simulateGeoLocation() {
+    this.detectLocation();
   },
 
   clearSearchFilter() {
     this.searchQuery = '';
     this.selectedCategory = '';
     this.searchLocation = '';
+
     const q = document.getElementById('srch-query');
     const cat = document.getElementById('srch-category');
     const loc = document.getElementById('srch-location');
+    const sort = document.getElementById('srch-sort');
+
     if (q) q.value = '';
     if (cat) cat.value = '';
     if (loc) loc.value = '';
+    if (sort) sort.value = 'recent';
+
+    document.querySelectorAll('input[name="srch-materials"], input[name="srch-condition"]').forEach(cb => {
+      cb.checked = false;
+      const chip = cb.closest('.filter-checkbox-chip');
+      if (chip) chip.classList.remove('active');
+    });
+
     this.applySearchFilter();
   },
 
   async applySearchFilter() {
-    const q = document.getElementById('srch-query') ? document.getElementById('srch-query').value : this.searchQuery;
-    const cat = document.getElementById('srch-category') ? document.getElementById('srch-category').value : this.selectedCategory;
-    const loc = document.getElementById('srch-location') ? document.getElementById('srch-location').value : this.searchLocation;
+    const q = document.getElementById('srch-query') ? document.getElementById('srch-query').value.trim() : this.searchQuery;
+    const cat = document.getElementById('srch-category') ? document.getElementById('srch-category').value.trim() : this.selectedCategory;
+    const loc = document.getElementById('srch-location') ? document.getElementById('srch-location').value.trim() : this.searchLocation;
+    const sort = document.getElementById('srch-sort') ? document.getElementById('srch-sort').value.trim() : 'recent';
 
-    let url = `api/products.php?action=list&search=${encodeURIComponent(q)}&category=${encodeURIComponent(cat)}&location=${encodeURIComponent(loc)}`;
+    const checkedMaterials = Array.from(document.querySelectorAll('input[name="srch-materials"]:checked')).map(el => el.value);
+    const materialsParam = checkedMaterials.join(',');
+
+    const checkedConditions = Array.from(document.querySelectorAll('input[name="srch-condition"]:checked')).map(el => el.value);
+    const conditionParam = checkedConditions.length === 1 ? checkedConditions[0] : '';
+
+    this.searchQuery = q;
+    this.selectedCategory = cat;
+    this.searchLocation = loc;
+
+    let url = `api/products.php?action=list&search=${encodeURIComponent(q)}&category=${encodeURIComponent(cat)}&location=${encodeURIComponent(loc)}&sort=${encodeURIComponent(sort)}`;
+    if (materialsParam) {
+      url += `&materials=${encodeURIComponent(materialsParam)}`;
+    }
+    if (conditionParam) {
+      url += `&condition=${encodeURIComponent(conditionParam)}`;
+    }
+
     const grid = document.getElementById('search-grid');
     if (!grid) return;
+
+    grid.innerHTML = this.getSkeletonCardsHTML(4);
 
     try {
       const res = await fetch(url);
       const data = await res.json();
       if (data.success && data.products && data.products.length > 0) {
-        grid.innerHTML = data.products.map(p => this.renderProductCardHTML(p)).join('');
+        let prods = data.products;
+        if (checkedConditions.length > 1) {
+          prods = prods.filter(p => checkedConditions.includes(p.product_condition));
+        }
+
+        if (prods.length > 0) {
+          grid.innerHTML = prods.map(p => this.renderProductCardHTML(p)).join('');
+        } else {
+          grid.innerHTML = `
+            <div class="col-span-full text-center py-12 space-y-2">
+              <i data-lucide="package-search" class="w-12 h-12 text-gray-300 mx-auto"></i>
+              <p class="text-sm font-semibold text-gray-600 dark:text-gray-400">Nenhum produto encontrado com as condições selecionadas.</p>
+            </div>
+          `;
+        }
       } else {
-        grid.innerHTML = `<div class="col-span-full text-center py-10 text-gray-500">${data.error || 'Nenhum produto encontrado para estes filtros de localização e categoria.'}</div>`;
+        grid.innerHTML = `
+          <div class="col-span-full text-center py-12 space-y-3 bg-white dark:bg-gray-800 rounded-3xl border dark:border-gray-800 p-8 shadow-xs">
+            <div class="w-14 h-14 rounded-2xl bg-teal-50 dark:bg-teal-950/60 text-teal-600 dark:text-teal-400 flex items-center justify-center mx-auto">
+              <i data-lucide="search-x" class="w-7 h-7"></i>
+            </div>
+            <div class="font-bold text-base text-gray-800 dark:text-gray-200">Nenhum produto sustentável encontrado</div>
+            <p class="text-xs text-gray-500 max-w-md mx-auto leading-relaxed">
+              Tente buscar por termos mais genéricos, desmarcar filtros específicos ou buscar em outra cidade/UF.
+            </p>
+            <button type="button" onclick="App.clearSearchFilter()" class="btn-primary text-xs py-2 px-4 cursor-pointer inline-flex items-center gap-1.5 mx-auto">
+              <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+              <span>Limpar Todos os Filtros</span>
+            </button>
+          </div>
+        `;
       }
+
+      if (typeof lucide !== 'undefined') lucide.createIcons();
     } catch (e) {
       console.error('Erro ao buscar produtos:', e);
       if (grid) {

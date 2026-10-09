@@ -2,6 +2,24 @@
 // config/db_init.php
 require_once __DIR__ . '/database.php';
 
+/**
+ * Verifica se um usuário possui privilégios de administrador / suporte
+ */
+if (!function_exists('isUserAdmin')) {
+    function isUserAdmin($db, $userId) {
+        if (!$userId) return false;
+        try {
+            $stmt = $db->prepare("SELECT email, is_admin FROM users WHERE id = ?");
+            $stmt->execute([$userId]);
+            $u = $stmt->fetch();
+            if (!$u) return false;
+            return ((int)($u['is_admin'] ?? 0) === 1) || (strtolower(trim($u['email'] ?? '')) === 'tccdssuporte@gmail.com');
+        } catch (Exception $e) {
+            return false;
+        }
+    }
+}
+
 function initializeDatabase() {
     static $alreadyRan = false;
     if ($alreadyRan) return;
@@ -14,6 +32,22 @@ function initializeDatabase() {
         try { $db->exec("ALTER TABLE orders ADD COLUMN coupon_code TEXT NULL"); } catch (Exception $e) {}
         try { $db->exec("ALTER TABLE orders ADD COLUMN discount_amount REAL DEFAULT 0.0"); } catch (Exception $e) {}
         try { $db->exec("ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 1"); } catch (Exception $e) {}
+        try { $db->exec("ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0"); } catch (Exception $e) {}
+        try { $db->exec("UPDATE users SET is_admin = 1 WHERE LOWER(TRIM(email)) = 'tccdssuporte@gmail.com'"); } catch (Exception $e) {}
+        try {
+            $db->exec("CREATE TABLE IF NOT EXISTS user_notifications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                message TEXT NOT NULL,
+                type TEXT DEFAULT 'moderation',
+                reason TEXT NULL,
+                product_name TEXT NULL,
+                is_read INTEGER DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )");
+        } catch (Exception $e) {}
         try {
             $db->exec("CREATE TABLE IF NOT EXISTS reviews (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -54,6 +88,22 @@ function initializeDatabase() {
         try { $db->exec("ALTER TABLE orders ADD COLUMN coupon_code VARCHAR(50) NULL"); } catch (Exception $e) {}
         try { $db->exec("ALTER TABLE orders ADD COLUMN discount_amount DECIMAL(10,2) DEFAULT 0.00"); } catch (Exception $e) {}
         try { $db->exec("ALTER TABLE users ADD COLUMN email_verified TINYINT(1) DEFAULT 1"); } catch (Exception $e) {}
+        try { $db->exec("ALTER TABLE users ADD COLUMN is_admin TINYINT(1) DEFAULT 0"); } catch (Exception $e) {}
+        try { $db->exec("UPDATE users SET is_admin = 1 WHERE LOWER(TRIM(email)) = 'tccdssuporte@gmail.com'"); } catch (Exception $e) {}
+        try {
+            $db->exec("CREATE TABLE IF NOT EXISTS user_notifications (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                title VARCHAR(255) NOT NULL,
+                message TEXT NOT NULL,
+                type VARCHAR(50) DEFAULT 'moderation',
+                reason TEXT NULL,
+                product_name VARCHAR(255) NULL,
+                is_read TINYINT(1) DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )");
+        } catch (Exception $e) {}
         try {
             $db->exec("CREATE TABLE IF NOT EXISTS reviews (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -112,18 +162,27 @@ function initializeDatabase() {
         try {
             $checkSup = $db->prepare("SELECT id FROM users WHERE LOWER(TRIM(email)) = 'tccdssuporte@gmail.com' LIMIT 1");
             $checkSup->execute();
-            if (!$checkSup->fetch()) {
+            $supRow = $checkSup->fetch();
+            if (!$supRow) {
                 $passHash = password_hash('Suporte@ReStore2026', PASSWORD_DEFAULT);
                 $supAvatar = 'https://ui-avatars.com/api/?name=Suporte+ReStore&background=0d9488&color=fff&size=128';
                 try {
-                    $db->prepare("INSERT INTO users (email, name, password_hash, avatar, is_verified_business, business_name, email_verified) VALUES ('tccdssuporte@gmail.com', 'Suporte Re-Store', ?, ?, 1, 'Central de Atendimento Oficial', 1)")->execute([$passHash, $supAvatar]);
+                    $db->prepare("INSERT INTO users (email, name, password_hash, avatar, is_verified_business, business_name, email_verified, is_admin) VALUES ('tccdssuporte@gmail.com', 'Suporte Re-Store', ?, ?, 1, 'Central de Atendimento Oficial', 1, 1)")->execute([$passHash, $supAvatar]);
                 } catch (Exception $e1) {
                     try {
-                        $db->prepare("INSERT INTO users (email, name, password_hash, avatar, is_verified_business, business_name) VALUES ('tccdssuporte@gmail.com', 'Suporte Re-Store', ?, ?, 1, 'Central de Atendimento Oficial')")->execute([$passHash, $supAvatar]);
+                        $db->prepare("INSERT INTO users (email, name, password_hash, avatar, is_verified_business, business_name, is_admin) VALUES ('tccdssuporte@gmail.com', 'Suporte Re-Store', ?, ?, 1, 'Central de Atendimento Oficial', 1)")->execute([$passHash, $supAvatar]);
                     } catch (Exception $e2) {
-                        $db->prepare("INSERT INTO users (email, name, password_hash, avatar) VALUES ('tccdssuporte@gmail.com', 'Suporte Re-Store', ?, ?)")->execute([$passHash, $supAvatar]);
+                        try {
+                            $db->prepare("INSERT INTO users (email, name, password_hash, avatar, is_admin) VALUES ('tccdssuporte@gmail.com', 'Suporte Re-Store', ?, ?, 1)")->execute([$passHash, $supAvatar]);
+                        } catch (Exception $e3) {
+                            $db->prepare("INSERT INTO users (email, name, password_hash, avatar) VALUES ('tccdssuporte@gmail.com', 'Suporte Re-Store', ?, ?)")->execute([$passHash, $supAvatar]);
+                        }
                     }
                 }
+            } else {
+                try {
+                    $db->prepare("UPDATE users SET is_admin = 1 WHERE id = ?")->execute([$supRow['id']]);
+                } catch (Exception $e) {}
             }
         } catch (Exception $e) {}
 
@@ -153,6 +212,7 @@ function initializeDatabase() {
                 points INTEGER DEFAULT 0,
                 level INTEGER DEFAULT 1,
                 is_verified_business INTEGER DEFAULT 0,
+                is_admin INTEGER DEFAULT 0,
                 business_name TEXT,
                 cnpj TEXT,
                 email_verified INTEGER DEFAULT 1,
@@ -291,6 +351,18 @@ function initializeDatabase() {
             image_url TEXT NOT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (review_id) REFERENCES reviews(id) ON DELETE CASCADE
+        )",
+            "CREATE TABLE IF NOT EXISTS user_notifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            message TEXT NOT NULL,
+            type TEXT DEFAULT 'moderation',
+            reason TEXT NULL,
+            product_name TEXT NULL,
+            is_read INTEGER DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         )"
         ];
         foreach ($queries as $q) {

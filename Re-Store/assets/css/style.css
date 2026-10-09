@@ -437,3 +437,97 @@ html.dark .chat-bubble-other {
 html.dark .chat-body-bg {
   background-color: rgba(17, 24, 39, 0.55);
 }
+
+/* ----------------------------------------------------
+   FILTROS SUSTENTÁVEIS & CHECKBOXES ESTILIZADOS
+---------------------------------------------------- */
+.filter-checkbox-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.85rem;
+  border-radius: 9999px;
+  border: 1.5px solid #e5e7eb;
+  background-color: #f9fafb;
+  color: #374151;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.filter-checkbox-chip:hover {
+  border-color: #0d9488;
+  background-color: #f0fdfa;
+  color: #0f766e;
+}
+
+.filter-checkbox-chip input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.filter-checkbox-chip .custom-checkbox-indicator {
+  width: 1rem;
+  height: 1rem;
+  border-radius: 0.35rem;
+  border: 1.5px solid #cbd5e1;
+  background-color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: transparent;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.filter-checkbox-chip.active,
+.filter-checkbox-chip:has(input:checked) {
+  background-color: #0d9488 !important;
+  border-color: #0d9488 !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 10px -2px rgba(13, 148, 136, 0.35);
+}
+
+.filter-checkbox-chip.active .custom-checkbox-indicator,
+.filter-checkbox-chip:has(input:checked) .custom-checkbox-indicator {
+  background-color: #ffffff !important;
+  border-color: #ffffff !important;
+  color: #0d9488 !important;
+}
+
+html.dark .filter-checkbox-chip {
+  background-color: #1f2937;
+  border-color: #374151;
+  color: #e5e7eb;
+}
+
+html.dark .filter-checkbox-chip:hover {
+  border-color: #14b8a6;
+  background-color: rgba(13, 148, 136, 0.15);
+  color: #5eead4;
+}
+
+html.dark .filter-checkbox-chip .custom-checkbox-indicator {
+  border-color: #4b5563;
+  background-color: #374151;
+}
+
+html.dark .filter-checkbox-chip.active,
+html.dark .filter-checkbox-chip:has(input:checked) {
+  background-color: #0d9488 !important;
+  border-color: #14b8a6 !important;
+  color: #ffffff !important;
+}
+
+html.dark .filter-checkbox-chip.active .custom-checkbox-indicator,
+html.dark .filter-checkbox-chip:has(input:checked) .custom-checkbox-indicator {
+  background-color: #ffffff !important;
+  border-color: #ffffff !important;
+  color: #0d9488 !important;
+}

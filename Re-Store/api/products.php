@@ -29,6 +29,8 @@ if ($method === 'GET' && $action === 'list') {
         $maxPrice = isset($_GET['max_price']) && $_GET['max_price'] !== '' ? (float)$_GET['max_price'] : null;
         $sellerId = isset($_GET['seller_id']) ? (int)$_GET['seller_id'] : null;
         $location = trim($_GET['location'] ?? '');
+        $materials = trim($_GET['materials'] ?? $_GET['material'] ?? '');
+        $sort = trim($_GET['sort'] ?? 'recent');
 
         $sql = "SELECT p.*, COALESCE(u.name, 'Vendedor Sustentável') as seller_name, u.avatar as seller_avatar, COALESCE(u.is_verified_business, 0) as is_verified_business, u.business_name 
                 FROM products p 
@@ -62,6 +64,21 @@ if ($method === 'GET' && $action === 'list') {
             $params[] = $condition;
         }
 
+        if (!empty($materials)) {
+            $matList = array_filter(array_map('trim', explode(',', $materials)));
+            if (!empty($matList)) {
+                $matClauses = [];
+                foreach ($matList as $mItem) {
+                    $matClauses[] = "(p.material LIKE ? OR p.description LIKE ? OR p.name LIKE ?)";
+                    $mTerm = "%{$mItem}%";
+                    $params[] = $mTerm;
+                    $params[] = $mTerm;
+                    $params[] = $mTerm;
+                }
+                $sql .= " AND (" . implode(" OR ", $matClauses) . ")";
+            }
+        }
+
         if ($minPrice !== null) {
             $sql .= " AND p.price >= ?";
             $params[] = $minPrice;
@@ -77,7 +94,17 @@ if ($method === 'GET' && $action === 'list') {
             $params[] = $sellerId;
         }
 
-        $sql .= " ORDER BY p.id DESC";
+        if ($sort === 'price_asc') {
+            $sql .= " ORDER BY p.price ASC, p.id DESC";
+        } elseif ($sort === 'price_desc') {
+            $sql .= " ORDER BY p.price DESC, p.id DESC";
+        } elseif ($sort === 'rating') {
+            $sql .= " ORDER BY p.rating DESC, p.id DESC";
+        } elseif ($sort === 'popular') {
+            $sql .= " ORDER BY p.views DESC, p.id DESC";
+        } else {
+            $sql .= " ORDER BY p.id DESC";
+        }
 
         $stmt = $db->prepare($sql);
         $stmt->execute($params);
@@ -124,8 +151,8 @@ if ($method === 'GET' && $action === 'detail') {
         $stmt->execute([$id]);
         $product = $stmt->fetch();
 
-        if (!$product) {
-            echo json_encode(['success' => false, 'error' => 'Produto não encontrado.']);
+        if (!$product || ($product['status'] ?? '') === 'deleted') {
+            echo json_encode(['success' => false, 'error' => 'Este anúncio não está mais disponível ou foi removido da plataforma.']);
             exit;
         }
 
@@ -237,6 +264,7 @@ if ($method === 'GET' && $action === 'detail') {
             'user_can_review' => ($currentUserId > 0 && !$isSeller && $purchased && !$userReview),
             'user_has_purchased' => $purchased,
             'user_is_seller' => $isSeller,
+            'user_is_admin' => isUserAdmin($db, $currentUserId),
             'user_review' => $userReview,
             'user_order_id' => $userOrderId
         ]);
@@ -260,7 +288,7 @@ if ($method === 'GET' && $action === 'my_products') {
         $sellerId = $_SESSION['user_id'];
         $stmt = $db->prepare("SELECT p.*, (SELECT image_url FROM product_images WHERE product_id = p.id ORDER BY is_primary DESC LIMIT 1) as primary_image 
                               FROM products p 
-                              WHERE p.seller_id = ? 
+                              WHERE p.seller_id = ? AND (p.status != 'deleted' OR p.status IS NULL)
                               ORDER BY p.id DESC");
         $stmt->execute([$sellerId]);
         $products = $stmt->fetchAll();
@@ -404,9 +432,15 @@ if ($method === 'POST' && ($action === 'update' || $action === 'edit')) {
         exit;
     }
 
-    // Verificar se o produto existe e pertence ao vendedor
-    $checkStmt = $db->prepare("SELECT * FROM products WHERE id = ? AND seller_id = ?");
-    $checkStmt->execute([$productId, $sellerId]);
+    // Verificar se o produto existe e pertence ao vendedor ou se o usuário é administrador
+    $isAdmin = isUserAdmin($db, $sellerId);
+    if ($isAdmin) {
+        $checkStmt = $db->prepare("SELECT * FROM products WHERE id = ?");
+        $checkStmt->execute([$productId]);
+    } else {
+        $checkStmt = $db->prepare("SELECT * FROM products WHERE id = ? AND seller_id = ?");
+        $checkStmt->execute([$productId, $sellerId]);
+    }
     $existingProduct = $checkStmt->fetch();
 
     if (!$existingProduct) {
@@ -439,10 +473,17 @@ if ($method === 'POST' && ($action === 'update' || $action === 'edit')) {
         exit;
     }
 
-    $upStmt = $db->prepare("UPDATE products SET 
-        name = ?, description = ?, price = ?, category = ?, product_condition = ?, material = ?, stock = ?, location = ?, points = ? 
-        WHERE id = ? AND seller_id = ?");
-    $upStmt->execute([$name, $description, $price, $category, $condition, $material, $stock, $location, $points, $productId, $sellerId]);
+    if ($isAdmin) {
+        $upStmt = $db->prepare("UPDATE products SET 
+            name = ?, description = ?, price = ?, category = ?, product_condition = ?, material = ?, stock = ?, location = ?, points = ? 
+            WHERE id = ?");
+        $upStmt->execute([$name, $description, $price, $category, $condition, $material, $stock, $location, $points, $productId]);
+    } else {
+        $upStmt = $db->prepare("UPDATE products SET 
+            name = ?, description = ?, price = ?, category = ?, product_condition = ?, material = ?, stock = ?, location = ?, points = ? 
+            WHERE id = ? AND seller_id = ?");
+        $upStmt->execute([$name, $description, $price, $category, $condition, $material, $stock, $location, $points, $productId, $sellerId]);
+    }
 
     // 1. Processar exclusão de imagens removidas pelo usuário
     $removedImageIds = $_POST['removed_image_ids'] ?? [];
@@ -549,12 +590,101 @@ if ($method === 'POST' && $action === 'delete') {
     }
 
     $productId = (int)($_POST['id'] ?? 0);
-    $sellerId = $_SESSION['user_id'];
+    $currentUserId = (int)$_SESSION['user_id'];
+    $reason = trim($_POST['reason'] ?? '');
 
-    $stmt = $db->prepare("DELETE FROM products WHERE id = ? AND seller_id = ?");
-    $stmt->execute([$productId, $sellerId]);
+    // Buscar dados do produto antes de remover
+    $pStmt = $db->prepare("SELECT id, seller_id, name FROM products WHERE id = ?");
+    $pStmt->execute([$productId]);
+    $product = $pStmt->fetch();
 
-    echo json_encode(['success' => true, 'message' => 'Produto removido com sucesso.']);
+    if (!$product) {
+        echo json_encode(['success' => false, 'error' => 'Produto não encontrado.']);
+        exit;
+    }
+
+    $isOwner = ((int)$product['seller_id'] === $currentUserId);
+    $isAdmin = isUserAdmin($db, $currentUserId);
+
+    if (!$isOwner && !$isAdmin) {
+        echo json_encode(['success' => false, 'error' => 'Você não tem permissão para excluir este anúncio.']);
+        exit;
+    }
+
+    // Se for moderação pelo suporte / admin (excluindo produto de outro usuário)
+    if ($isAdmin && !$isOwner) {
+        if (empty($reason)) {
+            $reason = 'Violação das diretrizes e políticas de qualidade da comunidade Re-Store.';
+        }
+
+        // 1. Notificação persistente oficial na tabela user_notifications
+        try {
+            $notifStmt = $db->prepare("INSERT INTO user_notifications (user_id, title, message, type, reason, product_name) VALUES (?, ?, ?, 'moderation', ?, ?)");
+            $notifTitle = "Anúncio Removido pela Moderação";
+            $notifMsg = "Seu anúncio '{$product['name']}' foi removido do marketplace pelo Suporte Re-Store. Motivo: {$reason}";
+            $notifStmt->execute([$product['seller_id'], $notifTitle, $notifMsg, $reason, $product['name']]);
+        } catch (Exception $e) {}
+
+        // 2. Mensagem oficial no Chat de Suporte para o vendedor
+        try {
+            $msgStmt = $db->prepare("INSERT INTO messages (sender_id, receiver_id, message, is_read) VALUES (?, ?, ?, 0)");
+            $chatMsg = "Olá! A moderação oficial do Re-Store removeu seu anúncio '{$product['name']}' do marketplace.\n\n📋 Motivo: {$reason}\n\nCaso queira esclarecer dúvidas ou adequar o produto para republicação, você pode responder diretamente por este chat com o suporte.";
+            $msgStmt->execute([$currentUserId, $product['seller_id'], $chatMsg]);
+        } catch (Exception $e) {}
+    }
+
+    // Remover imagens do disco (caso uploads locais)
+    try {
+        $imgsStmt = $db->prepare("SELECT image_url FROM product_images WHERE product_id = ?");
+        $imgsStmt->execute([$productId]);
+        foreach ($imgsStmt->fetchAll() as $img) {
+            $imgUrl = $img['image_url'];
+            if (strpos($imgUrl, 'uploads/products/') === 0) {
+                $filePath = __DIR__ . '/../' . $imgUrl;
+                if (file_exists($filePath)) {
+                    @unlink($filePath);
+                }
+            }
+        }
+    } catch (Exception $e) {}
+
+    // Remover dos favoritos
+    try { $db->prepare("DELETE FROM favorites WHERE product_id = ?")->execute([$productId]); } catch (Exception $e) {}
+
+    // Verificar se o produto já possui pedidos/vendas vinculados (order_items)
+    try {
+        $checkOrders = $db->prepare("SELECT COUNT(*) FROM order_items WHERE product_id = ?");
+        $checkOrders->execute([$productId]);
+        $hasOrders = ((int)$checkOrders->fetchColumn()) > 0;
+
+        if ($hasOrders) {
+            // Possui compras históricas: marca como 'deleted' e zera estoque para não quebrar integridade referencial dos pedidos
+            $upd = $db->prepare("UPDATE products SET status = 'deleted', stock = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?");
+            $upd->execute([$productId]);
+            // Opcional: manter imagens para visualização nos comprovantes de compras passadas, ou remover
+        } else {
+            // Não possui compras anteriores: remoção completa de imagens e registro
+            try { $db->prepare("DELETE FROM product_images WHERE product_id = ?")->execute([$productId]); } catch (Exception $e) {}
+            $stmt = $db->prepare("DELETE FROM products WHERE id = ?");
+            $stmt->execute([$productId]);
+        }
+    } catch (Exception $e) {
+        // Fallback defensivo caso haja qualquer restrição de chave estrangeira
+        try {
+            $upd = $db->prepare("UPDATE products SET status = 'deleted', stock = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?");
+            $upd->execute([$productId]);
+        } catch (Exception $ex) {
+            echo json_encode(['success' => false, 'error' => 'Erro ao processar exclusão do produto: ' . $ex->getMessage()]);
+            exit;
+        }
+    }
+
+    echo json_encode([
+        'success' => true,
+        'message' => ($isAdmin && !$isOwner)
+            ? 'Anúncio removido pela moderação com sucesso e vendedor notificado!'
+            : 'Produto removido com sucesso.'
+    ]);
     exit;
 }
 

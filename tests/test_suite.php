@@ -577,6 +577,185 @@ runTest('API: Bloqueio de município/UF inválido e aceitação de pré-determin
     return true;
 });
 
+// --------------------------------------------------------------------------
+// 18. Privilégios de Administrador / Suporte e Moderação de Conteúdo
+// --------------------------------------------------------------------------
+runTest('Permissões de Administrador: Conta oficial de Suporte com privilégios especiais', function() {
+    global $testDbFile;
+    $db = new PDO("sqlite:{$testDbFile}");
+    $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+    require_once dirname(__DIR__) . '/Re-Store/config/db_init.php';
+
+    // 1. Verificar se a conta de suporte existe e tem is_admin = 1
+    $stmt = $db->prepare("SELECT id, email, is_admin FROM users WHERE email = 'tccdssuporte@gmail.com'");
+    $stmt->execute();
+    $supportUser = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$supportUser) {
+        throw new Exception("Conta de suporte (tccdssuporte@gmail.com) não encontrada no banco");
+    }
+
+    if (!isUserAdmin($db, (int)$supportUser['id'])) {
+        throw new Exception("Função isUserAdmin retornou falso para a conta oficial de suporte");
+    }
+
+    // 2. Usuário comum NÃO pode ser admin
+    if (isUserAdmin($db, 2)) {
+        throw new Exception("Usuário comum (ID 2) foi incorretamente identificado como admin");
+    }
+
+    return true;
+});
+
+runTest('API Admin: Proteção de acesso e listagem de usuários e produtos (api/admin.php)', function() {
+    global $testDbFile;
+    $db = new PDO("sqlite:{$testDbFile}");
+    $supId = (int)$db->query("SELECT id FROM users WHERE email = 'tccdssuporte@gmail.com'")->fetchColumn();
+
+    // 1. Usuário comum tentando listar usuários do admin (deve ser bloqueado com erro)
+    $outBlocked = callApiIsolated('api/admin.php', ['action' => 'list_users'], 'GET', ['user_id' => 2]);
+    $jsonBlocked = json_decode($outBlocked, true);
+    if (!empty($jsonBlocked['success'])) {
+        throw new Exception("Usuário comum conseguiu acessar a API restrita de admin");
+    }
+
+    // 2. Suporte acessando list_users
+    $outAllowed = callApiIsolated('api/admin.php', ['action' => 'list_users'], 'GET', ['user_id' => $supId]);
+    $jsonAllowed = json_decode($outAllowed, true);
+
+    if (empty($jsonAllowed['success']) || empty($jsonAllowed['users'])) {
+        throw new Exception("Admin não conseguiu listar os usuários: " . ($jsonAllowed['error'] ?? ''));
+    }
+
+    // 3. Admin acessando user_products para um usuário específico
+    $targetUserId = 1;
+    $outUserProds = callApiIsolated('api/admin.php', ['action' => 'user_products', 'user_id' => $targetUserId], 'GET', ['user_id' => $supId]);
+    $jsonUserProds = json_decode($outUserProds, true);
+
+    if (empty($jsonUserProds['success']) || !isset($jsonUserProds['products'])) {
+        throw new Exception("Admin não conseguiu consultar produtos do usuário {$targetUserId}");
+    }
+
+    return true;
+});
+
+runTest('Moderação: Suporte editando e deletando anúncio com motivo e notificação para o vendedor', function() {
+    global $testDbFile;
+    $db = new PDO("sqlite:{$testDbFile}");
+    $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    $supId = (int)$db->query("SELECT id FROM users WHERE email = 'tccdssuporte@gmail.com'")->fetchColumn();
+
+    // 1. Suporte atualizando um produto de outro vendedor (ex: Produto ID 1, do Vendedor ID 1)
+    $outUpdate = callApiIsolated('api/products.php', [
+        'action' => 'update',
+        'id' => 1,
+        'name' => 'Garrafa Térmica Reutilizável de Inox (Modificado pelo Suporte)',
+        'description' => 'Descrição atualizada pelo suporte administrativo',
+        'price' => 55.00,
+        'category' => 'Utilidades',
+        'location' => 'São Paulo, SP'
+    ], 'POST', ['user_id' => $supId]);
+    $jsonUpdate = json_decode($outUpdate, true);
+
+    if (empty($jsonUpdate['success'])) {
+        throw new Exception("Suporte falhou ao editar anúncio de terceiro: " . ($jsonUpdate['error'] ?? ''));
+    }
+
+    // 2. Criar um produto temporário para testar a exclusão por moderação com motivo
+    $db->prepare("INSERT INTO products (id, seller_id, name, description, price, category, product_condition, stock, location, points)
+                  VALUES (999, 1, 'Produto Teste de Violação', 'Item para teste de moderação', 29.90, 'Utilidades', 'used', 1, 'São Paulo, SP', 30)")->execute();
+
+    $deletionReason = "Produto não atende às diretrizes de sustentabilidade e reuso da comunidade Re-Store.";
+
+    // 3. Suporte exclui o anúncio 999 informando o motivo
+    $outDelete = callApiIsolated('api/products.php', [
+        'action' => 'delete',
+        'id' => 999,
+        'reason' => $deletionReason
+    ], 'POST', ['user_id' => $supId]);
+    $jsonDelete = json_decode($outDelete, true);
+
+    if (empty($jsonDelete['success'])) {
+        throw new Exception("Suporte falhou ao excluir produto: " . ($jsonDelete['error'] ?? ''));
+    }
+
+    // 4. Verificar se a notificação foi gravada na tabela user_notifications para o vendedor (ID 1)
+    $notifStmt = $db->prepare("SELECT * FROM user_notifications WHERE user_id = 1 AND type = 'moderation' ORDER BY id DESC LIMIT 1");
+    $notifStmt->execute();
+    $notif = $notifStmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$notif) {
+        throw new Exception("Notificação de moderação não foi criada na tabela user_notifications");
+    }
+
+    if ($notif['reason'] !== $deletionReason) {
+        throw new Exception("Motivo gravado na notificação ('{$notif['reason']}') difere do enviado ('{$deletionReason}')");
+    }
+
+    // 5. Verificar se o vendedor (ID 1) consegue consultar suas notificações via API
+    $outSellerNotifs = callApiIsolated('api/admin.php', ['action' => 'my_moderation_notices'], 'GET', ['user_id' => 1]);
+    $jsonSellerNotifs = json_decode($outSellerNotifs, true);
+
+    if (empty($jsonSellerNotifs['success']) || empty($jsonSellerNotifs['notices'])) {
+        throw new Exception("Vendedor não conseguiu recuperar seus avisos de moderação");
+    }
+
+    $foundNotice = false;
+    foreach ($jsonSellerNotifs['notices'] as $n) {
+        if ($n['reason'] === $deletionReason) {
+            $foundNotice = true;
+            break;
+        }
+    }
+    if (!$foundNotice) {
+        throw new Exception("Aviso com o motivo específico não encontrado na listagem do vendedor");
+    }
+
+    // 6. Vendedor dispensando a notificação
+    $outDismiss = callApiIsolated('api/admin.php', ['action' => 'dismiss_notice', 'notice_id' => $notif['id']], 'POST', ['user_id' => 1]);
+    $jsonDismiss = json_decode($outDismiss, true);
+
+    if (empty($jsonDismiss['success'])) {
+        throw new Exception("Vendedor falhou ao dispensar notificação");
+    }
+
+    return true;
+});
+
+runTest('API: Busca com múltiplos filtros avançados (materiais, condição e ordenação)', function() {
+    // 1. Filtrar por condição e ordenação por menor preço
+    $out = callApiIsolated('api/products.php', [
+        'action' => 'list',
+        'condition' => 'used',
+        'sort' => 'price_asc'
+    ], 'GET');
+    $json = json_decode($out, true);
+
+    if (empty($json['success']) || !isset($json['products'])) {
+        throw new Exception("Falha ao filtrar produtos por condição e ordenação: " . ($json['error'] ?? ''));
+    }
+
+    foreach ($json['products'] as $p) {
+        if ($p['product_condition'] !== 'used') {
+            throw new Exception("Produto com condição '{$p['product_condition']}' retornado indevidamente");
+        }
+    }
+
+    // 2. Filtrar por materiais
+    $outMat = callApiIsolated('api/products.php', [
+        'action' => 'list',
+        'materials' => 'Inox'
+    ], 'GET');
+    $jsonMat = json_decode($outMat, true);
+
+    if (empty($jsonMat['success']) || !isset($jsonMat['products'])) {
+        throw new Exception("Falha ao filtrar produtos por material");
+    }
+
+    return true;
+});
+
 
 
 // Limpeza de arquivos temporários do teste
