@@ -145,7 +145,18 @@ function initializeDatabase() {
         try {
             $db->exec("ALTER TABLE points_history MODIFY COLUMN type ENUM('purchase', 'review', 'sale', 'redemption', 'reversal', 'sale_reversal') NOT NULL");
         } catch (Exception $e) {}
+        try {
+            $db->exec("ALTER TABLE products MODIFY COLUMN status VARCHAR(50) NOT NULL DEFAULT 'active'");
+        } catch (Exception $e) {
+            try {
+                $db->exec("ALTER TABLE products MODIFY COLUMN status ENUM('active', 'sold', 'inactive', 'deleted') NOT NULL DEFAULT 'active'");
+            } catch (Exception $e2) {}
+        }
     }
+
+    try {
+        $db->exec("UPDATE products SET status = 'deleted' WHERE status = 'inactive' OR status = ''");
+    } catch (Exception $e) {}
 
     $tableExists = false;
     try {

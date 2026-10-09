@@ -5,6 +5,9 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 if (!headers_sent()) {
     header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Pragma: no-cache');
+    header('Expires: 0');
 }
 
 require_once __DIR__ . '/../config/database.php';
@@ -288,7 +291,7 @@ if ($method === 'GET' && $action === 'my_products') {
         $sellerId = $_SESSION['user_id'];
         $stmt = $db->prepare("SELECT p.*, (SELECT image_url FROM product_images WHERE product_id = p.id ORDER BY is_primary DESC LIMIT 1) as primary_image 
                               FROM products p 
-                              WHERE p.seller_id = ? AND (p.status != 'deleted' OR p.status IS NULL)
+                              WHERE p.seller_id = ? AND p.status NOT IN ('deleted', 'inactive') AND p.status != '' AND p.status IS NOT NULL
                               ORDER BY p.id DESC");
         $stmt->execute([$sellerId]);
         $products = $stmt->fetchAll();
@@ -648,8 +651,14 @@ if ($method === 'POST' && $action === 'delete') {
         }
     } catch (Exception $e) {}
 
+    // Desvincular de mensagens para não quebrar chave estrangeira
+    try { $db->prepare("UPDATE messages SET product_id = NULL WHERE product_id = ?")->execute([$productId]); } catch (Exception $e) {}
+
     // Remover dos favoritos
     try { $db->prepare("DELETE FROM favorites WHERE product_id = ?")->execute([$productId]); } catch (Exception $e) {}
+
+    // Remover avaliações do produto (se não houver vínculo restritivo)
+    try { $db->prepare("DELETE FROM reviews WHERE product_id = ?")->execute([$productId]); } catch (Exception $e) {}
 
     // Verificar se o produto já possui pedidos/vendas vinculados (order_items)
     try {
@@ -661,12 +670,16 @@ if ($method === 'POST' && $action === 'delete') {
             // Possui compras históricas: marca como 'deleted' e zera estoque para não quebrar integridade referencial dos pedidos
             $upd = $db->prepare("UPDATE products SET status = 'deleted', stock = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?");
             $upd->execute([$productId]);
-            // Opcional: manter imagens para visualização nos comprovantes de compras passadas, ou remover
         } else {
-            // Não possui compras anteriores: remoção completa de imagens e registro
+            // Não possui compras anteriores: remoção de imagens e tentativa de deleção física
             try { $db->prepare("DELETE FROM product_images WHERE product_id = ?")->execute([$productId]); } catch (Exception $e) {}
-            $stmt = $db->prepare("DELETE FROM products WHERE id = ?");
-            $stmt->execute([$productId]);
+            try {
+                $stmt = $db->prepare("DELETE FROM products WHERE id = ?");
+                $stmt->execute([$productId]);
+            } catch (Exception $e) {
+                $upd = $db->prepare("UPDATE products SET status = 'deleted', stock = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?");
+                $upd->execute([$productId]);
+            }
         }
     } catch (Exception $e) {
         // Fallback defensivo caso haja qualquer restrição de chave estrangeira

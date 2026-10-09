@@ -10,7 +10,7 @@ const MessengerManager = {
 
   async getConversations() {
     try {
-      const res = await fetch('api/messenger.php?action=conversations');
+      const res = await fetch(`api/messenger.php?action=conversations&_t=${Date.now()}`);
       return await res.json();
     } catch (e) {
       console.error('Erro ao carregar conversas:', e);
@@ -19,14 +19,23 @@ const MessengerManager = {
   },
 
   async getMessages(withUserId, productId = null, afterId = 0) {
+    const isNewPartner = this.activePartnerId !== withUserId;
     this.activePartnerId = withUserId;
-    if (productId !== undefined && productId !== null) {
+
+    // Se trocou de parceiro ou é carga completa inicial (afterId === 0),
+    // define o produto ativo estritamente para o que foi passado nesta conversa (ou null).
+    // Isso impede que o anúncio de um vendedor continue aparecendo ao trocar de conversa!
+    if (isNewPartner || afterId === 0) {
+      this.lastMessageId = 0;
+      this.activeProductId = (productId !== undefined && productId !== null) ? productId : null;
+    } else if (productId !== undefined && productId !== null) {
       this.activeProductId = productId;
     }
 
     let url = `api/messenger.php?action=messages&with_user_id=${encodeURIComponent(withUserId)}`;
     if (this.activeProductId) url += `&product_id=${encodeURIComponent(this.activeProductId)}`;
     if (afterId > 0) url += `&after_id=${encodeURIComponent(afterId)}`;
+    url += `&_t=${Date.now()}`;
 
     try {
       const res = await fetch(url);
@@ -39,6 +48,13 @@ const MessengerManager = {
           const mid = parseInt(m.id, 10);
           if (mid > this.lastMessageId) this.lastMessageId = mid;
         });
+
+        // Sincroniza activeProductId com o produto retornado pela conversa atual
+        if (data.product && data.product.id) {
+          this.activeProductId = data.product.id;
+        } else if (!productId) {
+          this.activeProductId = null;
+        }
       }
 
       return data;
@@ -50,13 +66,14 @@ const MessengerManager = {
 
   async sendMessage(receiverId, messageText, productId = null) {
     try {
+      const targetProdId = (productId !== null && productId !== undefined) ? productId : this.activeProductId;
       const res = await fetch('api/messenger.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'send',
           receiver_id: receiverId,
-          product_id: productId || this.activeProductId,
+          product_id: targetProdId,
           message: messageText
         })
       });

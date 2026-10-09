@@ -5,6 +5,9 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 if (!headers_sent()) {
     header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Pragma: no-cache');
+    header('Expires: 0');
 }
 
 require_once __DIR__ . '/../config/database.php';
@@ -97,7 +100,7 @@ if ($action === 'list_users') {
                     u.cnpj, 
                     u.is_admin, 
                     u.created_at,
-                    COUNT(CASE WHEN p.id IS NOT NULL AND (p.status != 'deleted' OR p.status IS NULL) THEN 1 END) as total_products,
+                    COUNT(CASE WHEN p.id IS NOT NULL AND p.status NOT IN ('deleted', 'inactive') AND p.status != '' AND p.status IS NOT NULL THEN 1 END) as total_products,
                     SUM(CASE WHEN p.status = 'active' THEN 1 ELSE 0 END) as active_products
                 FROM users u
                 LEFT JOIN products p ON u.id = p.seller_id";
@@ -178,7 +181,7 @@ if ($action === 'user_products') {
         $pStmt = $db->prepare("SELECT p.*, 
                                 (SELECT image_url FROM product_images WHERE product_id = p.id ORDER BY is_primary DESC, id ASC LIMIT 1) as primary_image
                               FROM products p
-                              WHERE p.seller_id = ? AND (p.status != 'deleted' OR p.status IS NULL)
+                              WHERE p.seller_id = ? AND p.status NOT IN ('deleted', 'inactive') AND p.status != '' AND p.status IS NOT NULL
                               ORDER BY p.id DESC");
         $pStmt->execute([$targetUserId]);
         $products = $pStmt->fetchAll();
@@ -209,7 +212,7 @@ if ($action === 'user_products') {
 if ($action === 'stats') {
     try {
         $uCount = (int)$db->query("SELECT COUNT(*) FROM users")->fetchColumn();
-        $pCount = (int)$db->query("SELECT COUNT(*) FROM products")->fetchColumn();
+        $pCount = (int)$db->query("SELECT COUNT(*) FROM products WHERE status NOT IN ('deleted', 'inactive') AND status != '' AND status IS NOT NULL")->fetchColumn();
         $activeCount = (int)$db->query("SELECT COUNT(*) FROM products WHERE status = 'active'")->fetchColumn();
         $ordersCount = (int)$db->query("SELECT COUNT(*) FROM orders")->fetchColumn();
 

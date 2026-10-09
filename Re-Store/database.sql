@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS products (
     rating DECIMAL(2,1) DEFAULT 0.0,
     total_reviews INT DEFAULT 0,
     views INT DEFAULT 0,
-    status ENUM('active', 'sold', 'inactive') DEFAULT 'active',
+    status VARCHAR(50) DEFAULT 'active', -- active, sold, deleted, inactive
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (seller_id) REFERENCES users(id) ON DELETE CASCADE

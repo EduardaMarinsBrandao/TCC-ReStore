@@ -3845,6 +3845,10 @@ const App = {
       document.body.classList.remove('modal-open');
       document.documentElement.classList.remove('modal-open');
     }
+    if (modalId === 'admin-user-products-modal' && this.currentScreen === 'admin-users') {
+      const main = document.getElementById('main-content');
+      if (main) this.renderAdminUsersScreen(main);
+    }
   },
 
   promptDeleteProductAsAdmin(productId, productName, sellerId = null) {
@@ -4001,16 +4005,24 @@ const App = {
       if (res && res.success) {
         ToastManager.show(res.message || 'Anúncio removido e vendedor notificado na Área do Vendedor!', 'success', 5000);
 
-        // Se o modal de produtos do usuário estiver aberto, recarrega ele
+        // Se o modal de produtos do usuário estiver aberto, recarrega ele preservando o nome original
         const uProdModal = document.getElementById('admin-user-products-modal');
-        if (uProdModal && sellerId) {
+        let currentUserName = 'Usuário';
+        if (uProdModal) {
+          const titleEl = uProdModal.querySelector('h3');
+          if (titleEl) {
+            currentUserName = titleEl.textContent.replace(/^Produtos de\s+/i, '').trim() || 'Usuário';
+          }
           uProdModal.remove();
-          this.openAdminUserProducts(sellerId, 'Usuário');
+        }
+
+        if (sellerId && uProdModal) {
+          this.openAdminUserProducts(sellerId, currentUserName);
         }
 
         if (this.currentScreen === 'admin-users') {
           const main = document.getElementById('main-content');
-          if (main) this.renderAdminUsersScreen(main);
+          if (main) await this.renderAdminUsersScreen(main);
         } else if (this.currentScreen === 'product-detail') {
           this.navigateTo('admin-users');
         } else if (this.currentScreen === 'seller') {
@@ -5350,10 +5362,16 @@ const App = {
     this.currentChatPartnerId = partnerId;
     this.currentChatView = 'chat';
     const prevParams = this.chatParams || {};
+    const isSamePartner = prevParams.withUserId === partnerId;
+    const resolvedProductId = (productId !== null && productId !== undefined) 
+      ? productId 
+      : (isSamePartner ? prevParams.productId : null);
+
     this.chatParams = {
-      ...prevParams,
       withUserId: partnerId,
-      productId: productId !== null ? productId : (prevParams.withUserId === partnerId ? prevParams.productId : null)
+      productId: resolvedProductId,
+      orderNumber: isSamePartner ? (prevParams.orderNumber || null) : null,
+      initialMessage: isSamePartner ? (prevParams.initialMessage || '') : ''
     };
     ChatManager.stopPolling();
 
@@ -5383,7 +5401,7 @@ const App = {
       </div>
     `;
 
-    const res = await ChatManager.getMessages(partnerId, productId);
+    const res = await ChatManager.getMessages(partnerId, resolvedProductId);
     if (!res || !res.success || !res.partner) {
       win.innerHTML = `
         <div class="p-6 text-center my-auto space-y-3">
@@ -5397,6 +5415,13 @@ const App = {
     const partner = res.partner;
     const msgs = res.messages || [];
     const product = res.product;
+    if (product && product.id) {
+      this.chatParams.productId = product.id;
+      ChatManager.activeProductId = product.id;
+    } else {
+      this.chatParams.productId = null;
+      ChatManager.activeProductId = null;
+    }
     const currentUserId = AuthManager.currentUser ? parseInt(AuthManager.currentUser.id, 10) : 0;
     const partnerAvatar = partner.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(partner.name)}&background=0d9488&color=fff&size=80`;
 
@@ -5421,7 +5446,7 @@ const App = {
         </div>
 
         <div class="flex items-center gap-1">
-          <button type="button" onclick="App.refreshActiveChat(${partnerId}, ${product && product.id ? product.id : (productId ? productId : 'null')})" title="Recarregar conversa" class="p-2 text-gray-400 hover:text-teal-600 dark:hover:text-teal-400 hover:bg-gray-100 dark:hover:bg-gray-700/60 transition rounded-lg cursor-pointer">
+          <button type="button" onclick="App.refreshActiveChat(${partnerId}, ${product && product.id ? product.id : 'null'})" title="Recarregar conversa" class="p-2 text-gray-400 hover:text-teal-600 dark:hover:text-teal-400 hover:bg-gray-100 dark:hover:bg-gray-700/60 transition rounded-lg cursor-pointer">
             <i data-lucide="rotate-cw" class="w-4 h-4"></i>
           </button>
         </div>
@@ -5517,7 +5542,7 @@ const App = {
       </div>
 
       <!-- FORMULÁRIO DE ENVIO -->
-      <form onsubmit="App.sendChatMessage(event, ${partnerId}, ${product && product.id ? product.id : (productId ? productId : 'null')})" class="p-3 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800 flex items-center gap-2">
+      <form onsubmit="App.sendChatMessage(event, ${partnerId}, ${product && product.id ? product.id : 'null'})" class="p-3 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800 flex items-center gap-2">
         <input 
           type="text" 
           id="chat-input-text" 

@@ -5,6 +5,9 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 if (!headers_sent()) {
     header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Pragma: no-cache');
+    header('Expires: 0');
 }
 
 require_once __DIR__ . '/../config/database.php';
@@ -247,11 +250,36 @@ if ($method === 'GET' && ($action === 'messages' || $action === 'get_messages'))
     }
 
     if ($targetProductId) {
-        $pStmt = $db->prepare("SELECT p.id, p.name, p.price, p.seller_id,
+        $pStmt = $db->prepare("SELECT p.id, p.name, p.price, p.seller_id, p.status,
                                       (SELECT image_url FROM product_images WHERE product_id = p.id ORDER BY is_primary DESC LIMIT 1) as image_url
-                               FROM products p WHERE p.id = ?");
+                               FROM products p 
+                               WHERE p.id = ? AND p.status NOT IN ('deleted', 'inactive') AND p.status != '' AND p.status IS NOT NULL");
         $pStmt->execute([$targetProductId]);
-        $productData = $pStmt->fetch();
+        $cand = $pStmt->fetch();
+        if ($cand) {
+            $candSellerId = (int)$cand['seller_id'];
+            $isParticipant = ($candSellerId === $userId || $candSellerId === $withUserId);
+
+            $hasMessageRef = false;
+            if (!$isParticipant && !empty($messages)) {
+                foreach ($messages as $m) {
+                    if (!empty($m['product_id']) && (int)$m['product_id'] === (int)$cand['id']) {
+                        $hasMessageRef = true;
+                        break;
+                    }
+                }
+            }
+
+            if ($isParticipant || $hasMessageRef) {
+                $productData = [
+                    'id' => (int)$cand['id'],
+                    'name' => $cand['name'],
+                    'price' => $cand['price'],
+                    'seller_id' => $cand['seller_id'],
+                    'image_url' => $cand['image_url']
+                ];
+            }
+        }
     }
 
     echo json_encode([

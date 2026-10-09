@@ -3,7 +3,9 @@
 const AdminManager = {
   async listUsers(search = '') {
     try {
-      const res = await fetch(`api/admin.php?action=list_users&search=${encodeURIComponent(search)}`);
+      const res = await fetch(`api/admin.php?action=list_users&search=${encodeURIComponent(search)}&_t=${Date.now()}`, {
+        cache: 'no-store'
+      });
       return await res.json();
     } catch (e) {
       console.error('Erro ao listar usuários:', e);
@@ -13,7 +15,9 @@ const AdminManager = {
 
   async getUserProducts(userId) {
     try {
-      const res = await fetch(`api/admin.php?action=user_products&user_id=${userId}`);
+      const res = await fetch(`api/admin.php?action=user_products&user_id=${userId}&_t=${Date.now()}`, {
+        cache: 'no-store'
+      });
       return await res.json();
     } catch (e) {
       console.error('Erro ao buscar produtos do usuário:', e);
@@ -23,7 +27,9 @@ const AdminManager = {
 
   async getStats() {
     try {
-      const res = await fetch('api/admin.php?action=stats');
+      const res = await fetch(`api/admin.php?action=stats&_t=${Date.now()}`, {
+        cache: 'no-store'
+      });
       return await res.json();
     } catch (e) {
       console.error('Erro ao carregar estatísticas do admin:', e);
