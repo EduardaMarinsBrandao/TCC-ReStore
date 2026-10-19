@@ -508,7 +508,8 @@ if ($method === 'POST' && $action === 'create') {
     $db->beginTransaction();
     try {
         // Inserir avaliação com o order_id comprovado
-        $stmt = $db->prepare("INSERT INTO reviews (product_id, user_id, order_id, rating, comment, helpful_count, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)");
+        $stmt = $db->prepare("INSERT INTO reviews (product_id, user_id, order_id, rating, comment, helpful_count, created_at, updated_at) 
+        VALUES (?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)");
         $stmt->execute([$productId, $userId, $orderId, $rating, $comment]);
         $reviewId = (int)$db->lastInsertId();
 

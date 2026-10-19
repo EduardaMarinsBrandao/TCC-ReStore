@@ -631,7 +631,9 @@ if ($method === 'POST' && $action === 'delete') {
         // 2. Mensagem oficial no Chat de Suporte para o vendedor
         try {
             $msgStmt = $db->prepare("INSERT INTO messages (sender_id, receiver_id, message, is_read) VALUES (?, ?, ?, 0)");
-            $chatMsg = "Olá! A moderação oficial do Re-Store removeu seu anúncio '{$product['name']}' do marketplace.\n\n📋 Motivo: {$reason}\n\nCaso queira esclarecer dúvidas ou adequar o produto para republicação, você pode responder diretamente por este chat com o suporte.";
+            $chatMsg = "Olá! A moderação oficial do Re-Store removeu seu anúncio '
+            {$product['name']}' do marketplace.\n\n📋 Motivo: {$reason}\n\nCaso queira esclarecer dúvidas ou adequar o produto para republicação,
+            você pode responder diretamente por este chat com o suporte.";
             $msgStmt->execute([$currentUserId, $product['seller_id'], $chatMsg]);
         } catch (Exception $e) {}
     }

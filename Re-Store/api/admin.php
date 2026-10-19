@@ -100,7 +100,8 @@ if ($action === 'list_users') {
                     u.cnpj, 
                     u.is_admin, 
                     u.created_at,
-                    COUNT(CASE WHEN p.id IS NOT NULL AND p.status NOT IN ('deleted', 'inactive') AND p.status != '' AND p.status IS NOT NULL THEN 1 END) as total_products,
+                    COUNT(CASE WHEN p.id IS NOT NULL AND p.status NOT IN ('deleted', 'inactive') 
+                    AND p.status != '' AND p.status IS NOT NULL THEN 1 END) as total_products,
                     SUM(CASE WHEN p.status = 'active' THEN 1 ELSE 0 END) as active_products
                 FROM users u
                 LEFT JOIN products p ON u.id = p.seller_id";

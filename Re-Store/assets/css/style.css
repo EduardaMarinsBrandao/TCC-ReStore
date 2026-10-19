@@ -23,9 +23,27 @@
   --status-warning: #F59E0B;
   --status-info: #3B82F6;
 
+  /* Safe Area Insets para dispositivos modernos (iOS Notch, Home Bar, Dynamic Island) */
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+
+  /* Dynamic Viewport Height */
+  --app-height: 100dvh;
+
   /* Tamanho de Fonte Base */
   --font-base-size: 16px;
   --font-heading-scale: 1.25;
+}
+
+/* Reset Universal de Box-Sizing & Tap Highlights */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Ajustes de Tamanho de Fonte (3 Níveis) */
@@ -43,6 +61,10 @@ html {
   font-size: var(--font-base-size);
   scroll-behavior: smooth;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
 }
 
 body {
@@ -50,6 +72,60 @@ body {
   color: var(--text-light);
   transition: background-color 0.3s ease, color 0.3s ease;
   min-height: 100vh;
+  min-height: 100dvh;
+  max-width: 100vw;
+  overflow-x: hidden;
+  position: relative;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Imagens, vídeos e elementos de mídia responsivos por padrão */
+img, video, canvas, svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Rolagem suave por toque no iOS WebKit */
+.overflow-y-auto, .overflow-x-auto, .overflow-auto {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Evitar zoom automático indesejado no iOS Safari ao focar inputs */
+@media screen and (max-width: 768px) {
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="number"],
+  input[type="tel"],
+  input[type="url"],
+  input[type="search"],
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
+/* Barra de rolagem estilizada cross-browser (Firefox & WebKit) */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(20, 184, 166, 0.4) transparent;
+}
+html.dark * {
+  scrollbar-color: rgba(20, 184, 166, 0.3) transparent;
+}
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(20, 184, 166, 0.35);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(20, 184, 166, 0.6);
 }
 
 /* Modo Escuro (Dark Mode) */
@@ -530,4 +606,80 @@ html.dark .filter-checkbox-chip:has(input:checked) .custom-checkbox-indicator {
   background-color: #ffffff !important;
   border-color: #ffffff !important;
   color: #0d9488 !important;
+}
+
+/* ----------------------------------------------------
+   RESPONSIVIDADE AVANÇADA, MODAIS & ACESSIBILIDADE CROSS-BROWSER
+---------------------------------------------------- */
+
+/* Fallback de Glassmorphism para navegadores sem suporte a backdrop-filter */
+@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .header-glass {
+    background-color: #ffffff !important;
+  }
+  html.dark .header-glass {
+    background-color: #111827 !important;
+  }
+}
+
+/* Modais Responsivos com trava de scroll e suporte a Dynamic Island/Home Indicator */
+.modal-backdrop-responsive {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  padding-top: calc(1rem + env(safe-area-inset-top, 0px));
+  padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+  background-color: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.modal-card-responsive {
+  max-height: calc(100dvh - 3rem);
+  max-height: calc(100vh - 3rem);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Indicador de Aba Ativa na Barra Inferior Mobile */
+.mobile-nav-btn.active {
+  color: var(--color-primary) !important;
+}
+.mobile-nav-btn.active i {
+  color: var(--color-primary) !important;
+  transform: translateY(-1px);
+}
+html.dark .mobile-nav-btn.active {
+  color: #2dd4bf !important;
+}
+html.dark .mobile-nav-btn.active i {
+  color: #2dd4bf !important;
+}
+
+/* Tabelas e Containers de Listagem Responsivos */
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Área de toque mínima para acessibilidade e usabilidade em telas touch (WCAG AA 44x44px) */
+@media (pointer: coarse) {
+  button, 
+  a, 
+  input[type="button"], 
+  input[type="submit"], 
+  .cursor-pointer {
+    min-height: 38px;
+  }
+  
+  .mobile-nav-btn {
+    min-height: 44px;
+  }
 }

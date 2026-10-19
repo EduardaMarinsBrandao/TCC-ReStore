@@ -604,7 +604,7 @@ const App = {
       type="button" 
       onclick="App.navigateTo('orders')" 
       title="Meus Pedidos" 
-      class="text-xs font-semibold text-gray-700 dark:text-gray-200 hover:text-teal-600 cursor-pointer pointer-events-auto flex items-center gap-1"
+      class="hidden lg:flex text-xs font-semibold text-gray-700 dark:text-gray-200 hover:text-teal-600 cursor-pointer pointer-events-auto items-center gap-1"
     >
       <i data-lucide="package" class="w-4 h-4 pointer-events-none"></i>
       <span class="pointer-events-none">Pedidos</span>
@@ -614,12 +614,12 @@ const App = {
       type="button" 
       onclick="App.navigateTo('points')" 
       title="Saldo e Nível" 
-      class="badge-points px-3 py-1.5 rounded-full text-xs font-bold transition hover:opacity-90 cursor-pointer pointer-events-auto"
+      class="badge-points px-2 sm:px-3 py-1 sm:py-1.5 rounded-full text-xs font-bold transition hover:opacity-90 cursor-pointer pointer-events-auto"
     >
-      <i data-lucide="sprout" class="w-4 h-4 pointer-events-none"></i>
-      <span class="pointer-events-none">${user.points} pts</span>
+      <i data-lucide="sprout" class="w-3.5 sm:w-4 h-3.5 sm:h-4 pointer-events-none"></i>
+      <span class="pointer-events-none">${user.points} <span class="hidden xs:inline">pts</span></span>
 
-      <span class="bg-white/20 px-1.5 py-0.5 rounded text-[10px] pointer-events-none">
+      <span class="bg-white/20 px-1.5 py-0.5 rounded text-[10px] pointer-events-none hidden md:inline">
         Nível ${user.level}
       </span>
     </button>
@@ -627,7 +627,7 @@ const App = {
     <button 
       type="button" 
       onclick="App.navigateTo('seller')" 
-      class="text-sm font-semibold text-teal-600 hover:text-teal-700 dark:text-teal-400 cursor-pointer pointer-events-auto"
+      class="hidden md:inline-flex text-xs sm:text-sm font-semibold text-teal-600 hover:text-teal-700 dark:text-teal-400 cursor-pointer pointer-events-auto"
     >
       Área Vendedor
     </button>
@@ -637,7 +637,7 @@ const App = {
       type="button" 
       onclick="App.navigateTo('admin-users')" 
       title="Painel de Administração e Moderação (Suporte)" 
-      class="text-xs font-bold text-amber-700 bg-amber-50 dark:bg-amber-950/70 dark:text-amber-300 border border-amber-300 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900 px-2.5 py-1.5 rounded-full cursor-pointer pointer-events-auto flex items-center gap-1.5 transition shadow-xs"
+      class="hidden sm:flex text-xs font-bold text-amber-700 bg-amber-50 dark:bg-amber-950/70 dark:text-amber-300 border border-amber-300 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-full cursor-pointer pointer-events-auto items-center gap-1.5 transition shadow-xs"
     >
       <i data-lucide="shield-check" class="w-3.5 h-3.5 pointer-events-none text-amber-600 dark:text-amber-400"></i>
       <span class="pointer-events-none">Admin</span>
@@ -648,11 +648,11 @@ const App = {
       type="button" 
       onclick="App.navigateTo('profile')" 
       title="Meu Perfil" 
-      class="flex items-center gap-2 text-sm font-semibold hover:opacity-80 cursor-pointer pointer-events-auto border border-teal-500/50 rounded-full px-2 py-1 bg-white/10"
+      class="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-semibold hover:opacity-80 cursor-pointer pointer-events-auto border border-teal-500/50 rounded-full p-1 sm:px-2 sm:py-1 bg-white/10 shrink-0"
     >
       <img 
         src="${user.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}" 
-        class="w-7 h-7 rounded-full object-cover border border-teal-500 pointer-events-none" 
+        class="w-6 h-6 sm:w-7 sm:h-7 rounded-full object-cover border border-teal-500 pointer-events-none" 
         alt="Avatar"
       >
       <span class="hidden md:inline pointer-events-none">
@@ -668,11 +668,11 @@ const App = {
     }
     else {
       userNav.innerHTML = `
-        <button type="button" onclick="App.showLoginModal()" class="text-sm font-semibold text-gray-700 dark:text-gray-200 hover:text-teal-600 cursor-pointer pointer-events-auto px-2 py-1">
+        <button type="button" onclick="App.showLoginModal()" class="text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-200 hover:text-teal-600 cursor-pointer pointer-events-auto px-1.5 sm:px-2 py-1">
           Entrar
         </button>
-        <button type="button" onclick="App.showRegisterModal()" class="btn-primary text-sm py-1.5 px-4 cursor-pointer pointer-events-auto">
-          Criar Conta (+150 pts)
+        <button type="button" onclick="App.showRegisterModal()" class="btn-primary text-xs sm:text-sm py-1.5 px-2.5 sm:px-4 cursor-pointer pointer-events-auto">
+          <span>Cadastrar</span><span class="hidden sm:inline">&nbsp;(+150 pts)</span>
         </button>
       `;
 
@@ -707,6 +707,15 @@ const App = {
 
     this.currentScreen = screen;
     window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    // Atualiza aba ativa na navegação inferior móvel
+    document.querySelectorAll('.mobile-nav-btn').forEach(btn => {
+      btn.classList.remove('active');
+    });
+    const activeMobileBtn = document.getElementById(`mobile-nav-${screen}`);
+    if (activeMobileBtn) {
+      activeMobileBtn.classList.add('active');
+    }
 
     if (screen === 'chat') {
       this.chatParams = params || {};
@@ -823,79 +832,79 @@ const App = {
   // ----------------------------------------------------
   async renderHomeScreen(container) {
     container.innerHTML = `
-     <!-- BANNER HERO -->
-      <section class="relative bg-gradient-to-r from-teal-600 to-emerald-600 rounded-3xl p-6 md:p-10 text-white mb-8 overflow-hidden shadow-lg animate-fade-in flex flex-col md:flex-row items-center justify-between gap-6">
-        <div class="relative z-10 max-w-2xl">
-          
-          <span class="inline-flex items-center gap-1.5 bg-white/20 backdrop-blur-md text-white text-xs font-bold px-3 py-1 rounded-full mb-3">
-            <i data-lucide="recycle" class="w-4 h-4"></i>
-            <span>Marketplace Reutilizável & Sustentável</span>
-          </span>
-
-          <h1 class="text-2xl md:text-4xl font-extrabold tracking-tight mb-3">
-            Compre, Venda e Troque Produtos Sustentáveis com Recompensas
-          </h1>
-
-          <p class="text-teal-100 text-sm md:text-base mb-6 leading-relaxed">
-            Acumule Pontos Verdes a cada compra sustentável e troque por cupons exclusivos no Re-Store.
-          </p>
-
-          <div class="flex flex-wrap gap-3">
+      <div class="space-y-8 animate-fade-in">
+        <!-- BANNER HERO -->
+        <section class="relative bg-gradient-to-r from-teal-600 to-emerald-600 rounded-3xl p-5 sm:p-7 md:p-10 text-white mb-8 overflow-hidden shadow-lg animate-fade-in flex flex-col md:flex-row items-center justify-between gap-6">
+          <div class="relative z-10 max-w-2xl">
             
-            <button 
-              type="button" 
-              onclick="App.navigateTo('search')" 
-              class="bg-white text-teal-700 font-bold px-5 py-2.5 rounded-full shadow hover:bg-teal-50 transition cursor-pointer flex items-center gap-2"
-            >
-              <i data-lucide="shopping-bag" class="w-4 h-4"></i>
-              Explorar Produtos
-            </button>
+            <span class="inline-flex items-center gap-1.5 bg-white/20 backdrop-blur-md text-white text-[11px] sm:text-xs font-bold px-2.5 sm:px-3 py-1 rounded-full mb-3">
+              <i data-lucide="recycle" class="w-3.5 sm:w-4 h-3.5 sm:h-4"></i>
+              <span>Marketplace Reutilizável & Sustentável</span>
+            </span>
 
-            <button 
-              type="button" 
-              onclick="App.showTutorialModal()" 
-              class="bg-teal-700/60 border border-white/30 backdrop-blur-md text-white font-semibold px-5 py-2.5 rounded-full hover:bg-teal-700 transition cursor-pointer flex items-center gap-2"
-            >
-              <i data-lucide="graduation-cap" class="w-4 h-4"></i>
-              Como Funciona
-            </button>
+            <h1 class="text-xl sm:text-3xl md:text-4xl font-extrabold tracking-tight mb-3">
+              Compre, Venda e Troque Produtos Sustentáveis com Recompensas
+            </h1>
 
-          </div>
-        </div>
-      </section>
+            <p class="text-teal-100 text-xs sm:text-sm md:text-base mb-6 leading-relaxed">
+              Acumule Pontos Verdes a cada compra sustentável e troque por cupons exclusivos no Re-Store.
+            </p>
 
+            <div class="flex flex-wrap gap-2.5 sm:gap-3">
+              
+              <button 
+                type="button" 
+                onclick="App.navigateTo('search')" 
+                class="bg-white text-teal-700 font-bold px-4 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm rounded-full shadow hover:bg-teal-50 transition cursor-pointer flex items-center gap-2"
+              >
+                <i data-lucide="shopping-bag" class="w-4 h-4"></i>
+                Explorar Produtos
+              </button>
 
-      <!-- ATALHOS RÁPIDOS DE ACESSO -->
-      <section class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
-        <button type="button" onclick="App.navigateTo('favorites')" class="p-4 rounded-2xl bg-white dark:bg-gray-800 border dark:border-gray-800 flex items-center gap-3 hover:border-teal-500 transition shadow-sm cursor-pointer">
-          <i data-lucide="heart" class="w-6 h-6 pointer-events-none"></i>
-          <div class="text-left pointer-events-none">
-            <div class="font-bold text-xs text-gray-900 dark:text-white">Meus Favoritos</div>
-            <div class="text-[11px] text-gray-500">Itens salvos</div>
+              <button 
+                type="button" 
+                onclick="App.showTutorialModal()" 
+                class="bg-teal-700/60 border border-white/30 backdrop-blur-md text-white font-semibold px-4 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm rounded-full hover:bg-teal-700 transition cursor-pointer flex items-center gap-2"
+              >
+                <i data-lucide="graduation-cap" class="w-4 h-4"></i>
+                Como Funciona
+              </button>
+
+            </div>
           </div>
-        </button>
-        <button type="button" onclick="App.navigateTo('orders')" class="p-4 rounded-2xl bg-white dark:bg-gray-800 border dark:border-gray-800 flex items-center gap-3 hover:border-teal-500 transition shadow-sm cursor-pointer">
-          <i data-lucide="shopping-bag" class="w-6 h-6 pointer-events-none"></i>
-          <div class="text-left pointer-events-none">
-            <div class="font-bold text-xs text-gray-900 dark:text-white">Meus Pedidos</div>
-            <div class="text-[11px] text-gray-500">Acompanhar status</div>
-          </div>
-        </button>
-        <button type="button" onclick="App.navigateTo('points')" class="p-4 rounded-2xl bg-white dark:bg-gray-800 border dark:border-gray-800 flex items-center gap-3 hover:border-teal-500 transition shadow-sm cursor-pointer">
-          <i data-lucide="sprout" class="w-6 h-6 pointer-events-none"></i>
-          <div class="text-left pointer-events-none">
-            <div class="font-bold text-xs text-gray-900 dark:text-white">Extrato de Pontos</div>
-            <div class="text-[11px] text-gray-500">Saldo e cupons</div>
-          </div>
-        </button>
-        <button type="button" onclick="App.navigateTo('chat')" class="p-4 rounded-2xl bg-white dark:bg-gray-800 border dark:border-gray-800 flex items-center gap-3 hover:border-teal-500 transition shadow-sm cursor-pointer">
-          <i data-lucide="message-circle" class="w-6 h-6 pointer-events-none"></i>
-          <div class="text-left pointer-events-none">
-            <div class="font-bold text-xs text-gray-900 dark:text-white">Chat Direto</div>
-            <div class="text-[11px] text-gray-500">Conversar com vendedores</div>
-          </div>
-        </button>
-      </section>
+        </section>
+
+        <!-- ATALHOS RÁPIDOS DE ACESSO -->
+        <section class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-4 mb-8">
+          <button type="button" onclick="App.navigateTo('favorites')" class="p-3 sm:p-4 rounded-2xl bg-white dark:bg-gray-800 border dark:border-gray-800 flex items-center gap-2 sm:gap-3 hover:border-teal-500 transition shadow-xs cursor-pointer min-w-0">
+            <i data-lucide="heart" class="w-5 h-5 sm:w-6 sm:h-6 shrink-0 pointer-events-none"></i>
+            <div class="text-left pointer-events-none min-w-0 flex-1">
+              <div class="font-bold text-[11px] sm:text-xs text-gray-900 dark:text-white truncate">Meus Favoritos</div>
+              <div class="text-[10px] sm:text-[11px] text-gray-500 truncate">Itens salvos</div>
+            </div>
+          </button>
+          <button type="button" onclick="App.navigateTo('orders')" class="p-3 sm:p-4 rounded-2xl bg-white dark:bg-gray-800 border dark:border-gray-800 flex items-center gap-2 sm:gap-3 hover:border-teal-500 transition shadow-xs cursor-pointer min-w-0">
+            <i data-lucide="shopping-bag" class="w-5 h-5 sm:w-6 sm:h-6 shrink-0 pointer-events-none"></i>
+            <div class="text-left pointer-events-none min-w-0 flex-1">
+              <div class="font-bold text-[11px] sm:text-xs text-gray-900 dark:text-white truncate">Meus Pedidos</div>
+              <div class="text-[10px] sm:text-[11px] text-gray-500 truncate">Status de compras</div>
+            </div>
+          </button>
+          <button type="button" onclick="App.navigateTo('points')" class="p-3 sm:p-4 rounded-2xl bg-white dark:bg-gray-800 border dark:border-gray-800 flex items-center gap-2 sm:gap-3 hover:border-teal-500 transition shadow-xs cursor-pointer min-w-0">
+            <i data-lucide="sprout" class="w-5 h-5 sm:w-6 sm:h-6 shrink-0 pointer-events-none"></i>
+            <div class="text-left pointer-events-none min-w-0 flex-1">
+              <div class="font-bold text-[11px] sm:text-xs text-gray-900 dark:text-white truncate">Extrato Pontos</div>
+              <div class="text-[10px] sm:text-[11px] text-gray-500 truncate">Saldo e cupons</div>
+            </div>
+          </button>
+          <button type="button" onclick="App.navigateTo('chat')" class="p-3 sm:p-4 rounded-2xl bg-white dark:bg-gray-800 border dark:border-gray-800 flex items-center gap-2 sm:gap-3 hover:border-teal-500 transition shadow-xs cursor-pointer min-w-0">
+            <i data-lucide="message-circle" class="w-5 h-5 sm:w-6 sm:h-6 shrink-0 pointer-events-none"></i>
+            <div class="text-left pointer-events-none min-w-0 flex-1">
+              <div class="font-bold text-[11px] sm:text-xs text-gray-900 dark:text-white truncate">Chat Direto</div>
+              <div class="text-[10px] sm:text-[11px] text-gray-500 truncate">Falar com lojas</div>
+            </div>
+          </button>
+        </section>
 
       <!-- BARRA DE CATEGORIAS -->
       <section class="mb-8">
@@ -1166,22 +1175,22 @@ const App = {
                 </div>
 
                 <!-- CARD DO VENDEDOR -->
-                <div class="flex items-center justify-between p-4 rounded-xl border dark:border-gray-800 mb-6 bg-white dark:bg-gray-800">
-                  <div class="flex items-center gap-3">
-                    <img src="${p.seller_avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}" class="w-10 h-10 rounded-full object-cover border border-teal-500">
-                    <div>
-                      <div class="font-bold text-sm text-gray-900 dark:text-white flex items-center gap-1">
+                <div class="flex flex-col xs:flex-row xs:items-center justify-between gap-3 p-3.5 sm:p-4 rounded-xl border dark:border-gray-800 mb-6 bg-white dark:bg-gray-800">
+                  <div class="flex items-center gap-3 min-w-0">
+                    <img src="${p.seller_avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}" class="w-10 h-10 rounded-full object-cover border border-teal-500 shrink-0">
+                    <div class="min-w-0">
+                      <div class="font-bold text-sm text-gray-900 dark:text-white flex items-center gap-1 truncate">
                         ${p.seller_name}
-                        ${p.is_verified_business ? '<span class="text-teal-500 text-xs" title="Empresa Verificada">✓</span>' : ''}
+                        ${p.is_verified_business ? '<span class="text-teal-500 text-xs shrink-0" title="Empresa Verificada">✓</span>' : ''}
                       </div>
-                      <div class="text-xs text-gray-500 flex items-center gap-1"><span>Reputação:</span> <span class="text-amber-500 font-bold inline-flex items-center gap-0.5"><i data-lucide="star" class="w-3 h-3 fill-amber-400 text-amber-400"></i> 4.9</span> <span>(Vendedor Confiável)</span></div>
+                      <div class="text-xs text-gray-500 flex items-center gap-1 flex-wrap"><span>Reputação:</span> <span class="text-amber-500 font-bold inline-flex items-center gap-0.5"><i data-lucide="star" class="w-3 h-3 fill-amber-400 text-amber-400"></i> 4.9</span> <span>(Vendedor Confiável)</span></div>
                     </div>
                   </div>
                   ${user && parseInt(user.id, 10) === parseInt(p.seller_id, 10) ? '' : `
                     <button 
                       type="button" 
                       onclick="App.openChatWithUser(${p.seller_id}, ${p.id})" 
-                      class="btn-outline text-xs py-1.5 px-3 cursor-pointer inline-flex items-center gap-1.5"
+                      class="btn-outline text-xs py-1.5 px-3 cursor-pointer inline-flex items-center justify-center gap-1.5 shrink-0 self-start xs:self-center"
                     >
                       <i data-lucide="message-circle" class="w-4 h-4 pointer-events-none"></i>
                       <span>Chat</span>
@@ -1204,7 +1213,7 @@ const App = {
                       <div class="text-xs text-teal-700 dark:text-teal-400">Pela política do Re-Store, você não pode comprar seus próprios produtos.</div>
                     </div>
                   </div>
-                  <div class="flex gap-3 pt-1">
+                  <div class="flex flex-col sm:flex-row gap-3 pt-1">
                     <button type="button" onclick="App.navigateTo('edit-product', { productId: ${p.id} })" class="btn-primary flex-1 py-2.5 text-sm cursor-pointer flex items-center justify-center gap-1.5">
                       <i data-lucide="pencil" class="w-4 h-4 pointer-events-none"></i>
                       <span>Editar Anúncio</span>
@@ -1223,7 +1232,7 @@ const App = {
                   </button>
                 </div>
               ` : `
-                <div class="flex gap-4">
+                <div class="flex flex-col sm:flex-row gap-3 sm:gap-4">
                   <button type="button" onclick="App.addToCartAndCheckout(${p.id})" class="btn-secondary flex-1 py-3 text-base cursor-pointer inline-flex items-center justify-center gap-2">
                     <i data-lucide="zap" class="w-5 h-5"></i>
                     <span>Comprar Agora</span>
@@ -1732,12 +1741,12 @@ const App = {
             ${cart.map(item => {
               const isItemOwner = user && parseInt(item.seller_id) === parseInt(user.id);
               return `
-              <div class="flex items-center justify-between p-4 rounded-2xl border ${isItemOwner ? 'border-amber-300 bg-amber-50/50 dark:bg-amber-950/20 dark:border-amber-800' : 'dark:border-gray-800 bg-white dark:bg-gray-800'}">
-                <div class="flex items-center gap-4">
-                  <img src="${item.image}" onclick="App.navigateTo('product-detail', { productId: ${item.product_id} })" class="w-16 h-16 rounded-xl object-cover border dark:border-gray-700 cursor-pointer hover:opacity-80 transition" title="Ver Detalhes">
-                  <div>
-                    <h3 onclick="App.navigateTo('product-detail', { productId: ${item.product_id} })" class="font-bold text-gray-900 dark:text-white text-sm line-clamp-1 hover:text-teal-600 cursor-pointer" title="Ver Detalhes">${item.name}</h3>
-                    <div class="text-xs text-gray-500">Vendedor: ${item.seller_name}</div>
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 p-4 rounded-2xl border ${isItemOwner ? 'border-amber-300 bg-amber-50/50 dark:bg-amber-950/20 dark:border-amber-800' : 'dark:border-gray-800 bg-white dark:bg-gray-800'}">
+                <div class="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
+                  <img src="${item.image}" onclick="App.navigateTo('product-detail', { productId: ${item.product_id} })" class="w-16 h-16 rounded-xl object-cover border dark:border-gray-700 cursor-pointer hover:opacity-80 transition shrink-0" title="Ver Detalhes">
+                  <div class="min-w-0 flex-1">
+                    <h3 onclick="App.navigateTo('product-detail', { productId: ${item.product_id} })" class="font-bold text-gray-900 dark:text-white text-sm truncate hover:text-teal-600 cursor-pointer" title="Ver Detalhes">${item.name}</h3>
+                    <div class="text-xs text-gray-500 truncate">Vendedor: ${item.seller_name}</div>
                     ${isItemOwner ? `
                       <span class="inline-flex items-center gap-1 mt-1 text-[10px] font-bold text-amber-800 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/60 px-2 py-0.5 rounded-full border border-amber-300 dark:border-amber-700">
                         <i data-lucide="ban" class="w-3 h-3 inline"></i> Seu Próprio Anúncio (Remoção Obrigatória)
@@ -1746,7 +1755,7 @@ const App = {
                     <div class="text-sm font-extrabold text-teal-600 mt-1">R$ ${item.price.toFixed(2).replace('.', ',')}</div>
                   </div>
                 </div>
-                <div class="flex items-center gap-3">
+                <div class="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100 dark:border-gray-700">
                   <div class="flex items-center border dark:border-gray-700 rounded-lg overflow-hidden">
                     <button type="button" onclick="App.updateCartQty(${item.product_id}, ${item.quantity - 1})" class="px-2.5 py-1 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">-</button>
                     <span class="px-3 py-1 text-sm font-semibold">${item.quantity}</span>
@@ -2073,9 +2082,9 @@ const App = {
                   </button>
                 </div>
               ` : `
-                <div class="flex gap-2 mb-3">
+                <div class="flex flex-col sm:flex-row gap-2 mb-3">
                   <input type="text" id="chk-coupon-input" placeholder="Digite o código (ex: ECO10-1234)" value="" class="flex-1 px-4 py-2 border rounded-xl dark:bg-gray-700 font-mono text-sm uppercase">
-                  <button type="button" onclick="App.applyCouponCheckout()" class="btn-primary text-xs py-2 px-5 cursor-pointer">
+                  <button type="button" onclick="App.applyCouponCheckout()" class="btn-primary text-xs py-2 px-5 cursor-pointer whitespace-nowrap">
                     Aplicar Cupom
                   </button>
                 </div>
@@ -2142,7 +2151,7 @@ const App = {
                     <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Número do Cartão</label>
                     <input type="text" placeholder="4532 •••• •••• 8892" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-800 text-sm font-mono">
                   </div>
-                  <div class="grid grid-cols-3 gap-3">
+                  <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     <div>
                       <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Validade</label>
                       <input type="text" placeholder="MM/AA" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-800 text-sm font-mono">
@@ -2151,7 +2160,7 @@ const App = {
                       <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">CVV</label>
                       <input type="text" placeholder="123" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-800 text-sm font-mono">
                     </div>
-                    <div>
+                    <div class="col-span-2 sm:col-span-1">
                       <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Parcelas</label>
                       <select class="w-full px-2 py-2 border rounded-xl dark:bg-gray-800 text-xs">
                         <option>1x à vista</option>
@@ -2708,13 +2717,13 @@ const App = {
 
                 <div class="space-y-3">
                   ${(o.items || []).map(i => `
-                    <div class="flex items-center justify-between">
-                      <div class="flex items-center gap-3">
-                        <img src="${i.product_image || 'https://images.unsplash.com/photo-1544816155-12df9643f363?w=100'}" onclick="App.navigateTo('product-detail', { productId: ${i.product_id}, id: ${i.product_id} })" class="w-12 h-12 rounded-xl object-cover border dark:border-gray-700 cursor-pointer hover:opacity-85 transition" title="Ver detalhes do produto">
-                        <div>
-                          <div onclick="App.navigateTo('product-detail', { productId: ${i.product_id}, id: ${i.product_id} })" class="font-bold text-sm text-gray-900 dark:text-white hover:text-teal-600 cursor-pointer transition">${i.product_name}</div>
-                          <div class="text-xs text-gray-500">Qtd: ${i.quantity} • Vendedor: ${i.seller_name}</div>
-                          <div class="flex items-center gap-3 mt-1">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-2.5 sm:p-0 rounded-xl sm:rounded-none bg-gray-50/70 sm:bg-transparent dark:bg-gray-750/30 sm:dark:bg-transparent">
+                      <div class="flex items-center gap-3 min-w-0 flex-1">
+                        <img src="${i.product_image || 'https://images.unsplash.com/photo-1544816155-12df9643f363?w=100'}" onclick="App.navigateTo('product-detail', { productId: ${i.product_id}, id: ${i.product_id} })" class="w-12 h-12 rounded-xl object-cover border dark:border-gray-700 cursor-pointer hover:opacity-85 transition shrink-0" title="Ver detalhes do produto">
+                        <div class="min-w-0 flex-1">
+                          <div onclick="App.navigateTo('product-detail', { productId: ${i.product_id}, id: ${i.product_id} })" class="font-bold text-sm text-gray-900 dark:text-white hover:text-teal-600 cursor-pointer transition truncate">${i.product_name}</div>
+                          <div class="text-xs text-gray-500 truncate">Qtd: ${i.quantity} • Vendedor: ${i.seller_name}</div>
+                          <div class="flex items-center gap-3 mt-1 flex-wrap">
                             ${i.seller_id ? `
                               <button type="button" onclick="App.openChatWithUser(${i.seller_id}, ${i.product_id})" class="text-[11px] text-teal-600 hover:text-teal-700 dark:text-teal-400 font-semibold hover:underline inline-flex items-center gap-1 cursor-pointer">
                                 <i data-lucide="message-circle" class="w-3 h-3 pointer-events-none"></i>
@@ -2737,7 +2746,7 @@ const App = {
                           </div>
                         </div>
                       </div>
-                      <div class="font-bold text-sm">R$ ${parseFloat(i.price).toFixed(2).replace('.', ',')}</div>
+                      <div class="font-bold text-sm sm:text-right shrink-0">R$ ${parseFloat(i.price).toFixed(2).replace('.', ',')}</div>
                     </div>
                   `).join('')}
                 </div>
@@ -2925,15 +2934,15 @@ const App = {
       container.innerHTML = `
         <div class="max-w-4xl mx-auto space-y-8 animate-fade-in">
           <!-- BANNER PRINCIPAL DE PONTOS -->
-          <div class="bg-gradient-to-r from-emerald-600 via-teal-600 to-teal-700 rounded-3xl p-8 text-white flex flex-col md:flex-row items-center justify-between shadow-xl gap-6">
+          <div class="bg-gradient-to-r from-emerald-600 via-teal-600 to-teal-700 rounded-3xl p-5 sm:p-8 text-white flex flex-col md:flex-row items-center justify-between shadow-xl gap-6">
             <div>
-              <div class="flex items-center gap-2 mb-2">
+              <div class="flex items-center gap-2 mb-2 flex-wrap">
                 <span class="bg-white/20 px-3 py-1 rounded-full text-xs font-bold">Nível Geral: ${levelName}</span>
                 <span class="bg-emerald-400/20 text-emerald-100 border border-emerald-300/30 px-3 py-1 rounded-full text-xs font-bold">Vendedor: ${sTier.tier_name}</span>
               </div>
-              <div class="text-4xl sm:text-5xl font-extrabold flex items-center gap-2.5">
+              <div class="text-3xl sm:text-4xl md:text-5xl font-extrabold flex items-center gap-2 sm:gap-2.5 flex-wrap">
                 <span>${points} Pontos Verdes</span>
-                <i data-lucide="sprout" class="w-10 h-10 inline text-emerald-300 pointer-events-none"></i>
+                <i data-lucide="sprout" class="w-7 sm:w-10 h-7 sm:h-10 inline text-emerald-300 pointer-events-none"></i>
               </div>
               <div class="text-xs text-emerald-100 mt-2 max-w-lg leading-relaxed">
                 Participe da economia circular! Ganhe pontos comprando, vendendo produtos sustentáveis e avaliando compras. Troque seus pontos por cupons reais de desconto.
@@ -3278,22 +3287,22 @@ const App = {
 
     container.innerHTML = `
       <div class="max-w-3xl mx-auto space-y-8 animate-fade-in">
-        <div class="p-6 rounded-3xl border dark:border-gray-800 bg-white dark:bg-gray-800 flex items-center justify-between shadow-sm">
-          <div class="flex items-center gap-4">
-            <img src="${user.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200'}" class="w-16 h-16 rounded-full object-cover border-2 border-teal-500">
-            <div>
-              <h1 class="text-xl font-extrabold text-gray-900 dark:text-white flex items-center gap-2">
-                ${user.name}
-                ${isPJ ? '<span class="text-xs bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200 px-2 py-0.5 rounded-full font-bold">CNPJ Verificado ✓</span>' : ''}
+        <div class="p-5 sm:p-6 rounded-3xl border dark:border-gray-800 bg-white dark:bg-gray-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
+          <div class="flex items-center gap-3 sm:gap-4 min-w-0">
+            <img src="${user.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200'}" class="w-14 h-14 sm:w-16 sm:h-16 rounded-full object-cover border-2 border-teal-500 shrink-0">
+            <div class="min-w-0 flex-1">
+              <h1 class="text-lg sm:text-xl font-extrabold text-gray-900 dark:text-white flex items-center gap-2 flex-wrap">
+                <span class="truncate">${user.name}</span>
+                ${isPJ ? '<span class="text-xs bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200 px-2 py-0.5 rounded-full font-bold shrink-0">CNPJ Verificado ✓</span>' : ''}
               </h1>
-              <div class="text-xs text-gray-500">${user.email} • ${user.city || 'São Paulo'}, ${user.state || 'SP'}${user.created_at ? ' • Membro desde ' + DateHelper.formatDate(user.created_at) : ''}</div>
-              <div class="mt-2 flex items-center gap-2">
+              <div class="text-xs text-gray-500 truncate">${user.email} • ${user.city || 'São Paulo'}, ${user.state || 'SP'}${user.created_at ? ' • Membro desde ' + DateHelper.formatDate(user.created_at) : ''}</div>
+              <div class="mt-2 flex items-center gap-2 flex-wrap">
                 <span class="badge-points inline-flex items-center gap-1.5"><i data-lucide="sprout" class="w-3.5 h-3.5"></i> ${user.points} Pontos Verdes</span>
                 <span class="bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200 text-xs px-2.5 py-0.5 rounded-full font-bold">Nível ${user.level}</span>
               </div>
             </div>
           </div>
-          <button type="button" onclick="App.confirmLogout()" class="text-xs font-semibold text-red-500 hover:underline cursor-pointer">
+          <button type="button" onclick="App.confirmLogout()" class="text-xs font-semibold text-red-500 hover:underline cursor-pointer self-start sm:self-center shrink-0">
             Sair da Conta
           </button>
         </div>
@@ -3326,9 +3335,9 @@ const App = {
                 <input type="file" id="prof-avatar" accept="image/*" class="w-full text-xs text-gray-500">
               </div>
             </div>
-            <div class="flex justify-between items-center pt-2">
-              <button type="submit" class="btn-primary text-sm py-2 px-6 cursor-pointer">Salvar Alterações</button>
-              <button type="button" onclick="App.confirmDeleteAccount()" class="text-xs font-bold text-red-500 hover:underline cursor-pointer">Excluir Minha Conta Permanentemente</button>
+            <div class="flex flex-col sm:flex-row sm:justify-between items-center gap-3 pt-2">
+              <button type="submit" class="btn-primary text-sm py-2 px-6 w-full sm:w-auto cursor-pointer">Salvar Alterações</button>
+              <button type="button" onclick="App.confirmDeleteAccount()" class="text-xs font-bold text-red-500 hover:underline cursor-pointer py-1">Excluir Minha Conta Permanentemente</button>
             </div>
           </form>
         </div>
@@ -3718,7 +3727,7 @@ const App = {
             </div>
 
             ${recentSales.length > 0 ? `
-              <div class="overflow-x-auto">
+              <div class="table-responsive">
                 <table class="w-full text-left text-xs">
                   <thead>
                     <tr class="border-b dark:border-gray-700 text-gray-500 uppercase tracking-wider text-[10px]">
@@ -3758,23 +3767,23 @@ const App = {
             <h2 class="text-lg font-bold mb-4">Meus Anúncios</h2>
             <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               ${products.map(p => `
-                <div class="p-4 rounded-2xl border dark:border-gray-800 bg-white dark:bg-gray-800 flex items-center justify-between">
-                  <div class="flex items-center gap-3 cursor-pointer" onclick="App.navigateTo('product-detail', { productId: ${p.id} })" title="Ver Detalhes do Produto">
-                    <img src="${p.primary_image}" class="w-12 h-12 rounded-xl object-cover hover:opacity-80 transition">
-                    <div>
-                      <div class="font-bold text-sm text-gray-900 dark:text-white line-clamp-1 hover:text-teal-600 transition">${p.name}</div>
+                <div class="p-4 rounded-2xl border dark:border-gray-800 bg-white dark:bg-gray-800 flex items-center justify-between gap-3">
+                  <div class="flex items-center gap-3 cursor-pointer min-w-0 flex-1" onclick="App.navigateTo('product-detail', { productId: ${p.id} })" title="Ver Detalhes do Produto">
+                    <img src="${p.primary_image}" class="w-12 h-12 rounded-xl object-cover hover:opacity-80 transition shrink-0">
+                    <div class="min-w-0 flex-1">
+                      <div class="font-bold text-sm text-gray-900 dark:text-white truncate hover:text-teal-600 transition">${p.name}</div>
                       <div class="text-xs text-gray-500">R$ ${parseFloat(p.price).toFixed(2).replace('.', ',')}</div>
-                      <div class="mt-1">
+                      <div class="mt-1 flex flex-wrap gap-1">
                         ${parseInt(p.stock) <= 0
                           ? '<span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700">Esgotado</span>'
                           : (parseInt(p.stock) <= 3
                             ? `<span class="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700"><i data-lucide="alert-triangle" class="w-3 h-3 inline"></i> Estoque baixo: ${p.stock} un.</span>`
                             : `<span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Estoque: ${p.stock} un.</span>`)}
                       </div>
-                      <div class="text-[11px] text-gray-400 mt-1 flex items-center gap-1"><i data-lucide="map-pin" class="w-3 h-3 text-teal-600"></i> ${p.location || 'Local não informado'}</div>
+                      <div class="text-[11px] text-gray-400 mt-1 flex items-center gap-1 truncate"><i data-lucide="map-pin" class="w-3 h-3 text-teal-600 shrink-0"></i> <span>${p.location || 'Local não informado'}</span></div>
                     </div>
                   </div>
-                  <div class="flex items-center gap-1">
+                  <div class="flex items-center gap-1 shrink-0">
                     <button type="button" onclick="App.navigateTo('edit-product', { productId: ${p.id} })" title="Editar Anúncio" class="text-teal-600 hover:text-teal-800 hover:bg-teal-50 dark:hover:bg-teal-950/50 p-2 rounded-lg cursor-pointer transition">
                       <i data-lucide="pencil" class="w-4 h-4"></i>
                     </button>
@@ -4168,7 +4177,7 @@ const App = {
             </div>
 
             <!-- VISÃO DESKTOP: TABELA CLÁSSICA (>= 768px) -->
-            <div class="hidden md:block overflow-x-auto">
+            <div class="hidden md:block overflow-x-auto table-responsive">
               <table class="w-full text-left text-xs">
                 <thead class="bg-gray-50 dark:bg-gray-900/60 border-b dark:border-gray-800 text-gray-500 uppercase text-[11px] font-bold">
                   <tr>
@@ -4549,7 +4558,7 @@ const App = {
         <button type="button" onclick="App.navigateTo('seller')" class="text-sm text-teal-600 font-semibold hover:underline mb-4 block cursor-pointer">← Voltar para Área do Vendedor</button>
         <h1 class="text-2xl font-extrabold mb-6">Cadastrar Produto Sustentável</h1>
 
-        <form onsubmit="App.submitAddProduct(event)" class="space-y-4 p-6 rounded-3xl border dark:border-gray-800 bg-white dark:bg-gray-800 shadow-sm">
+        <form onsubmit="App.submitAddProduct(event)" class="space-y-4 p-4 sm:p-6 rounded-2xl sm:rounded-3xl border dark:border-gray-800 bg-white dark:bg-gray-800 shadow-sm">
           <div>
             <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Nome do Produto *</label>
             <input type="text" id="prod-name" required placeholder="Ex: Garrafa Térmica Inox" class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 text-sm">
@@ -4868,7 +4877,7 @@ const App = {
             <span class="text-xs bg-teal-50 dark:bg-teal-950 text-teal-700 dark:text-teal-300 font-mono px-2 py-1 rounded border border-teal-200 dark:border-teal-800">ID #${p.id}</span>
           </div>
 
-          <form onsubmit="App.submitEditProduct(event, ${p.id})" class="space-y-4 p-6 rounded-3xl border dark:border-gray-800 bg-white dark:bg-gray-800 shadow-sm">
+          <form onsubmit="App.submitEditProduct(event, ${p.id})" class="space-y-4 p-4 sm:p-6 rounded-2xl sm:rounded-3xl border dark:border-gray-800 bg-white dark:bg-gray-800 shadow-sm">
             <div>
               <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Nome do Produto *</label>
               <input type="text" id="edit-prod-name" required value="${(p.name || '').replace(/"/g, '&quot;')}" class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 text-sm">
@@ -5246,7 +5255,7 @@ const App = {
     this.currentChatView = targetPartnerId ? 'chat' : 'sidebar';
 
     container.innerHTML = `
-      <div class="h-[78vh] min-h-[520px] rounded-3xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800 flex overflow-hidden shadow-xl animate-fade-in relative">
+      <div class="h-[calc(100dvh-13.5rem)] min-h-[460px] md:min-h-[520px] rounded-2xl sm:rounded-3xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800 flex overflow-hidden shadow-xl animate-fade-in relative">
         <!-- BARRA LATERAL: LISTA DE CONVERSAS -->
         <div id="chat-sidebar" class="w-full md:w-80 lg:w-96 md:shrink-0 border-r border-gray-200 dark:border-gray-800 flex md:flex flex-col bg-gray-50/80 dark:bg-gray-900/50 overflow-hidden">
           <div class="p-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between bg-white dark:bg-gray-800/80">
@@ -5919,34 +5928,34 @@ const App = {
             <h1 class="text-2xl font-extrabold text-gray-900 dark:text-white">Preferências de Acessibilidade</h1>
           </div>
           <div class="space-y-6">
-            <div class="flex items-center justify-between pb-4 border-b dark:border-gray-700">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b dark:border-gray-700">
               <div>
                 <div class="font-bold text-sm">Modo Escuro (Dark Mode)</div>
                 <div class="text-xs text-gray-500">Alternar tema de contraste escuro com persistência.</div>
               </div>
-              <button type="button" onclick="AccessibilityManager.toggleDarkMode(); ToastManager.show('Modo Escuro alternado!', 'info')" class="btn-primary text-xs py-1.5 px-4 cursor-pointer">
+              <button type="button" onclick="AccessibilityManager.toggleDarkMode(); ToastManager.show('Modo Escuro alternado!', 'info')" class="btn-primary text-xs py-1.5 px-4 cursor-pointer self-start sm:self-auto">
                 Alternar Dark Mode
               </button>
             </div>
 
-            <div class="flex items-center justify-between pb-4 border-b dark:border-gray-700">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b dark:border-gray-700">
               <div>
                 <div class="font-bold text-sm">Tamanho do Texto (3 Níveis)</div>
                 <div class="text-xs text-gray-500">Escolha o tamanho confortável para leitura.</div>
               </div>
-              <div class="flex gap-2">
+              <div class="flex gap-2 self-start sm:self-auto flex-wrap">
                 <button type="button" onclick="AccessibilityManager.setFontSize('sm'); ToastManager.show('Fonte Pequena', 'info')" class="px-3 py-1 border rounded-lg text-xs hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">Pequeno</button>
                 <button type="button" onclick="AccessibilityManager.setFontSize('md'); ToastManager.show('Fonte Média', 'info')" class="px-3 py-1 border rounded-lg text-xs font-bold hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">Médio</button>
                 <button type="button" onclick="AccessibilityManager.setFontSize('lg'); ToastManager.show('Fonte Grande', 'info')" class="px-3 py-1 border rounded-lg text-xs hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">Grande</button>
               </div>
             </div>
 
-            <div class="flex items-center justify-between">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <div class="font-bold text-sm">Modo para Daltonismo</div>
                 <div class="text-xs text-gray-500">Filtros de correção de cores por matriz SVG.</div>
               </div>
-              <select onchange="AccessibilityManager.setColorblindMode(this.value); ToastManager.show('Filtro de daltonismo alterado', 'info')" class="px-3 py-1.5 border rounded-xl dark:bg-gray-700 text-xs font-semibold cursor-pointer">
+              <select onchange="AccessibilityManager.setColorblindMode(this.value); ToastManager.show('Filtro de daltonismo alterado', 'info')" class="px-3 py-1.5 border rounded-xl dark:bg-gray-700 text-xs font-semibold cursor-pointer self-start sm:self-auto">
                 <option value="none">Padrão (Desativado)</option>
                 <option value="protanopia">Protanopia (Red-blind)</option>
                 <option value="deuteranopia">Deuteranopia (Green-blind)</option>
@@ -6098,7 +6107,7 @@ const App = {
               <p class="text-xs text-gray-600 dark:text-gray-300">Nossa equipe de atendimento oficial está disponível para tirar dúvidas pelo chat.</p>
             </div>
           </div>
-          <button type="button" onclick="App.openSupportChat()" class="btn-primary text-xs py-2.5 px-5 rounded-2xl inline-flex items-center gap-2 cursor-pointer shadow-sm shrink-0 font-bold">
+          <button type="button" onclick="App.openSupportChat()" class="btn-primary text-xs py-2.5 px-5 rounded-2xl inline-flex items-center justify-center gap-2 cursor-pointer shadow-sm shrink-0 font-bold w-full sm:w-auto">
             <i data-lucide="message-circle" class="w-4 h-4"></i>
             <span>Falar com o Suporte</span>
           </button>
@@ -6209,7 +6218,7 @@ const App = {
     const currentStep = stepsContent[step - 1];
 
     this.openAuthModal(`
-      <div class="bg-white dark:bg-gray-800 rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl relative text-center animate-modal-in">
+      <div class="bg-white dark:bg-gray-800 rounded-3xl p-5 sm:p-6 md:p-8 max-w-md w-full shadow-2xl relative text-center animate-modal-in modal-card-responsive">
         <button type="button" onclick="App.closeAuthModal()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold cursor-pointer">✕</button>
 
         <div class="flex items-center gap-2 justify-center mb-6">
@@ -6240,7 +6249,7 @@ const App = {
 
   showLoginModal() {
     this.openAuthModal(`
-      <div class="bg-white dark:bg-gray-800 rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl relative animate-modal-in">
+      <div class="bg-white dark:bg-gray-800 rounded-3xl p-5 sm:p-6 md:p-8 max-w-md w-full shadow-2xl relative animate-modal-in modal-card-responsive">
         <button type="button" onclick="App.closeAuthModal()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold cursor-pointer">✕</button>
 
         <div class="p-2.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded-xl mb-4 flex items-center gap-2 text-xs text-emerald-800 dark:text-emerald-300">
@@ -6475,7 +6484,7 @@ const App = {
     const cnpjVal = saved.cnpj || '';
 
     this.openAuthModal(`
-      <div class="bg-white dark:bg-gray-800 rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl relative max-h-[90vh] overflow-y-auto animate-modal-in">
+      <div class="bg-white dark:bg-gray-800 rounded-3xl p-5 sm:p-6 md:p-8 max-w-md w-full shadow-2xl relative modal-card-responsive animate-modal-in">
         <button type="button" onclick="App.closeAuthModal()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold cursor-pointer">✕</button>
 
         <span class="inline-flex items-center gap-1.5 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 text-[11px] font-bold px-2.5 py-0.5 rounded-full mb-2"><i data-lucide="gift" class="w-3.5 h-3.5"></i> Bônus de 150 Pontos Verdes</span>
@@ -6748,7 +6757,7 @@ const App = {
 
   renderRegisterVerifyStep(email) {
     this.openAuthModal(`
-      <div class="bg-white dark:bg-gray-800 rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl relative animate-modal-in">
+      <div class="bg-white dark:bg-gray-800 rounded-3xl p-5 sm:p-6 md:p-8 max-w-md w-full shadow-2xl relative animate-modal-in modal-card-responsive">
         <button type="button" onclick="App.closeAuthModal()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold cursor-pointer">✕</button>
 
         <!-- Barra de Progresso do Cadastro -->
@@ -6999,7 +7008,7 @@ const App = {
 
   renderForgotStep1() {
     this.openAuthModal(`
-      <div class="bg-white dark:bg-gray-800 rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl relative animate-modal-in">
+      <div class="bg-white dark:bg-gray-800 rounded-3xl p-5 sm:p-6 md:p-8 max-w-md w-full shadow-2xl relative animate-modal-in modal-card-responsive">
         <button type="button" onclick="App.closeAuthModal()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold cursor-pointer">✕</button>
 
         <div class="flex items-center gap-2 mb-6">
@@ -7041,7 +7050,7 @@ const App = {
 
   renderForgotStep2() {
     this.openAuthModal(`
-      <div class="bg-white dark:bg-gray-800 rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl relative animate-modal-in">
+      <div class="bg-white dark:bg-gray-800 rounded-3xl p-5 sm:p-6 md:p-8 max-w-md w-full shadow-2xl relative animate-modal-in modal-card-responsive">
         <button type="button" onclick="App.closeAuthModal()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold cursor-pointer">✕</button>
 
         <div class="flex items-center gap-2 mb-6">
@@ -7087,7 +7096,7 @@ const App = {
 
   renderForgotStep3() {
     this.openAuthModal(`
-      <div class="bg-white dark:bg-gray-800 rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl relative animate-modal-in">
+      <div class="bg-white dark:bg-gray-800 rounded-3xl p-5 sm:p-6 md:p-8 max-w-md w-full shadow-2xl relative animate-modal-in modal-card-responsive">
         <button type="button" onclick="App.closeAuthModal()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold cursor-pointer">✕</button>
 
         <div class="flex items-center gap-2 mb-6">
@@ -7144,15 +7153,15 @@ const App = {
 
     container.innerHTML = `
       <div class="space-y-6 animate-fade-in max-w-7xl mx-auto">
-        <div class="flex items-center justify-between">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h1 class="text-2xl font-extrabold flex items-center gap-2.5 text-gray-900 dark:text-white">
-              <i data-lucide="heart" class="w-6 h-6 text-red-500 fill-red-500"></i>
+            <h1 class="text-xl sm:text-2xl font-extrabold flex items-center gap-2.5 text-gray-900 dark:text-white">
+              <i data-lucide="heart" class="w-6 h-6 text-red-500 fill-red-500 shrink-0"></i>
               <span>Meus Produtos Favoritos</span>
             </h1>
             <p class="text-xs text-gray-500 mt-1">Produtos sustentáveis salvos para você comprar no seu ritmo.</p>
           </div>
-          <button type="button" onclick="App.navigateTo('search')" class="btn-outline text-xs py-1.5 px-4 cursor-pointer">
+          <button type="button" onclick="App.navigateTo('search')" class="btn-outline text-xs py-1.5 px-4 cursor-pointer self-start sm:self-auto">
             Explorar Mais Produtos
           </button>
         </div>

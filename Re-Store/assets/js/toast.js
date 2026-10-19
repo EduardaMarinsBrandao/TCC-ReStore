@@ -58,7 +58,7 @@ const ModalDialog = {
 
       const card = document.createElement('div');
       card.id = 'modal-dialog-card';
-      card.className = 'bg-white dark:bg-gray-800 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-gray-100 dark:border-gray-700 relative text-center animate-modal-in transform transition-all duration-200';
+      card.className = 'bg-white dark:bg-gray-800 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-gray-100 dark:border-gray-700 relative text-center animate-modal-in transform transition-all duration-200 modal-card-responsive';
 
       const iconHtml = this._getIconHtml(type, icon);
 
@@ -227,7 +227,7 @@ const ToastManager = {
     if (!this.container) {
       this.container = document.createElement('div');
       this.container.id = 'toast-container';
-      this.container.className = 'fixed top-5 right-5 z-[99999] flex flex-col gap-2 max-w-sm w-full pointer-events-none';
+      this.container.className = 'fixed top-4 right-4 left-4 sm:left-auto sm:right-5 sm:top-5 z-[99999] flex flex-col gap-2 max-w-sm pointer-events-none';
       document.body.appendChild(this.container);
     }
   },

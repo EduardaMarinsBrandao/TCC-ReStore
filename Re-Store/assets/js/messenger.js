@@ -40,7 +40,7 @@ const MessengerManager = {
     try {
       const res = await fetch(url);
       const data = await res.json();
-      
+
       // Se for a busca completa inicial, rastreia o maior ID
       if (afterId === 0 && data.success && Array.isArray(data.messages)) {
         this.lastMessageId = 0;
@@ -125,7 +125,8 @@ const MessengerManager = {
   startPolling(onNewMessagesCallback) {
     this.stopPolling();
     this.pollTimer = setInterval(async () => {
-      // Não executa a chamada de polling se a aba do navegador estiver inativa, se não houver parceiro ou se outra requisição estiver pendente
+      // Não executa a chamada de polling se a aba do navegador estiver inativa,
+      // se não houver parceiro ou se outra requisição estiver pendente
       if (document.hidden || !this.activePartnerId || this.isPollingBusy) return;
 
       this.isPollingBusy = true;
