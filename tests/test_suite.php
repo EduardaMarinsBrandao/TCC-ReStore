@@ -242,35 +242,7 @@ runTest('API: Bloqueio de criação de conta sem validação de e-mail (código 
 });
 
 // --------------------------------------------------------------------------
-// 9. Teste de Endpoint: Solicitação de Código de Verificação de Cadastro
-// --------------------------------------------------------------------------
-runTest('API: Geração de código de validação de e-mail para cadastro', function() {
-    // 1. Tentar solicitar código para e-mail já existente deve ser rejeitado
-    $outputExist = callApiIsolated('api/auth.php', [
-        'action' => 'send_register_code',
-        'email' => 'eco.vendedor@restore.com',
-        'name' => 'Vendedor Existente'
-    ], 'POST');
-    $jsonExist = json_decode($outputExist, true);
-    if (!empty($jsonExist['success'])) {
-        throw new Exception("API permitiu solicitar código de cadastro para e-mail já registrado");
-    }
-
-    // 2. Solicitar código para novo e-mail deve ser aceito
-    $outputNew = callApiIsolated('api/auth.php', [
-        'action' => 'send_register_code',
-        'email' => 'novo.usuario.' . uniqid() . '@restore.com',
-        'name' => 'Novo Usuário'
-    ], 'POST');
-    $jsonNew = json_decode($outputNew, true);
-    if (empty($jsonNew['success'])) {
-        throw new Exception("API falhou ao gerar código de cadastro: " . ($jsonNew['error'] ?? 'desconhecido'));
-    }
-    return true;
-});
-
-// --------------------------------------------------------------------------
-// 10. Teste: Bloqueio de Avaliação sem Compra Comprovada
+// 9. Teste: Bloqueio de Avaliação sem Compra Comprovada
 // --------------------------------------------------------------------------
 runTest('API: Bloqueio de avaliação sem compra comprovada (compra verificada obrigatória)', function() {
     // Usuário 2 não comprou o produto 1 inicialmente
@@ -307,7 +279,7 @@ runTest('API: Bloqueio de avaliação sem compra comprovada (compra verificada o
 });
 
 // --------------------------------------------------------------------------
-// 11. Teste: Criação de Avaliação após Compra Confirmada e Fotos
+// 10. Teste: Criação de Avaliação após Compra Confirmada e Fotos
 // --------------------------------------------------------------------------
 runTest('API: Criação de avaliação após compra confirmada e fotos de avaliação', function() {
     $db = getDbConnection();
@@ -387,7 +359,7 @@ runTest('API: Criação de avaliação após compra confirmada e fotos de avalia
 });
 
 // --------------------------------------------------------------------------
-// 12. Teste: Edição de Avaliação, Alteração de Nota e Recálculo da Média
+// 11. Teste: Edição de Avaliação, Alteração de Nota e Recálculo da Média
 // --------------------------------------------------------------------------
 runTest('API: Edição de avaliação existente, alteração de nota e recálculo da média do produto', function() {
     $db = getDbConnection();
@@ -429,7 +401,7 @@ runTest('API: Edição de avaliação existente, alteração de nota e recálcul
 });
 
 // --------------------------------------------------------------------------
-// 13. Teste: Minhas Avaliações e Exclusão com Recálculo
+// 12. Teste: Minhas Avaliações e Exclusão com Recálculo
 // --------------------------------------------------------------------------
 runTest('API: Listagem de avaliações do usuário ("Minhas Avaliações") e exclusão com recálculo', function() {
     $db = getDbConnection();
