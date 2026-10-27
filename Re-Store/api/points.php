@@ -1,7 +1,11 @@
 <?php
 // api/points.php
-header('Content-Type: application/json; charset=utf-8');
-session_start();
+require_once __DIR__ . '/../config/session.php';
+restoreStartSession();
+
+if (!headers_sent()) {
+    header('Content-Type: application/json; charset=utf-8');
+}
 
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/db_init.php';

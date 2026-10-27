@@ -1,7 +1,12 @@
 <?php
 // api/auth.php
-header('Content-Type: application/json; charset=utf-8');
-session_start();
+require_once __DIR__ . '/../config/session.php';
+require_once __DIR__ . '/../config/upload_security.php';
+restoreStartSession();
+
+if (!headers_sent()) {
+    header('Content-Type: application/json; charset=utf-8');
+}
 
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/db_init.php';
@@ -56,31 +61,33 @@ function isValidCNPJ($cnpj) {
     return true;
 }
 
-function base64UrlDecode($data) {
-    $remainder = strlen($data) % 4;
-    if ($remainder) {
-        $padlen = 4 - $remainder;
-        $data .= str_repeat('=', $padlen);
-    }
-    return base64_decode(strtr($data, '-_', '+/'));
-}
-
+/**
+ * Valida o ID Token do Google exclusivamente pelo endpoint oficial (tokeninfo),
+ * que verifica a assinatura criptográfica do token. A verificação do certificado
+ * SSL e do nome do servidor permanece sempre habilitada. Se a validação oficial
+ * não puder ser concluída, o acesso é recusado (não há decodificação local sem
+ * verificação de assinatura).
+ */
 function verifyGoogleIdToken($credential, $expectedClientId) {
     if (empty($credential)) {
         return ['success' => false, 'error' => 'Credencial do Google vazia.'];
     }
 
+    if (empty($expectedClientId)) {
+        return ['success' => false, 'error' => 'Login com Google indisponível: Client ID não configurado no servidor.'];
+    }
+
     $payload = null;
 
-    // 1. Tentar validar via cURL no endpoint oficial da Google (com SSL relaxado para hospedagem compartilhada)
+    // 1. Validar via cURL no endpoint oficial da Google (certificado SSL verificado)
     $url = "https://oauth2.googleapis.com/tokeninfo?id_token=" . urlencode($credential);
     if (function_exists('curl_init')) {
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_TIMEOUT, 6);
         curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 4);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
         curl_setopt($ch, CURLOPT_USERAGENT, 'ReStore-GoogleAuth/1.0');
         $res = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -94,7 +101,7 @@ function verifyGoogleIdToken($credential, $expectedClientId) {
         }
     }
 
-    // 2. Se cURL falhar ou for bloqueado por rede externa na InfinityFree, tentar via file_get_contents
+    // 2. Se cURL falhar, tentar via file_get_contents (também com verificação SSL)
     if (!$payload && ini_get('allow_url_fopen')) {
         $ctx = stream_context_create([
             'http' => [
@@ -102,8 +109,8 @@ function verifyGoogleIdToken($credential, $expectedClientId) {
                 'user_agent' => 'ReStore-GoogleAuth/1.0'
             ],
             'ssl' => [
-                'verify_peer' => false,
-                'verify_peer_name' => false
+                'verify_peer' => true,
+                'verify_peer_name' => true
             ]
         ]);
         $streamRes = @file_get_contents($url, false, $ctx);
@@ -115,40 +122,33 @@ function verifyGoogleIdToken($credential, $expectedClientId) {
         }
     }
 
-    // 3. Fallback JWT direto com Base64URL padding correto (100% autônomo na InfinityFree)
-    if (!$payload) {
-        $parts = explode('.', $credential);
-        if (count($parts) === 3) {
-            $headerJson = base64UrlDecode($parts[0]);
-            $bodyJson = base64UrlDecode($parts[1]);
-            $header = json_decode($headerJson, true);
-            $body = json_decode($bodyJson, true);
-            if (is_array($header) && is_array($body)) {
-                $payload = $body;
-            }
-        }
-    }
-
+    // Sem validação oficial concluída, o acesso é recusado (nunca confiar em token apenas decodificado)
     if (!$payload || empty($payload['email'])) {
-        return ['success' => false, 'error' => 'Não foi possível decodificar o token fornecido pela Google.'];
+        return ['success' => false, 'error' => 'Não foi possível validar o token do Google. Tente novamente em instantes.'];
     }
 
-    // Validação de segurança: Client ID
+    // Validação de segurança: Client ID (destinatário do token)
     $aud = $payload['aud'] ?? '';
-    if (!empty($expectedClientId) && $aud !== $expectedClientId) {
-        return ['success' => false, 'error' => "Client ID incompatível (esperado: {$expectedClientId}, recebido: {$aud})"];
+    if (!hash_equals((string)$expectedClientId, (string)$aud)) {
+        return ['success' => false, 'error' => 'Token do Google emitido para outra aplicação.'];
     }
 
     // Validação de segurança: Emissor
     $iss = $payload['iss'] ?? '';
     if ($iss !== 'accounts.google.com' && $iss !== 'https://accounts.google.com') {
-        return ['success' => false, 'error' => 'Emissor do token do Google inválido: ' . $iss];
+        return ['success' => false, 'error' => 'Emissor do token do Google inválido.'];
     }
 
-    // Validação de expiração (com margem de 600s para desvios de relógio de servidor)
+    // Validação de expiração (obrigatória, com margem curta de 60s para desvio de relógio)
     $exp = (int)($payload['exp'] ?? 0);
-    if ($exp > 0 && time() > ($exp + 600)) {
+    if ($exp <= 0 || time() > ($exp + 60)) {
         return ['success' => false, 'error' => 'Sessão do Google expirada. Por favor, tente novamente.'];
+    }
+
+    // O e-mail precisa estar verificado pelo Google
+    $emailVerified = $payload['email_verified'] ?? false;
+    if ($emailVerified !== true && $emailVerified !== 'true') {
+        return ['success' => false, 'error' => 'O e-mail da conta Google não está verificado.'];
     }
 
     return ['success' => true, 'payload' => $payload];
@@ -264,6 +264,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $user['avatar'] = $avatar;
             }
 
+            restoreRegenerateSession();
             $_SESSION['user_id'] = $user['id'];
             $_SESSION['user_name'] = $user['name'];
 
@@ -299,6 +300,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Não impede o login se tabela estiver com estrutura legada
             }
 
+            restoreRegenerateSession();
             $_SESSION['user_id'] = $newUserId;
             $_SESSION['user_name'] = $name;
 
@@ -343,6 +345,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($user && password_verify($password, $user['password_hash'])) {
 
+            restoreRegenerateSession();
             $_SESSION['user_id'] = $user['id'];
             $_SESSION['user_name'] = $user['name'];
 
@@ -410,6 +413,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['reg_email'] = $email;
         $_SESSION['reg_expires'] = time() + 600; // Validade de 10 minutos
         $_SESSION['reg_verified'] = false;
+        $_SESSION['reg_attempts'] = 0;
 
         require_once __DIR__ . '/../config/mailer.php';
         $mailRes = sendRegistrationVerificationEmail($email, $name, $code);
@@ -421,11 +425,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ]);
             exit;
         } else {
-            // Em contingência se SMTP ainda não estiver configurado nas secrets
+            // O código NUNCA é devolvido ao cliente: sem envio por e-mail, a verificação não pode ser concluída.
+            unset($_SESSION['reg_code'], $_SESSION['reg_email'], $_SESSION['reg_expires'], $_SESSION['reg_verified'], $_SESSION['reg_attempts']);
+
             if (!empty($mailRes['unconfigured'])) {
                 echo json_encode([
-                    'success' => true,
-                    'message' => 'Código de verificação de cadastro gerado: ' . $code . ' (Configure SMTP_USER e SMTP_PASS nas Secrets do GitHub para envio real).'
+                    'success' => false,
+                    'error' => 'O serviço de envio de e-mail está indisponível no momento. Não foi possível enviar o código de verificação. Tente novamente mais tarde.'
                 ]);
                 exit;
             }
@@ -447,10 +453,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $code = trim($data['code'] ?? '');
         $email = trim($data['email'] ?? '');
 
+        $attempts = (int)($_SESSION['reg_attempts'] ?? 0);
+        if (!empty($_SESSION['reg_code']) && $attempts >= VERIFICATION_MAX_ATTEMPTS) {
+            unset($_SESSION['reg_code'], $_SESSION['reg_email'], $_SESSION['reg_expires'], $_SESSION['reg_verified'], $_SESSION['reg_attempts']);
+            echo json_encode([
+                'success' => false,
+                'error' => 'Número máximo de tentativas excedido. Solicite um novo código de verificação.'
+            ]);
+            exit;
+        }
+
         if (
             !empty($_SESSION['reg_code']) &&
-            $code === $_SESSION['reg_code'] &&
-            (!empty($email) ? $email === ($_SESSION['reg_email'] ?? '') : true) &&
+            hash_equals((string)$_SESSION['reg_code'], $code) &&
+            !empty($email) && hash_equals((string)($_SESSION['reg_email'] ?? ''), $email) &&
             time() <= ($_SESSION['reg_expires'] ?? 0)
         ) {
             $_SESSION['reg_verified'] = true;
@@ -461,6 +477,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ]);
             exit;
         } else {
+            if (!empty($_SESSION['reg_code'])) {
+                $_SESSION['reg_attempts'] = $attempts + 1;
+            }
             echo json_encode([
                 'success' => false,
                 'error' => 'Código de verificação incorreto ou expirado. Verifique os 6 dígitos recebidos no seu e-mail.'
@@ -543,7 +562,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $sessionCode = $_SESSION['reg_code'] ?? '';
         $sessionEmail = $_SESSION['reg_email'] ?? '';
         $sessionExpires = $_SESSION['reg_expires'] ?? 0;
-        $isAlreadyVerified = !empty($_SESSION['reg_verified']) && ($sessionEmail === $email);
+        $isAlreadyVerified = !empty($_SESSION['reg_verified']) && ($sessionEmail === $email) && time() <= $sessionExpires;
 
         if (!$isAlreadyVerified) {
             if (empty($code)) {
@@ -554,7 +573,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 exit;
             }
 
-            if (empty($sessionCode) || $code !== $sessionCode || $email !== $sessionEmail || time() > $sessionExpires) {
+            $regAttempts = (int)($_SESSION['reg_attempts'] ?? 0);
+            if ($regAttempts >= VERIFICATION_MAX_ATTEMPTS) {
+                unset($_SESSION['reg_code'], $_SESSION['reg_email'], $_SESSION['reg_expires'], $_SESSION['reg_verified'], $_SESSION['reg_attempts']);
+                echo json_encode([
+                    'success' => false,
+                    'error' => 'Número máximo de tentativas excedido. Solicite um novo código de verificação.'
+                ]);
+                exit;
+            }
+
+            if (empty($sessionCode) || !hash_equals((string)$sessionCode, $code) || !hash_equals((string)$sessionEmail, $email) || time() > $sessionExpires) {
+                if (!empty($sessionCode)) {
+                    $_SESSION['reg_attempts'] = $regAttempts + 1;
+                }
                 echo json_encode([
                     'success' => false,
                     'error' => 'Código de verificação incorreto ou expirado. Verifique os 6 dígitos recebidos no seu e-mail ou solicite um novo envio.'
@@ -564,7 +596,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         // Limpa variáveis de validação de cadastro da sessão
-        unset($_SESSION['reg_code'], $_SESSION['reg_email'], $_SESSION['reg_expires'], $_SESSION['reg_verified']);
+        unset($_SESSION['reg_code'], $_SESSION['reg_email'], $_SESSION['reg_expires'], $_SESSION['reg_verified'], $_SESSION['reg_attempts']);
 
         $passHash = password_hash($password, PASSWORD_DEFAULT);
 
@@ -644,6 +676,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ]);
         } catch (Exception $e) {}
 
+        restoreRegenerateSession();
         $_SESSION['user_id'] = $userId;
         $_SESSION['user_name'] = $name;
 
@@ -693,6 +726,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'logout') {
 
+        $_SESSION = [];
+        if (ini_get('session.use_cookies')) {
+            $cp = session_get_cookie_params();
+            setcookie(session_name(), '', time() - 42000, $cp['path'], $cp['domain'], $cp['secure'], $cp['httponly']);
+        }
         session_destroy();
 
         echo json_encode([
@@ -782,7 +820,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // UPLOAD DO AVATAR
         // ----------------------------------------------------
 
-        $avatarUrl = 'uploads/avatars/13360247-de-icone-de-foto-avatar-padrao-simbolo-de-sinal-de-perfil-de-midia-social-vetor.jpg';
+        // Preserva o avatar atual: só é substituído se um novo arquivo válido for enviado
+        $avatarUrl = null;
 
 
         if (
@@ -812,6 +851,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 echo json_encode([
                     'success' => false,
                     'error' => 'Formato de imagem não permitido. Use JPG, JPEG, PNG ou WEBP.'
+                ]);
+
+                exit;
+            }
+
+            // Valida o conteúdo real do arquivo (não apenas a extensão do nome)
+            if (!isRealImageUpload($fileTmp, $ext)) {
+
+                echo json_encode([
+                    'success' => false,
+                    'error' => 'O arquivo enviado não é uma imagem válida (JPG, PNG ou WEBP).'
                 ]);
 
                 exit;
@@ -860,6 +910,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // ------------------------------------------------
 
             if (move_uploaded_file($fileTmp, $targetPath)) {
+
+                // Se existia um avatar customizado anterior do usuário, remove do disco
+                try {
+                    $oldAvatarStmt = $db->prepare("SELECT avatar FROM users WHERE id = ?");
+                    $oldAvatarStmt->execute([$userId]);
+                    $oldAvatar = $oldAvatarStmt->fetchColumn();
+                    if ($oldAvatar && strpos($oldAvatar, 'uploads/avatars/avatar_' . $userId . '_') === 0) {
+                        $oldPath = __DIR__ . '/../' . $oldAvatar;
+                        if (file_exists($oldPath)) {
+                            @unlink($oldPath);
+                        }
+                    }
+                } catch (Exception $eAvatar) {}
 
                 $avatarUrl =
                     'uploads/avatars/' .
@@ -1015,9 +1078,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Gera código de verificação dinâmico e seguro de 6 dígitos
         $code = strval(random_int(100000, 999999));
         $_SESSION['reset_code'] = $code;
-        $_SESSION['reset_email'] = $email;
+        $_SESSION['reset_email'] = $user['email'];
         $_SESSION['reset_expires'] = time() + 600; // Validade de 10 minutos
         $_SESSION['reset_verified'] = false;
+        $_SESSION['reset_attempts'] = 0;
 
         require_once __DIR__ . '/../config/mailer.php';
         $mailRes = sendVerificationEmail($email, $user['name'] ?? '', $code);
@@ -1029,11 +1093,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ]);
             exit;
         } else {
-            // Se o SMTP ainda não foi configurado pelo usuário, informa o código de contingência para permitir testes
+            // O código NUNCA é devolvido ao cliente: sem envio por e-mail, a redefinição não pode prosseguir.
+            unset($_SESSION['reset_code'], $_SESSION['reset_email'], $_SESSION['reset_expires'], $_SESSION['reset_verified'], $_SESSION['reset_attempts']);
+
             if (!empty($mailRes['unconfigured'])) {
                 echo json_encode([
-                    'success' => true,
-                    'message' => 'Código de verificação gerado: ' . $code . ' (Configure SMTP_USER e SMTP_PASS nas Secrets do repositório para envio de e-mail real).'
+                    'success' => false,
+                    'error' => 'O serviço de envio de e-mail está indisponível no momento. Não foi possível enviar o código de verificação. Tente novamente mais tarde.'
                 ]);
                 exit;
             }
@@ -1055,9 +1121,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $code = trim($data['code'] ?? '');
 
+        $attempts = (int)($_SESSION['reset_attempts'] ?? 0);
+        if (!empty($_SESSION['reset_code']) && $attempts >= VERIFICATION_MAX_ATTEMPTS) {
+            unset($_SESSION['reset_code'], $_SESSION['reset_email'], $_SESSION['reset_expires'], $_SESSION['reset_verified'], $_SESSION['reset_attempts']);
+            echo json_encode([
+                'success' => false,
+                'error' => 'Número máximo de tentativas excedido. Solicite um novo código de verificação.'
+            ]);
+            exit;
+        }
+
         if (
             !empty($_SESSION['reset_code']) &&
-            $code === $_SESSION['reset_code'] &&
+            hash_equals((string)$_SESSION['reset_code'], $code) &&
             time() <= ($_SESSION['reset_expires'] ?? 0)
         ) {
             $_SESSION['reset_verified'] = true;
@@ -1069,6 +1145,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
 
         } else {
+            if (!empty($_SESSION['reset_code'])) {
+                $_SESSION['reset_attempts'] = $attempts + 1;
+            }
             echo json_encode([
                 'success' => false,
                 'error' => 'Código incorreto ou expirado. Verifique os 6 dígitos recebidos ou solicite um novo envio.'
@@ -1086,8 +1165,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $newPass = $data['new_password'] ?? '';
 
-        $email = $_SESSION['reset_email'] ??
-                 trim($data['email'] ?? '');
+        // A redefinição só é permitida após a verificação do código (verify_code),
+        // e apenas para o e-mail armazenado na sessão — nunca para um e-mail enviado no corpo da requisição.
+        $email = $_SESSION['reset_email'] ?? '';
+
+        if (
+            empty($email) ||
+            ($_SESSION['reset_verified'] ?? false) !== true ||
+            time() > ($_SESSION['reset_expires'] ?? 0)
+        ) {
+
+            unset(
+                $_SESSION['reset_code'],
+                $_SESSION['reset_email'],
+                $_SESSION['reset_expires'],
+                $_SESSION['reset_verified'],
+                $_SESSION['reset_attempts']
+            );
+
+            echo json_encode([
+                'success' => false,
+                'error' => 'Verificação do código pendente ou sessão de redefinição expirada. Solicite um novo código.'
+            ]);
+
+            exit;
+        }
 
 
         if (
@@ -1098,17 +1200,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             echo json_encode([
                 'success' => false,
                 'error' => 'A nova senha deve ter pelo menos 6 caracteres.'
-            ]);
-
-            exit;
-        }
-
-
-        if (empty($email)) {
-
-            echo json_encode([
-                'success' => false,
-                'error' => 'Sessão de redefinição expirada.'
             ]);
 
             exit;
@@ -1137,7 +1228,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['reset_code'],
             $_SESSION['reset_email'],
             $_SESSION['reset_expires'],
-            $_SESSION['reset_verified']
+            $_SESSION['reset_verified'],
+            $_SESSION['reset_attempts']
         );
 
 

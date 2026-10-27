@@ -1,8 +1,7 @@
 <?php
 // api/orders.php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+require_once __DIR__ . '/../config/session.php';
+restoreStartSession();
 if (!headers_sent()) {
     header('Content-Type: application/json; charset=utf-8');
 }
@@ -41,9 +40,36 @@ if ($method === 'POST' && ($action === 'create' || $action === 'checkout')) {
     $shippingState = trim($data['shipping_state'] ?? '');
     $shippingZip = trim($data['shipping_zip'] ?? '');
 
-    if (empty($items)) {
+    if (empty($items) || !is_array($items)) {
         echo json_encode(['success' => false, 'error' => 'O carrinho está vazio.']);
         exit;
+    }
+
+    // Validação no servidor: forma de pagamento padronizada dentre as opções aceitas pelo sistema
+    $normalizedPayment = strtolower(trim((string)$paymentMethod));
+    if (in_array($normalizedPayment, ['credit', 'credit_card', 'card', 'cartao', 'cartao_credito'], true)) {
+        $paymentMethod = 'credit';
+    } elseif (in_array($normalizedPayment, ['pix'], true)) {
+        $paymentMethod = 'pix';
+    } elseif (in_array($normalizedPayment, ['boleto', 'boleto_bancario'], true)) {
+        $paymentMethod = 'boleto';
+    } else {
+        echo json_encode(['success' => false, 'error' => 'Forma de pagamento inválida. Selecione Pix, Cartão de Crédito ou Boleto.']);
+        exit;
+    }
+
+    // Validação no servidor: cada item precisa de produto válido e quantidade inteira positiva
+    foreach ($items as $chkItem) {
+        $chkProductId = is_array($chkItem) ? ($chkItem['product_id'] ?? $chkItem['id'] ?? null) : null;
+        $chkQty = is_array($chkItem) ? ($chkItem['quantity'] ?? 1) : null;
+
+        if (
+            $chkProductId === null || filter_var($chkProductId, FILTER_VALIDATE_INT) === false || (int)$chkProductId <= 0 ||
+            filter_var($chkQty, FILTER_VALIDATE_INT) === false || (int)$chkQty < 1 || (int)$chkQty > 1000
+        ) {
+            echo json_encode(['success' => false, 'error' => 'Item inválido no carrinho: a quantidade deve ser um número inteiro maior que zero.']);
+            exit;
+        }
     }
 
     $cleanZip = preg_replace('/\D/', '', $shippingZip);
@@ -60,7 +86,7 @@ if ($method === 'POST' && ($action === 'create' || $action === 'checkout')) {
         $orderItemsData = [];
 
         foreach ($items as $item) {
-            $productId = (int)($item['product_id'] ?? 0);
+            $productId = (int)($item['product_id'] ?? $item['id'] ?? 0);
             $qty = (int)($item['quantity'] ?? 1);
 
             // Buscar produto atualizado do banco

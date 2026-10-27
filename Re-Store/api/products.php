@@ -1,8 +1,8 @@
 <?php
 // api/products.php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+require_once __DIR__ . '/../config/session.php';
+require_once __DIR__ . '/../config/upload_security.php';
+restoreStartSession();
 if (!headers_sent()) {
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
@@ -340,6 +340,11 @@ if ($method === 'POST' && ($action === 'create' || $action === 'add')) {
         exit;
     }
 
+    if ($stock < 1) {
+        echo json_encode(['success' => false, 'error' => 'O estoque deve ser de pelo menos 1 unidade.']);
+        exit;
+    }
+
     require_once __DIR__ . '/../config/locations.php';
     if (!isValidBrazilLocation($location)) {
         echo json_encode(['success' => false, 'error' => 'Por favor, selecione um município/UF válido da lista pré-determinada.']);
@@ -347,75 +352,92 @@ if ($method === 'POST' && ($action === 'create' || $action === 'add')) {
     }
 
     // Cálculo automático de pontos verdes sustentáveis (1 ponto por cada R$ 1,00)
-    $points = max(1, (int)round($price * BUYER_POINTS_PER_REAL));
-
-    $stmt = $db->prepare("INSERT INTO products (seller_id, name, description, price, category, product_condition, material, stock, location, points) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-    $stmt->execute([$sellerId, $name, $description, $price, $category, $condition, $material, $stock, $location, $points]);
-    $productId = $db->lastInsertId();
-
     // Processamento de Upload Local de Múltiplas Imagens (1 foto obrigatória, até 5 fotos)
-    $uploadedImages = [];
     $uploadDir = __DIR__ . '/../uploads/products/';
     if (!is_dir($uploadDir)) {
         mkdir($uploadDir, 0755, true);
     }
     $allowedExts = ['jpg', 'jpeg', 'png', 'webp'];
 
-    if (isset($_FILES['images']) && is_array($_FILES['images']['name'])) {
-        $count = count($_FILES['images']['name']);
-        $maxUploads = min($count, 5);
+    $db->beginTransaction();
+    $movedFiles = [];
 
-        for ($key = 0; $key < $maxUploads; $key++) {
-            if ($_FILES['images']['error'][$key] === UPLOAD_ERR_OK) {
-                $fileTmp = $_FILES['images']['tmp_name'][$key];
-                $filename = $_FILES['images']['name'][$key];
-                $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+    try {
+        $stmt = $db->prepare("INSERT INTO products (seller_id, name, description, price, category, product_condition, material, stock, location, points) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        $stmt->execute([$sellerId, $name, $description, $price, $category, $condition, $material, $stock, $location, $points]);
+        $productId = $db->lastInsertId();
 
-                if (in_array($ext, $allowedExts)) {
-                    $newFileName = 'prod_' . $productId . '_' . uniqid() . '_' . $key . '.' . $ext;
-                    $targetPath = $uploadDir . $newFileName;
+        $uploadedImages = [];
+        if (isset($_FILES['images']) && is_array($_FILES['images']['name'])) {
+            $count = count($_FILES['images']['name']);
+            $maxUploads = min($count, 5);
 
-                    if (move_uploaded_file($fileTmp, $targetPath)) {
-                        $relUrl = 'uploads/products/' . $newFileName;
-                        $isPrimary = (count($uploadedImages) === 0) ? 1 : 0;
-                        
-                        $imgStmt = $db->prepare("INSERT INTO product_images (product_id, image_url, is_primary, image_order) VALUES (?, ?, ?, ?)");
-                        $imgStmt->execute([$productId, $relUrl, $isPrimary, count($uploadedImages)]);
-                        $uploadedImages[] = $relUrl;
+            for ($key = 0; $key < $maxUploads; $key++) {
+                if ($_FILES['images']['error'][$key] === UPLOAD_ERR_OK) {
+                    $fileTmp = $_FILES['images']['tmp_name'][$key];
+                    $filename = $_FILES['images']['name'][$key];
+                    $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+
+                    if (in_array($ext, $allowedExts, true) && isRealImageUpload($fileTmp, $ext)) {
+                        $newFileName = 'prod_' . $productId . '_' . uniqid() . '_' . $key . '.' . $ext;
+                        $targetPath = $uploadDir . $newFileName;
+
+                        if (move_uploaded_file($fileTmp, $targetPath)) {
+                            $movedFiles[] = $targetPath;
+                            $relUrl = 'uploads/products/' . $newFileName;
+                            $isPrimary = (count($uploadedImages) === 0) ? 1 : 0;
+                            
+                            $imgStmt = $db->prepare("INSERT INTO product_images (product_id, image_url, is_primary, image_order) VALUES (?, ?, ?, ?)");
+                            $imgStmt->execute([$productId, $relUrl, $isPrimary, count($uploadedImages)]);
+                            $uploadedImages[] = $relUrl;
+                        }
                     }
                 }
             }
-        }
-    } elseif (isset($_FILES['images']) && is_string($_FILES['images']['name']) && $_FILES['images']['error'] === UPLOAD_ERR_OK) {
-        $fileTmp = $_FILES['images']['tmp_name'];
-        $filename = $_FILES['images']['name'];
-        $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
-        if (in_array($ext, $allowedExts)) {
-            $newFileName = 'prod_' . $productId . '_' . uniqid() . '_0.' . $ext;
-            $targetPath = $uploadDir . $newFileName;
-            if (move_uploaded_file($fileTmp, $targetPath)) {
-                $relUrl = 'uploads/products/' . $newFileName;
-                $imgStmt = $db->prepare("INSERT INTO product_images (product_id, image_url, is_primary, image_order) VALUES (?, ?, 1, 0)");
-                $imgStmt->execute([$productId, $relUrl]);
-                $uploadedImages[] = $relUrl;
+        } elseif (isset($_FILES['images']) && is_string($_FILES['images']['name']) && $_FILES['images']['error'] === UPLOAD_ERR_OK) {
+            $fileTmp = $_FILES['images']['tmp_name'];
+            $filename = $_FILES['images']['name'];
+            $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+            if (in_array($ext, $allowedExts, true) && isRealImageUpload($fileTmp, $ext)) {
+                $newFileName = 'prod_' . $productId . '_' . uniqid() . '_0.' . $ext;
+                $targetPath = $uploadDir . $newFileName;
+                if (move_uploaded_file($fileTmp, $targetPath)) {
+                    $movedFiles[] = $targetPath;
+                    $relUrl = 'uploads/products/' . $newFileName;
+                    $imgStmt = $db->prepare("INSERT INTO product_images (product_id, image_url, is_primary, image_order) VALUES (?, ?, 1, 0)");
+                    $imgStmt->execute([$productId, $relUrl]);
+                    $uploadedImages[] = $relUrl;
+                }
             }
         }
-    }
 
-    // Se nenhuma imagem válida foi enviada, cancelar o cadastro e retornar erro (1 foto obrigatória)
-    if (empty($uploadedImages)) {
-        $db->prepare("DELETE FROM products WHERE id = ?")->execute([$productId]);
-        echo json_encode(['success' => false, 'error' => 'É obrigatório enviar pelo menos 1 foto válida do produto (JPG, PNG ou WEBP).']);
+        // Se nenhuma imagem válida foi enviada, cancelar o cadastro e retornar erro (1 foto obrigatória)
+        if (empty($uploadedImages)) {
+            throw new Exception('É obrigatório enviar pelo menos 1 foto válida do produto (JPG, PNG ou WEBP).');
+        }
+
+        $db->commit();
+
+        echo json_encode([
+            'success' => true, 
+            'message' => 'Produto cadastrado com sucesso!', 
+            'product_id' => $productId,
+            'images_count' => count($uploadedImages)
+        ]);
+        exit;
+
+    } catch (Exception $e) {
+        if ($db->inTransaction()) {
+            $db->rollBack();
+        }
+        foreach ($movedFiles as $mf) {
+            if (file_exists($mf)) {
+                @unlink($mf);
+            }
+        }
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
         exit;
     }
-
-    echo json_encode([
-        'success' => true, 
-        'message' => 'Produto cadastrado com sucesso!', 
-        'product_id' => $productId,
-        'images_count' => count($uploadedImages)
-    ]);
-    exit;
 }
 
 // ----------------------------------------------------
@@ -476,103 +498,147 @@ if ($method === 'POST' && ($action === 'update' || $action === 'edit')) {
         exit;
     }
 
-    if ($isAdmin) {
-        $upStmt = $db->prepare("UPDATE products SET 
-            name = ?, description = ?, price = ?, category = ?, product_condition = ?, material = ?, stock = ?, location = ?, points = ? 
-            WHERE id = ?");
-        $upStmt->execute([$name, $description, $price, $category, $condition, $material, $stock, $location, $points, $productId]);
-    } else {
-        $upStmt = $db->prepare("UPDATE products SET 
-            name = ?, description = ?, price = ?, category = ?, product_condition = ?, material = ?, stock = ?, location = ?, points = ? 
-            WHERE id = ? AND seller_id = ?");
-        $upStmt->execute([$name, $description, $price, $category, $condition, $material, $stock, $location, $points, $productId, $sellerId]);
+    if ($stock < 0) {
+        echo json_encode(['success' => false, 'error' => 'O estoque não pode ser negativo.']);
+        exit;
     }
 
-    // 1. Processar exclusão de imagens removidas pelo usuário
+    // 1. Identificar imagens marcadas para remoção (apenas imagens pertencentes a este produto)
     $removedImageIds = $_POST['removed_image_ids'] ?? [];
     if (!is_array($removedImageIds) && !empty($removedImageIds)) {
         $removedImageIds = explode(',', $removedImageIds);
     }
-    if (!empty($removedImageIds)) {
-        foreach ($removedImageIds as $remId) {
-            $remId = (int)$remId;
-            if ($remId > 0) {
-                $imgRow = $db->prepare("SELECT image_url FROM product_images WHERE id = ? AND product_id = ?");
-                $imgRow->execute([$remId, $productId]);
-                $imgData = $imgRow->fetch();
-                if ($imgData) {
-                    $delStmt = $db->prepare("DELETE FROM product_images WHERE id = ? AND product_id = ?");
-                    $delStmt->execute([$remId, $productId]);
-                    // Se o arquivo for local, tentar remover do disco
-                    $filePath = __DIR__ . '/../' . $imgData['image_url'];
-                    if (file_exists($filePath) && strpos($imgData['image_url'], 'uploads/products/') === 0) {
-                        @unlink($filePath);
-                    }
-                }
-            }
+    if (!is_array($removedImageIds)) {
+        $removedImageIds = [];
+    }
+    $removedImageIds = array_values(array_unique(array_filter(array_map('intval', $removedImageIds), function ($v) {
+        return $v > 0;
+    })));
+
+    $curImgStmt = $db->prepare("SELECT id, image_url FROM product_images WHERE product_id = ?");
+    $curImgStmt->execute([$productId]);
+    $currentImages = $curImgStmt->fetchAll();
+
+    $imagesToRemove = [];
+    foreach ($currentImages as $curImg) {
+        if (in_array((int)$curImg['id'], $removedImageIds, true)) {
+            $imagesToRemove[] = $curImg;
         }
     }
+    $remainingImageCount = count($currentImages) - count($imagesToRemove);
 
-    // 2. Contar quantas imagens o produto tem atualmente
-    $curImgStmt = $db->prepare("SELECT COUNT(*) as total FROM product_images WHERE product_id = ?");
-    $curImgStmt->execute([$productId]);
-    $currentImageCount = (int)$curImgStmt->fetch()['total'];
-
-    // 3. Processar upload de novas imagens (respeitando limite de 5 fotos no total)
-    $uploadedImages = [];
-    $uploadDir = __DIR__ . '/../uploads/products/';
-    if (!is_dir($uploadDir)) {
-        mkdir($uploadDir, 0755, true);
-    }
+    // 2. Selecionar novas imagens válidas (limite de 5 fotos no total, validando o conteúdo real)
     $allowedExts = ['jpg', 'jpeg', 'png', 'webp'];
+    $availableSlots = max(0, 5 - $remainingImageCount);
+    $newUploads = [];
 
     if (isset($_FILES['images']) && is_array($_FILES['images']['name'])) {
         $count = count($_FILES['images']['name']);
-        $availableSlots = max(0, 5 - $currentImageCount);
-        $maxUploads = min($count, $availableSlots);
-
-        for ($key = 0; $key < $maxUploads; $key++) {
-            if ($_FILES['images']['error'][$key] === UPLOAD_ERR_OK) {
-                $fileTmp = $_FILES['images']['tmp_name'][$key];
-                $filename = $_FILES['images']['name'][$key];
-                $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
-
-                if (in_array($ext, $allowedExts)) {
-                    $newFileName = 'prod_' . $productId . '_' . uniqid() . '_' . $key . '.' . $ext;
-                    $targetPath = $uploadDir . $newFileName;
-
-                    if (move_uploaded_file($fileTmp, $targetPath)) {
-                        $relUrl = 'uploads/products/' . $newFileName;
-                        $imgStmt = $db->prepare("INSERT INTO product_images (product_id, image_url, is_primary, image_order) VALUES (?, ?, 0, ?)");
-                        $imgStmt->execute([$productId, $relUrl, $currentImageCount + count($uploadedImages)]);
-                        $uploadedImages[] = $relUrl;
-                    }
-                }
+        for ($key = 0; $key < $count && count($newUploads) < $availableSlots; $key++) {
+            if ($_FILES['images']['error'][$key] !== UPLOAD_ERR_OK) {
+                continue;
             }
+            $fileTmp = $_FILES['images']['tmp_name'][$key];
+            $ext = strtolower(pathinfo($_FILES['images']['name'][$key], PATHINFO_EXTENSION));
+            if (in_array($ext, $allowedExts, true) && isRealImageUpload($fileTmp, $ext)) {
+                $newUploads[] = ['tmp' => $fileTmp, 'ext' => $ext, 'key' => $key];
+            }
+        }
+    } elseif (isset($_FILES['images']) && is_string($_FILES['images']['name']) && $_FILES['images']['error'] === UPLOAD_ERR_OK && $availableSlots > 0) {
+        $fileTmp = $_FILES['images']['tmp_name'];
+        $ext = strtolower(pathinfo($_FILES['images']['name'], PATHINFO_EXTENSION));
+        if (in_array($ext, $allowedExts, true) && isRealImageUpload($fileTmp, $ext)) {
+            $newUploads[] = ['tmp' => $fileTmp, 'ext' => $ext, 'key' => 0];
         }
     }
 
-    // 4. Garantir que o produto continue tendo pelo menos 1 imagem válida
-    $finalImgStmt = $db->prepare("SELECT id, is_primary FROM product_images WHERE product_id = ? ORDER BY is_primary DESC, id ASC");
-    $finalImgStmt->execute([$productId]);
-    $finalImages = $finalImgStmt->fetchAll();
-
-    if (empty($finalImages)) {
+    // 3. Validar ANTES de qualquer alteração: o produto deve manter pelo menos 1 foto válida
+    if ($remainingImageCount + count($newUploads) < 1) {
         echo json_encode(['success' => false, 'error' => 'O produto precisa ter pelo menos 1 foto. Não é possível remover todas as fotos.']);
         exit;
     }
 
-    // Garantir que pelo menos uma imagem esteja marcada como is_primary = 1
-    $hasPrimary = false;
-    foreach ($finalImages as $fImg) {
-        if ((int)$fImg['is_primary'] === 1) {
-            $hasPrimary = true;
-            break;
-        }
+    $uploadDir = __DIR__ . '/../uploads/products/';
+    if (!is_dir($uploadDir)) {
+        mkdir($uploadDir, 0755, true);
     }
-    if (!$hasPrimary) {
-        $firstId = $finalImages[0]['id'];
-        $db->prepare("UPDATE product_images SET is_primary = 1 WHERE id = ?")->execute([$firstId]);
+
+    // 4. Aplicar todas as alterações de banco de forma atômica
+    $movedFiles = [];
+    $db->beginTransaction();
+    try {
+        if ($isAdmin) {
+            $upStmt = $db->prepare("UPDATE products SET 
+                name = ?, description = ?, price = ?, category = ?, product_condition = ?, material = ?, stock = ?, location = ?, points = ? 
+                WHERE id = ?");
+            $upStmt->execute([$name, $description, $price, $category, $condition, $material, $stock, $location, $points, $productId]);
+        } else {
+            $upStmt = $db->prepare("UPDATE products SET 
+                name = ?, description = ?, price = ?, category = ?, product_condition = ?, material = ?, stock = ?, location = ?, points = ? 
+                WHERE id = ? AND seller_id = ?");
+            $upStmt->execute([$name, $description, $price, $category, $condition, $material, $stock, $location, $points, $productId, $sellerId]);
+        }
+
+        // Remover registros das imagens excluídas pelo usuário
+        $delStmt = $db->prepare("DELETE FROM product_images WHERE id = ? AND product_id = ?");
+        foreach ($imagesToRemove as $imgData) {
+            $delStmt->execute([(int)$imgData['id'], $productId]);
+        }
+
+        // Salvar novas imagens
+        $imgStmt = $db->prepare("INSERT INTO product_images (product_id, image_url, is_primary, image_order) VALUES (?, ?, 0, ?)");
+        foreach ($newUploads as $idx => $up) {
+            $newFileName = 'prod_' . $productId . '_' . uniqid() . '_' . $up['key'] . '.' . $up['ext'];
+            $targetPath = $uploadDir . $newFileName;
+            if (move_uploaded_file($up['tmp'], $targetPath)) {
+                $movedFiles[] = $targetPath;
+                $imgStmt->execute([$productId, 'uploads/products/' . $newFileName, $remainingImageCount + count($movedFiles) - 1]);
+            }
+        }
+
+        // Garantir que o produto continue tendo pelo menos 1 imagem válida
+        $finalImgStmt = $db->prepare("SELECT id, is_primary FROM product_images WHERE product_id = ? ORDER BY is_primary DESC, id ASC");
+        $finalImgStmt->execute([$productId]);
+        $finalImages = $finalImgStmt->fetchAll();
+
+        if (empty($finalImages)) {
+            throw new Exception('O produto precisa ter pelo menos 1 foto. Não é possível remover todas as fotos.');
+        }
+
+        // Garantir que pelo menos uma imagem esteja marcada como is_primary = 1
+        $hasPrimary = false;
+        foreach ($finalImages as $fImg) {
+            if ((int)$fImg['is_primary'] === 1) {
+                $hasPrimary = true;
+                break;
+            }
+        }
+        if (!$hasPrimary) {
+            $firstId = $finalImages[0]['id'];
+            $db->prepare("UPDATE product_images SET is_primary = 1 WHERE id = ?")->execute([$firstId]);
+        }
+
+        $db->commit();
+    } catch (Exception $e) {
+        if ($db->inTransaction()) {
+            $db->rollBack();
+        }
+        // Descartar arquivos novos gravados nesta tentativa; os originais permanecem intactos
+        foreach ($movedFiles as $movedFile) {
+            if (file_exists($movedFile)) {
+                @unlink($movedFile);
+            }
+        }
+        echo json_encode(['success' => false, 'error' => 'Não foi possível atualizar o produto: ' . $e->getMessage()]);
+        exit;
+    }
+
+    // 5. Somente após a confirmação da transação, remover do disco os arquivos das imagens excluídas
+    foreach ($imagesToRemove as $imgData) {
+        $filePath = __DIR__ . '/../' . $imgData['image_url'];
+        if (strpos($imgData['image_url'], 'uploads/products/') === 0 && file_exists($filePath)) {
+            @unlink($filePath);
+        }
     }
 
     echo json_encode([

@@ -1,8 +1,8 @@
 <?php
 // api/reviews.php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+require_once __DIR__ . '/../config/session.php';
+require_once __DIR__ . '/../config/upload_security.php';
+restoreStartSession();
 if (!headers_sent()) {
     header('Content-Type: application/json; charset=utf-8');
 }
@@ -73,7 +73,7 @@ function handleReviewPhotoUploads($reviewId, $uploadDir, $allowedExts, $maxAllow
     foreach ($files as $f) {
         if ($savedCount >= $maxAllowed) break;
         $ext = strtolower(pathinfo($f['name'], PATHINFO_EXTENSION));
-        if (!in_array($ext, $allowedExts)) {
+        if (!in_array($ext, $allowedExts) || !isRealImageUpload($f['tmp'], $ext)) {
             continue;
         }
         // Limite de 5MB por foto
@@ -313,6 +313,7 @@ if ($method === 'POST' && $action === 'update') {
             $deleteImageIds = json_decode($deleteImageIds, true) ?? explode(',', $deleteImageIds);
         }
 
+        $filesToDelete = [];
         if (!empty($deleteImageIds)) {
             foreach ($deleteImageIds as $delId) {
                 $delId = (int)$delId;
@@ -321,10 +322,7 @@ if ($method === 'POST' && $action === 'update') {
                 $chkImg->execute([$delId, $reviewId]);
                 $imgRow = $chkImg->fetch();
                 if ($imgRow) {
-                    $filePath = __DIR__ . '/../' . $imgRow['image_url'];
-                    if (file_exists($filePath)) {
-                        @unlink($filePath);
-                    }
+                    $filesToDelete[] = __DIR__ . '/../' . $imgRow['image_url'];
                     $db->prepare("DELETE FROM review_images WHERE id = ?")->execute([$delId]);
                 }
             }
@@ -352,6 +350,13 @@ if ($method === 'POST' && $action === 'update') {
         $db->prepare("UPDATE products SET rating = ?, total_reviews = ? WHERE id = ?")->execute([$avgRating, $totalReviews, $productId]);
 
         $db->commit();
+
+        // Somente após confirmação da transação, remove do disco
+        foreach ($filesToDelete as $delFile) {
+            if (file_exists($delFile)) {
+                @unlink($delFile);
+            }
+        }
 
         // Buscar imagens atualizadas para resposta
         $imgListStmt = $db->prepare("SELECT id, image_url FROM review_images WHERE review_id = ? ORDER BY id ASC");
@@ -402,15 +407,13 @@ if ($method === 'POST' && $action === 'delete') {
 
     $db->beginTransaction();
     try {
-        // Remover arquivos de fotos do disco
+        // Coletar arquivos de fotos para remoção segura do disco após commit
         $imgStmt = $db->prepare("SELECT image_url FROM review_images WHERE review_id = ?");
         $imgStmt->execute([$reviewId]);
         $imgs = $imgStmt->fetchAll();
+        $filesToDelete = [];
         foreach ($imgs as $im) {
-            $filePath = __DIR__ . '/../' . $im['image_url'];
-            if (file_exists($filePath)) {
-                @unlink($filePath);
-            }
+            $filesToDelete[] = __DIR__ . '/../' . $im['image_url'];
         }
 
         // Excluir registros das tabelas relacionadas
@@ -429,6 +432,14 @@ if ($method === 'POST' && $action === 'delete') {
         $db->prepare("UPDATE products SET rating = ?, total_reviews = ? WHERE id = ?")->execute([$avgRating, $totalReviews, $productId]);
 
         $db->commit();
+
+        // Somente após o commit, deleta arquivos do disco
+        foreach ($filesToDelete as $filePath) {
+            if (file_exists($filePath)) {
+                @unlink($filePath);
+            }
+        }
+
         echo json_encode(['success' => true, 'message' => 'Avaliação removida com sucesso!']);
         exit;
     } catch (Exception $e) {
@@ -529,20 +540,36 @@ if ($method === 'POST' && $action === 'create') {
 
         $db->prepare("UPDATE products SET rating = ?, total_reviews = ? WHERE id = ?")->execute([$avgRating, $totalReviews, $productId]);
 
-        // Bônus de Pontos Verdes por avaliar um produto
+        // Bônus de Pontos Verdes por avaliar um produto (concedido uma única vez por produto comprado).
+        // Excluir e recriar a avaliação não gera novo crédito: o histórico de pontos é consultado antes.
         $reviewBonusPoints = POINTS_REVIEW_BONUS;
-        $db->prepare("UPDATE users SET points = points + ? WHERE id = ?")->execute([$reviewBonusPoints, $userId]);
-        $db->prepare("INSERT INTO points_history (user_id, points, type, description, order_id) VALUES (?, ?, 'review', ?, ?)")
-           ->execute([$userId, $reviewBonusPoints, 'Bônus por avaliar um produto comprado', $orderId]);
+        $bonusMarker = "[produto #{$productId}]";
+        $bonusCheck = $db->prepare("SELECT COUNT(*) FROM points_history WHERE user_id = ? AND type = 'review' AND (
+            (order_id = ? AND description LIKE ?) OR 
+            (order_id = ? AND description = 'Bônus por avaliar um produto comprado')
+        )");
+        $bonusCheck->execute([$userId, $orderId, '%' . $bonusMarker . '%', $orderId]);
+        $bonusAlreadyGranted = ((int)$bonusCheck->fetchColumn()) > 0;
 
-        updateUserEngagementLevel($db, $userId);
+        if (!$bonusAlreadyGranted) {
+            $db->prepare("UPDATE users SET points = points + ? WHERE id = ?")->execute([$reviewBonusPoints, $userId]);
+            $db->prepare("INSERT INTO points_history (user_id, points, type, description, order_id) VALUES (?, ?, 'review', ?, ?)")
+               ->execute([$userId, $reviewBonusPoints, "Bônus por avaliar um produto comprado {$bonusMarker}", $orderId]);
+
+            updateUserEngagementLevel($db, $userId);
+        } else {
+            $reviewBonusPoints = 0;
+        }
 
         $db->commit();
 
         $photoMsg = $photosSaved > 0 ? " com {$photosSaved} foto(s) anexada(s)" : "";
+        $pointsMsg = $reviewBonusPoints > 0
+            ? " Você ganhou +{$reviewBonusPoints} Pontos Verdes."
+            : " Os Pontos Verdes desta avaliação já haviam sido creditados anteriormente.";
         echo json_encode([
             'success' => true, 
-            'message' => "Avaliação publicada com sucesso{$photoMsg}! Você ganhou +{$reviewBonusPoints} Pontos Verdes.",
+            'message' => "Avaliação publicada com sucesso{$photoMsg}!{$pointsMsg}",
             'review_id' => $reviewId
         ]);
         exit;

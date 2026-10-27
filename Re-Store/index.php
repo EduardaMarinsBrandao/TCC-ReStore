@@ -1,6 +1,7 @@
 <?php
 // index.php - Marketplace Sustentável Re-Store
-session_start();
+require_once __DIR__ . '/config/session.php';
+restoreStartSession();
 require_once __DIR__ . '/config/database.php';
 require_once __DIR__ . '/config/db_init.php';
 
