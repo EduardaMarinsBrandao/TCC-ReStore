@@ -87,6 +87,8 @@ runTest('Verificação de arquivos fundamentais do projeto', function() {
         $baseDir . DIRECTORY_SEPARATOR . 'config' . DIRECTORY_SEPARATOR . 'database.php',
         $baseDir . DIRECTORY_SEPARATOR . 'config' . DIRECTORY_SEPARATOR . 'db_init.php',
         $baseDir . DIRECTORY_SEPARATOR . 'config' . DIRECTORY_SEPARATOR . 'mailer.php',
+        $baseDir . DIRECTORY_SEPARATOR . 'config' . DIRECTORY_SEPARATOR . 'session.php',
+        $baseDir . DIRECTORY_SEPARATOR . 'config' . DIRECTORY_SEPARATOR . 'upload_security.php',
         $baseDir . DIRECTORY_SEPARATOR . 'api' . DIRECTORY_SEPARATOR . 'products.php',
         $baseDir . DIRECTORY_SEPARATOR . 'api' . DIRECTORY_SEPARATOR . 'auth.php',
         $baseDir . DIRECTORY_SEPARATOR . 'api' . DIRECTORY_SEPARATOR . 'orders.php',
@@ -217,7 +219,50 @@ runTest('Integridade de histórico de pontos e relacionamentos com usuários', f
 });
 
 // --------------------------------------------------------------------------
-// 8. Teste de Regra de Negócio: Bloqueio de Cadastro Sem E-mail Validado
+// 8. Teste de Segurança: Não Vazamento de Códigos de Verificação (Threat Model)
+// --------------------------------------------------------------------------
+runTest('Segurança: API não vaza código de verificação localmente na resposta HTTP', function() {
+    // 1. Testar envio de código de cadastro (send_register_code)
+    $outReg = callApiIsolated('api/auth.php', [
+        'action' => 'send_register_code',
+        'email' => 'seguranca.novousuario@restore.com',
+        'name' => 'Usuário Teste Segurança'
+    ], 'POST');
+    $jsonReg = json_decode($outReg, true);
+
+    if (!is_array($jsonReg)) {
+        throw new Exception("Resposta de send_register_code não é JSON válido: " . substr($outReg, 0, 150));
+    }
+    // A API não pode devolver o código em nenhum campo do JSON nem no corpo da resposta
+    if (isset($jsonReg['code']) || isset($jsonReg['reg_code'])) {
+        throw new Exception("Vulnerabilidade detectada: API expôs código de verificação no JSON!");
+    }
+    if (preg_match('/c[oó]digo.*?\b\d{6}\b/i', $outReg)) {
+        throw new Exception("Vulnerabilidade detectada: API vazou código de 6 dígitos no corpo da mensagem!");
+    }
+
+    // 2. Testar recuperação de senha (forgot_password)
+    $outForgot = callApiIsolated('api/auth.php', [
+        'action' => 'forgot_password',
+        'email' => 'comprador@restore.com'
+    ], 'POST');
+    $jsonForgot = json_decode($outForgot, true);
+
+    if (!is_array($jsonForgot)) {
+        throw new Exception("Resposta de forgot_password não é JSON válido: " . substr($outForgot, 0, 150));
+    }
+    if (isset($jsonForgot['code']) || isset($jsonForgot['reset_code'])) {
+        throw new Exception("Vulnerabilidade detectada: API expôs código de redefinição no JSON!");
+    }
+    if (preg_match('/c[oó]digo.*?\b\d{6}\b/i', $outForgot)) {
+        throw new Exception("Vulnerabilidade detectada: API vazou código de 6 dígitos no corpo da resposta de reset!");
+    }
+
+    return true;
+});
+
+// --------------------------------------------------------------------------
+// 9. Teste de Regra de Negócio: Bloqueio de Cadastro Sem E-mail Validado
 // --------------------------------------------------------------------------
 runTest('API: Bloqueio de criação de conta sem validação de e-mail (código obrigatório)', function() {
     $output = callApiIsolated('api/auth.php', [
@@ -242,7 +287,130 @@ runTest('API: Bloqueio de criação de conta sem validação de e-mail (código 
 });
 
 // --------------------------------------------------------------------------
-// 9. Teste: Bloqueio de Avaliação sem Compra Comprovada
+// 10. Teste de Fluxo: Validação de Código e Cadastro Seguro com E-mail Validado
+// --------------------------------------------------------------------------
+runTest('API: Validação de código e cadastro seguro com e-mail validado', function() {
+    $db = getDbConnection();
+    $testEmail = 'seguro.' . uniqid() . '@restore.com';
+    $mockCode = '654321';
+
+    // 1. Tentar validar com código incorreto deve ser rejeitado pela API
+    $outWrong = callApiIsolated('api/auth.php', [
+        'action' => 'verify_register_code',
+        'email' => $testEmail,
+        'code' => '000000'
+    ], 'POST', [
+        'reg_code' => $mockCode,
+        'reg_email' => $testEmail,
+        'reg_expires' => time() + 600,
+        'reg_attempts' => 0
+    ]);
+    $jsonWrong = json_decode($outWrong, true);
+    if (!empty($jsonWrong['success'])) {
+        throw new Exception("API validou código incorreto indevidamente");
+    }
+
+    // 2. Validar com o código correto deve retornar sucesso
+    $outCorrect = callApiIsolated('api/auth.php', [
+        'action' => 'verify_register_code',
+        'email' => $testEmail,
+        'code' => $mockCode
+    ], 'POST', [
+        'reg_code' => $mockCode,
+        'reg_email' => $testEmail,
+        'reg_expires' => time() + 600,
+        'reg_attempts' => 0
+    ]);
+    $jsonCorrect = json_decode($outCorrect, true);
+    if (empty($jsonCorrect['success'])) {
+        throw new Exception("Falha ao validar código correto na API: " . ($jsonCorrect['error'] ?? ''));
+    }
+
+    // 3. Efetuar cadastro seguro com a sessão validada
+    $outRegister = callApiIsolated('api/auth.php', [
+        'action' => 'register',
+        'name' => 'Usuário Verificado',
+        'email' => $testEmail,
+        'password' => 'senhaSegura123',
+        'phone' => '(11) 97777-6666'
+    ], 'POST', [
+        'reg_verified' => true,
+        'reg_email' => $testEmail,
+        'reg_expires' => time() + 600
+    ]);
+    $jsonRegister = json_decode($outRegister, true);
+    if (empty($jsonRegister['success']) || empty($jsonRegister['user'])) {
+        throw new Exception("Falha ao cadastrar usuário com e-mail validado: " . ($jsonRegister['error'] ?? ''));
+    }
+
+    // 4. Confirmar que usuário foi persistido no banco e recebeu bônus de boas-vindas
+    $stmt = $db->prepare("SELECT id, name, email, points FROM users WHERE email = ?");
+    $stmt->execute([$testEmail]);
+    $created = $stmt->fetch();
+    if (!$created) {
+        throw new Exception("Usuário cadastrado não foi encontrado no banco de dados");
+    }
+    if ((int)$created['points'] <= 0) {
+        throw new Exception("Usuário não recebeu pontuação de boas-vindas");
+    }
+
+    return true;
+});
+
+// --------------------------------------------------------------------------
+// 11. Teste de Segurança: Bloqueio e Fluxo de Redefinição de Senha
+// --------------------------------------------------------------------------
+runTest('Segurança: Bloqueio de redefinição de senha sem validação de código prévia', function() {
+    $db = getDbConnection();
+    $targetEmail = 'comprador@restore.com';
+
+    // 1. Tentar redefinir senha sem código validado na sessão deve ser bloqueado
+    $outUnverified = callApiIsolated('api/auth.php', [
+        'action' => 'reset_password',
+        'new_password' => 'novaSenha123'
+    ], 'POST', []);
+    $jsonUnverified = json_decode($outUnverified, true);
+
+    if (!empty($jsonUnverified['success'])) {
+        throw new Exception("Vulnerabilidade detectada: API permitiu redefinir senha sem código validado na sessão!");
+    }
+
+    // 2. Com sessão devidamente validada, redefinir com sucesso
+    $newPass = 'novaSenhaForte@2026';
+    $outReset = callApiIsolated('api/auth.php', [
+        'action' => 'reset_password',
+        'new_password' => $newPass
+    ], 'POST', [
+        'reset_code' => '123456',
+        'reset_email' => $targetEmail,
+        'reset_expires' => time() + 600,
+        'reset_verified' => true
+    ]);
+    $jsonReset = json_decode($outReset, true);
+    if (empty($jsonReset['success'])) {
+        throw new Exception("Falha ao redefinir senha com sessão validada: " . ($jsonReset['error'] ?? ''));
+    }
+
+    // 3. Testar login com a nova senha
+    $outLogin = callApiIsolated('api/auth.php', [
+        'action' => 'login',
+        'email' => $targetEmail,
+        'password' => $newPass
+    ], 'POST');
+    $jsonLogin = json_decode($outLogin, true);
+    if (empty($jsonLogin['success'])) {
+        throw new Exception("Falha ao realizar login após redefinição de senha: " . ($jsonLogin['error'] ?? ''));
+    }
+
+    // 4. Restaurar a senha original ('123456') do usuário comprador
+    $origHash = password_hash('123456', PASSWORD_DEFAULT);
+    $db->prepare("UPDATE users SET password_hash = ? WHERE email = ?")->execute([$origHash, $targetEmail]);
+
+    return true;
+});
+
+// --------------------------------------------------------------------------
+// 12. Teste: Bloqueio de Avaliação sem Compra Comprovada
 // --------------------------------------------------------------------------
 runTest('API: Bloqueio de avaliação sem compra comprovada (compra verificada obrigatória)', function() {
     // Usuário 2 não comprou o produto 1 inicialmente
@@ -279,7 +447,7 @@ runTest('API: Bloqueio de avaliação sem compra comprovada (compra verificada o
 });
 
 // --------------------------------------------------------------------------
-// 10. Teste: Criação de Avaliação após Compra Confirmada e Fotos
+// 13. Teste: Criação de Avaliação após Compra Confirmada e Fotos
 // --------------------------------------------------------------------------
 runTest('API: Criação de avaliação após compra confirmada e fotos de avaliação', function() {
     $db = getDbConnection();
@@ -359,7 +527,7 @@ runTest('API: Criação de avaliação após compra confirmada e fotos de avalia
 });
 
 // --------------------------------------------------------------------------
-// 11. Teste: Edição de Avaliação, Alteração de Nota e Recálculo da Média
+// 14. Teste: Edição de Avaliação, Alteração de Nota e Recálculo da Média
 // --------------------------------------------------------------------------
 runTest('API: Edição de avaliação existente, alteração de nota e recálculo da média do produto', function() {
     $db = getDbConnection();
@@ -401,7 +569,7 @@ runTest('API: Edição de avaliação existente, alteração de nota e recálcul
 });
 
 // --------------------------------------------------------------------------
-// 12. Teste: Minhas Avaliações e Exclusão com Recálculo
+// 15. Teste: Minhas Avaliações e Exclusão com Recálculo
 // --------------------------------------------------------------------------
 runTest('API: Listagem de avaliações do usuário ("Minhas Avaliações") e exclusão com recálculo', function() {
     $db = getDbConnection();
@@ -448,6 +616,9 @@ runTest('API: Listagem de avaliações do usuário ("Minhas Avaliações") e exc
     return true;
 });
 
+// --------------------------------------------------------------------------
+// 16. Teste: Localização da Conta Oficial de Suporte no Messenger
+// --------------------------------------------------------------------------
 runTest('API: Localização da conta oficial de suporte (api/messenger.php?action=get_support_user)', function() {
     $output = callApiIsolated('api/messenger.php', ['action' => 'get_support_user'], 'GET', ['user_id' => 2]);
     $json = json_decode($output, true);
@@ -463,6 +634,9 @@ runTest('API: Localização da conta oficial de suporte (api/messenger.php?actio
     return true;
 });
 
+// --------------------------------------------------------------------------
+// 17. Teste: Listagem de Pedidos com Identificação de Avaliação
+// --------------------------------------------------------------------------
 runTest('API: Listagem de pedidos com identificação de itens avaliados (api/orders.php?action=my_orders)', function() {
     $output = callApiIsolated('api/orders.php', ['action' => 'my_orders'], 'GET', ['user_id' => 2]);
     $json = json_decode($output, true);
@@ -486,6 +660,9 @@ runTest('API: Listagem de pedidos com identificação de itens avaliados (api/or
     return true;
 });
 
+// --------------------------------------------------------------------------
+// 18. Teste: Validação da Lista Oficial de Municípios/UF
+// --------------------------------------------------------------------------
 runTest('Validação da lista oficial pré-determinada de municípios/UF em ordem alfabética', function() {
     require_once dirname(__DIR__) . '/Re-Store/config/locations.php';
     
@@ -513,6 +690,9 @@ runTest('Validação da lista oficial pré-determinada de municípios/UF em orde
     return true;
 });
 
+// --------------------------------------------------------------------------
+// 19. Teste: Bloqueio de Município/UF Inválido
+// --------------------------------------------------------------------------
 runTest('API: Bloqueio de município/UF inválido e aceitação de pré-determinado (api/products.php)', function() {
     // 1. Tentar atualizar produto com local inválido (deve ser rejeitado)
     $outInvalid = callApiIsolated('api/products.php', [
@@ -550,7 +730,7 @@ runTest('API: Bloqueio de município/UF inválido e aceitação de pré-determin
 });
 
 // --------------------------------------------------------------------------
-// 18. Privilégios de Administrador / Suporte e Moderação de Conteúdo
+// 20. Privilégios de Administrador / Suporte e Moderação de Conteúdo
 // --------------------------------------------------------------------------
 runTest('Permissões de Administrador: Conta oficial de Suporte com privilégios especiais', function() {
     global $testDbFile;
@@ -580,6 +760,9 @@ runTest('Permissões de Administrador: Conta oficial de Suporte com privilégios
     return true;
 });
 
+// --------------------------------------------------------------------------
+// 21. Teste: API Admin e Proteção de Acesso
+// --------------------------------------------------------------------------
 runTest('API Admin: Proteção de acesso e listagem de usuários e produtos (api/admin.php)', function() {
     global $testDbFile;
     $db = new PDO("sqlite:{$testDbFile}");
@@ -612,6 +795,9 @@ runTest('API Admin: Proteção de acesso e listagem de usuários e produtos (api
     return true;
 });
 
+// --------------------------------------------------------------------------
+// 22. Teste: Moderação pelo Suporte com Motivo e Notificação ao Vendedor
+// --------------------------------------------------------------------------
 runTest('Moderação: Suporte editando e deletando anúncio com motivo e notificação para o vendedor', function() {
     global $testDbFile;
     $db = new PDO("sqlite:{$testDbFile}");
@@ -695,6 +881,9 @@ runTest('Moderação: Suporte editando e deletando anúncio com motivo e notific
     return true;
 });
 
+// --------------------------------------------------------------------------
+// 23. Teste: Busca com Múltiplos Filtros Avançados
+// --------------------------------------------------------------------------
 runTest('API: Busca com múltiplos filtros avançados (materiais, condição e ordenação)', function() {
     // 1. Filtrar por condição e ordenação por menor preço
     $out = callApiIsolated('api/products.php', [
