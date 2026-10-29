@@ -15,11 +15,16 @@ function sendVerificationEmail($toEmail, $toName, $verificationCode) {
         return ['success' => false, 'error' => 'Endereço de e-mail inválido.'];
     }
 
-    $smtpHost = defined('SMTP_HOST') && !empty(SMTP_HOST) ? SMTP_HOST : 'smtp.gmail.com';
+    $smtpHost = defined('SMTP_HOST') && !empty(SMTP_HOST) ? trim(SMTP_HOST) : 'smtp.gmail.com';
     $smtpPort = defined('SMTP_PORT') && !empty(SMTP_PORT) ? (int)SMTP_PORT : 587;
-    $smtpUser = defined('SMTP_USER') ? SMTP_USER : '';
-    $smtpPass = defined('SMTP_PASS') ? SMTP_PASS : '';
-    $fromEmail = defined('SMTP_FROM_EMAIL') && !empty(SMTP_FROM_EMAIL) ? SMTP_FROM_EMAIL : $smtpUser;
+    $smtpUser = defined('SMTP_USER') ? trim(SMTP_USER) : '';
+    $smtpPass = defined('SMTP_PASS') ? trim(SMTP_PASS) : '';
+    if (stripos($smtpHost, 'gmail') !== false) {
+        // Senhas de App do Google contêm 16 caracteres e são exibidas com espaços pelo Google (ex: 'abcd efgh ijkl mnop').
+        // Removemos espaços para evitar falhas de autenticação no protocolo SMTP.
+        $smtpPass = str_replace(' ', '', $smtpPass);
+    }
+    $fromEmail = defined('SMTP_FROM_EMAIL') && !empty(SMTP_FROM_EMAIL) ? trim(SMTP_FROM_EMAIL) : $smtpUser;
     $fromName = defined('SMTP_FROM_NAME') && !empty(SMTP_FROM_NAME) ? SMTP_FROM_NAME : 'Re-Store Marketplace';
 
     // Se as credenciais de SMTP ainda não foram informadas no ambiente
@@ -135,9 +140,13 @@ function sendVerificationEmail($toEmail, $toName, $verificationCode) {
         return ['success' => true];
 
     } catch (Exception $e) {
+        $errMsg = $mail->ErrorInfo;
+        if (stripos($errMsg, 'Could not authenticate') !== false) {
+            $errMsg = 'Falha de autenticação SMTP: Usuário ou senha recusados pelo servidor de e-mail. No Gmail, é obrigatório utilizar uma "Senha de App" de 16 caracteres (gerada em Conta Google > Segurança > Senhas de app) e ter a verificação em 2 etapas ativada.';
+        }
         return [
             'success' => false,
-            'error' => 'Falha ao enviar e-mail via SMTP: ' . $mail->ErrorInfo
+            'error' => 'Falha ao enviar e-mail via SMTP: ' . $errMsg
         ];
     }
 }
@@ -150,11 +159,16 @@ function sendRegistrationVerificationEmail($toEmail, $toName, $verificationCode)
         return ['success' => false, 'error' => 'Endereço de e-mail inválido.'];
     }
 
-    $smtpHost = defined('SMTP_HOST') && !empty(SMTP_HOST) ? SMTP_HOST : 'smtp.gmail.com';
+    $smtpHost = defined('SMTP_HOST') && !empty(SMTP_HOST) ? trim(SMTP_HOST) : 'smtp.gmail.com';
     $smtpPort = defined('SMTP_PORT') && !empty(SMTP_PORT) ? (int)SMTP_PORT : 587;
-    $smtpUser = defined('SMTP_USER') ? SMTP_USER : '';
-    $smtpPass = defined('SMTP_PASS') ? SMTP_PASS : '';
-    $fromEmail = defined('SMTP_FROM_EMAIL') && !empty(SMTP_FROM_EMAIL) ? SMTP_FROM_EMAIL : $smtpUser;
+    $smtpUser = defined('SMTP_USER') ? trim(SMTP_USER) : '';
+    $smtpPass = defined('SMTP_PASS') ? trim(SMTP_PASS) : '';
+    if (stripos($smtpHost, 'gmail') !== false) {
+        // Senhas de App do Google contêm 16 caracteres e são exibidas com espaços pelo Google (ex: 'abcd efgh ijkl mnop').
+        // Removemos espaços para evitar falhas de autenticação no protocolo SMTP.
+        $smtpPass = str_replace(' ', '', $smtpPass);
+    }
+    $fromEmail = defined('SMTP_FROM_EMAIL') && !empty(SMTP_FROM_EMAIL) ? trim(SMTP_FROM_EMAIL) : $smtpUser;
     $fromName = defined('SMTP_FROM_NAME') && !empty(SMTP_FROM_NAME) ? SMTP_FROM_NAME : 'Re-Store Marketplace';
 
     // Se as credenciais de SMTP ainda não foram informadas no ambiente
@@ -265,9 +279,13 @@ function sendRegistrationVerificationEmail($toEmail, $toName, $verificationCode)
         return ['success' => true];
 
     } catch (Exception $e) {
+        $errMsg = $mail->ErrorInfo;
+        if (stripos($errMsg, 'Could not authenticate') !== false) {
+            $errMsg = 'Falha de autenticação SMTP: Usuário ou senha recusados pelo servidor de e-mail. No Gmail, é obrigatório utilizar uma "Senha de App" de 16 caracteres (gerada em Conta Google > Segurança > Senhas de app) e ter a verificação em 2 etapas ativada.';
+        }
         return [
             'success' => false,
-            'error' => 'Falha ao enviar e-mail via SMTP: ' . $mail->ErrorInfo
+            'error' => 'Falha ao enviar e-mail via SMTP: ' . $errMsg
         ];
     }
 }
