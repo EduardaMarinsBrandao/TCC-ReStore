@@ -9,6 +9,7 @@ if (!headers_sent()) {
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/db_init.php';
 require_once __DIR__ . '/../config/gamification.php';
+require_once __DIR__ . '/../config/audit.php';
 
 initializeDatabase();
 $db = getDbConnection();
@@ -168,16 +169,32 @@ if ($method === 'POST' && ($action === 'create' || $action === 'checkout')) {
         // Gerar número de pedido único ex: RES-2026-98341
         $orderNumber = 'RES-' . date('Y') . '-' . strtoupper(substr(uniqid(), -5));
         $status = 'confirmed'; // Confirmação imediata no fluxo 100% simulado
+        $clientIp = getClientIp();
+        $clientUa = getClientUserAgent();
 
-        $orderStmt = $db->prepare("INSERT INTO orders 
-            (buyer_id, order_number, total, points_earned, payment_method, shipping_address, shipping_city, shipping_state, shipping_zip, status, coupon_code, discount_amount) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-        $orderStmt->execute([
-            $userId, $orderNumber, $finalTotal, $totalPointsEarned, 
-            $paymentMethod, $shippingAddress, $shippingCity, $shippingState, $shippingZip, $status,
-            (!empty($couponCode) && $discountId) ? $couponCode : null,
-            $discountAmount
-        ]);
+        try {
+            $orderStmt = $db->prepare("INSERT INTO orders 
+                (buyer_id, order_number, total, points_earned, payment_method, shipping_address, shipping_city, shipping_state, shipping_zip, status, coupon_code, discount_amount, ip_address, user_agent) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $orderStmt->execute([
+                $userId, $orderNumber, $finalTotal, $totalPointsEarned, 
+                $paymentMethod, $shippingAddress, $shippingCity, $shippingState, $shippingZip, $status,
+                (!empty($couponCode) && $discountId) ? $couponCode : null,
+                $discountAmount,
+                $clientIp,
+                $clientUa
+            ]);
+        } catch (Exception $eOrder) {
+            $orderStmt = $db->prepare("INSERT INTO orders 
+                (buyer_id, order_number, total, points_earned, payment_method, shipping_address, shipping_city, shipping_state, shipping_zip, status, coupon_code, discount_amount) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $orderStmt->execute([
+                $userId, $orderNumber, $finalTotal, $totalPointsEarned, 
+                $paymentMethod, $shippingAddress, $shippingCity, $shippingState, $shippingZip, $status,
+                (!empty($couponCode) && $discountId) ? $couponCode : null,
+                $discountAmount
+            ]);
+        }
         $orderId = $db->lastInsertId();
 
         // Se usou cupom, marcar como utilizado no banco (USO ÚNICO)
@@ -260,6 +277,13 @@ if ($method === 'POST' && ($action === 'create' || $action === 'checkout')) {
         }
 
         $db->commit();
+
+        writeAuditLog($db, $userId, 'order_created', [
+            'order_id' => $orderId,
+            'order_number' => $orderNumber,
+            'total' => $finalTotal,
+            'points_earned' => $totalPointsEarned
+        ]);
 
         echo json_encode([
             'success' => true,
@@ -420,6 +444,12 @@ if ($method === 'POST' && $action === 'cancel') {
         }
 
         $db->commit();
+
+        writeAuditLog($db, $userId, 'order_cancelled', [
+            'order_id' => $orderId,
+            'order_number' => $order['order_number'] ?? null,
+            'coupon_restored' => $couponRestored
+        ]);
 
         $msg = 'Pedido cancelado com sucesso.';
         if ($couponRestored) {

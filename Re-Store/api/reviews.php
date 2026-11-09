@@ -10,6 +10,7 @@ if (!headers_sent()) {
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/db_init.php';
 require_once __DIR__ . '/../config/gamification.php';
+require_once __DIR__ . '/../config/audit.php';
 
 initializeDatabase();
 $db = getDbConnection();
@@ -351,6 +352,12 @@ if ($method === 'POST' && $action === 'update') {
 
         $db->commit();
 
+        writeAuditLog($db, $userId, 'review_updated', [
+            'review_id' => $reviewId,
+            'product_id' => $productId,
+            'rating' => $rating
+        ]);
+
         // Somente após confirmação da transação, remove do disco
         foreach ($filesToDelete as $delFile) {
             if (file_exists($delFile)) {
@@ -407,6 +414,9 @@ if ($method === 'POST' && $action === 'delete') {
 
     $db->beginTransaction();
     try {
+        // Preservar cópia forense indelével na tabela de auditoria audit_reviews antes do descarte (Não-repúdio STRIDE R 3.3)
+        archiveReviewForAudit($db, $reviewId, $userId);
+
         // Coletar arquivos de fotos para remoção segura do disco após commit
         $imgStmt = $db->prepare("SELECT image_url FROM review_images WHERE review_id = ?");
         $imgStmt->execute([$reviewId]);
@@ -562,6 +572,13 @@ if ($method === 'POST' && $action === 'create') {
         }
 
         $db->commit();
+
+        writeAuditLog($db, $userId, 'review_created', [
+            'review_id' => $reviewId,
+            'product_id' => $productId,
+            'rating' => $rating,
+            'photos_count' => $photosSaved
+        ]);
 
         $photoMsg = $photosSaved > 0 ? " com {$photosSaved} foto(s) anexada(s)" : "";
         $pointsMsg = $reviewBonusPoints > 0

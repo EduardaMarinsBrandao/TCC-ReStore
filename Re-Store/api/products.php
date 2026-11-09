@@ -13,6 +13,7 @@ if (!headers_sent()) {
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/db_init.php';
 require_once __DIR__ . '/../config/gamification.php';
+require_once __DIR__ . '/../config/audit.php';
 
 initializeDatabase();
 $db = getDbConnection();
@@ -147,7 +148,7 @@ if ($method === 'GET' && $action === 'detail') {
             $db->prepare("UPDATE products SET views = views + 1 WHERE id = ?")->execute([$id]);
         } catch (Exception $e) {}
 
-        $stmt = $db->prepare("SELECT p.*, COALESCE(u.name, 'Vendedor Sustentável') as seller_name, u.email as seller_email, u.avatar as seller_avatar, u.phone as seller_phone, u.city as seller_city, u.state as seller_state, COALESCE(u.is_verified_business, 0) as is_verified_business, u.business_name 
+        $stmt = $db->prepare("SELECT p.*, COALESCE(u.name, 'Vendedor Sustentável') as seller_name, u.avatar as seller_avatar, u.city as seller_city, u.state as seller_state, COALESCE(u.is_verified_business, 0) as is_verified_business, u.business_name 
                               FROM products p 
                               LEFT JOIN users u ON p.seller_id = u.id 
                               WHERE p.id = ?");
@@ -363,8 +364,15 @@ if ($method === 'POST' && ($action === 'create' || $action === 'add')) {
     $movedFiles = [];
 
     try {
-        $stmt = $db->prepare("INSERT INTO products (seller_id, name, description, price, category, product_condition, material, stock, location, points) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-        $stmt->execute([$sellerId, $name, $description, $price, $category, $condition, $material, $stock, $location, $points]);
+        $clientIp = getClientIp();
+        $clientUa = getClientUserAgent();
+        try {
+            $stmt = $db->prepare("INSERT INTO products (seller_id, name, description, price, category, product_condition, material, stock, location, points, ip_address, user_agent) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([$sellerId, $name, $description, $price, $category, $condition, $material, $stock, $location, $points, $clientIp, $clientUa]);
+        } catch (Exception $e) {
+            $stmt = $db->prepare("INSERT INTO products (seller_id, name, description, price, category, product_condition, material, stock, location, points) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([$sellerId, $name, $description, $price, $category, $condition, $material, $stock, $location, $points]);
+        }
         $productId = $db->lastInsertId();
 
         $uploadedImages = [];
@@ -417,6 +425,13 @@ if ($method === 'POST' && ($action === 'create' || $action === 'add')) {
         }
 
         $db->commit();
+
+        writeAuditLog($db, $sellerId, 'product_created', [
+            'product_id' => $productId,
+            'name' => $name,
+            'price' => $price,
+            'category' => $category
+        ]);
 
         echo json_encode([
             'success' => true, 
@@ -641,6 +656,12 @@ if ($method === 'POST' && ($action === 'update' || $action === 'edit')) {
         }
     }
 
+    writeAuditLog($db, $sellerId, 'product_updated', [
+        'product_id' => $productId,
+        'name' => $name,
+        'price' => $price
+    ]);
+
     echo json_encode([
         'success' => true,
         'message' => 'Produto atualizado com sucesso!',
@@ -759,6 +780,14 @@ if ($method === 'POST' && $action === 'delete') {
             exit;
         }
     }
+
+    writeAuditLog($db, $currentUserId, 'product_deleted', [
+        'product_id' => $productId,
+        'product_name' => $product['name'] ?? null,
+        'seller_id' => $product['seller_id'] ?? null,
+        'is_admin' => $isAdmin,
+        'reason' => $reason
+    ]);
 
     echo json_encode([
         'success' => true,

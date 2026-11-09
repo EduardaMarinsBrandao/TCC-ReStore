@@ -11,6 +11,7 @@ if (!headers_sent()) {
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/db_init.php';
 require_once __DIR__ . '/../config/gamification.php';
+require_once __DIR__ . '/../config/audit.php';
 
 // Garantir que as tabelas e dados iniciais foram carregados
 initializeDatabase();
@@ -162,6 +163,31 @@ function verifyGoogleIdToken($credential, $expectedClientId) {
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'me') {
 
     if (isset($_SESSION['user_id'])) {
+        $userId = (int)$_SESSION['user_id'];
+        $currentIp = getClientIp();
+        $currentUa = getClientUserAgent();
+
+        // Rastreabilidade contra Repúdio e Sequestro de Sessão (Threat Modeling Repudiation 3.2):
+        // Detecta e audita requisições com divergências no contexto de rede da sessão
+        if (!empty($_SESSION['auth_ip']) && $_SESSION['auth_ip'] !== $currentIp) {
+            writeAuditLog($db, $userId, 'session_ip_mismatch', [
+                'session_ip' => $_SESSION['auth_ip'],
+                'current_ip' => $currentIp,
+                'endpoint' => 'action=me'
+            ]);
+        }
+        if (!empty($_SESSION['auth_user_agent']) && $_SESSION['auth_user_agent'] !== $currentUa) {
+            writeAuditLog($db, $userId, 'session_ua_mismatch', [
+                'session_ua' => $_SESSION['auth_user_agent'],
+                'current_ua' => $currentUa,
+                'endpoint' => 'action=me'
+            ]);
+        }
+
+        // Telemetria de leitura de dados sensíveis da conta
+        writeAuditLog($db, $userId, 'account_me_access', [
+            'endpoint' => 'action=me'
+        ]);
 
         $stmt = $db->prepare("
             SELECT 
@@ -186,7 +212,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'me') {
             WHERE id = ?
         ");
 
-        $stmt->execute([$_SESSION['user_id']]);
+        $stmt->execute([$userId]);
         $user = $stmt->fetch();
 
         if ($user) {
@@ -267,6 +293,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             restoreRegenerateSession();
             $_SESSION['user_id'] = $user['id'];
             $_SESSION['user_name'] = $user['name'];
+            $_SESSION['auth_ip'] = getClientIp();
+            $_SESSION['auth_user_agent'] = getClientUserAgent();
+
+            writeAuditLog($db, $user['id'], 'user_login', [
+                'method' => 'google',
+                'email' => $user['email']
+            ]);
 
             unset($user['password_hash']);
 
@@ -303,6 +336,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             restoreRegenerateSession();
             $_SESSION['user_id'] = $newUserId;
             $_SESSION['user_name'] = $name;
+            $_SESSION['auth_ip'] = getClientIp();
+            $_SESSION['auth_user_agent'] = getClientUserAgent();
+
+            writeAuditLog($db, $newUserId, 'user_registered', [
+                'method' => 'google',
+                'email' => $email
+            ]);
 
             $uStmt = $db->prepare("
                 SELECT id, email, name, phone, cpf, avatar, address, city, state, zip_code, points, level, is_verified_business, business_name, cnpj, created_at
@@ -348,6 +388,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             restoreRegenerateSession();
             $_SESSION['user_id'] = $user['id'];
             $_SESSION['user_name'] = $user['name'];
+            $_SESSION['auth_ip'] = getClientIp();
+            $_SESSION['auth_user_agent'] = getClientUserAgent();
+
+            writeAuditLog($db, $user['id'], 'user_login', [
+                'method' => 'password',
+                'email' => $user['email']
+            ]);
 
             unset($user['password_hash']);
             $user['is_admin'] = isUserAdmin($db, $user['id']) ? 1 : 0;
@@ -361,6 +408,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
 
         } else {
+
+            writeAuditLog($db, null, 'login_failed', [
+                'attempted_email' => $email
+            ]);
 
             echo json_encode([
                 'success' => false,
@@ -679,6 +730,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         restoreRegenerateSession();
         $_SESSION['user_id'] = $userId;
         $_SESSION['user_name'] = $name;
+        $_SESSION['auth_ip'] = getClientIp();
+        $_SESSION['auth_user_agent'] = getClientUserAgent();
+
+        writeAuditLog($db, $userId, 'user_registered', [
+            'method' => 'standard',
+            'email' => $email,
+            'is_business' => !empty($isVerifiedBusiness) ? 1 : 0
+        ]);
 
         // Retorna dados do usuário
         $userStmt = $db->prepare("
@@ -725,6 +784,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // ========================================================
 
     if ($action === 'logout') {
+
+        if (!empty($_SESSION['user_id'])) {
+            writeAuditLog($db, (int)$_SESSION['user_id'], 'user_logout');
+        }
 
         $_SESSION = [];
         if (ini_get('session.use_cookies')) {
@@ -1036,6 +1099,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $updatedUser = $userStmt->fetch();
 
+        writeAuditLog($db, $userId, 'profile_updated');
 
         echo json_encode([
             'success' => true,
@@ -1223,6 +1287,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $email
         ]);
 
+        writeAuditLog($db, null, 'password_reset_completed', [
+            'email' => $email
+        ]);
 
         unset(
             $_SESSION['reset_code'],
@@ -1261,6 +1328,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $userId = $_SESSION['user_id'];
 
+        writeAuditLog($db, $userId, 'account_deleted', [
+            'user_id' => $userId
+        ]);
 
         $stmt = $db->prepare(
             "DELETE FROM users WHERE id = ?"

@@ -12,6 +12,7 @@ if (!headers_sent()) {
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/db_init.php';
 require_once __DIR__ . '/../config/gamification.php';
+require_once __DIR__ . '/../config/audit.php';
 
 initializeDatabase();
 $db = getDbConnection();
@@ -83,6 +84,9 @@ if (!$currentUserId || !isUserAdmin($db, $currentUserId)) {
 // --------------------------------------------------------------------------
 if ($action === 'list_users') {
     try {
+        writeAuditLog($db, $currentUserId, 'admin_list_users', [
+            'search' => $_GET['search'] ?? ''
+        ]);
         $search = trim($_GET['search'] ?? '');
         $sql = "SELECT 
                     u.id, 

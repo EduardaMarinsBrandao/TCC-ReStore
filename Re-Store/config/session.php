@@ -2,6 +2,11 @@
 // config/session.php
 // Inicialização centralizada e segura das sessões PHP do Re-Store.
 
+// Padronização rigorosa de fuso horário em UTC para todo o ecossistema do Re-Store
+if (function_exists('date_default_timezone_set')) {
+    @date_default_timezone_set('UTC');
+}
+
 /**
  * Inicia a sessão com cookies endurecidos:
  *  - HttpOnly: o cookie não é acessível por JavaScript (mitiga roubo via XSS);
@@ -13,6 +18,10 @@
 function restoreStartSession() {
     if (session_status() !== PHP_SESSION_NONE) {
         return;
+    }
+
+    if (function_exists('date_default_timezone_set')) {
+        @date_default_timezone_set('UTC');
     }
 
     if (headers_sent()) {
@@ -29,6 +38,9 @@ function restoreStartSession() {
     @ini_set('session.use_strict_mode', '1');
     @ini_set('session.use_only_cookies', '1');
     @ini_set('session.cookie_httponly', '1');
+    if ($isHttps) {
+        @ini_set('session.cookie_secure', '1');
+    }
 
     if (PHP_VERSION_ID >= 70300) {
         session_set_cookie_params([

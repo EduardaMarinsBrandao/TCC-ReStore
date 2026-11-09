@@ -1,6 +1,7 @@
 <?php
 // config/db_init.php
 require_once __DIR__ . '/database.php';
+require_once __DIR__ . '/audit.php';
 
 /**
  * Verifica se um usuário possui privilégios de administrador / suporte
@@ -84,6 +85,39 @@ function initializeDatabase() {
                 FOREIGN KEY (review_id) REFERENCES reviews(id) ON DELETE CASCADE
             )");
         } catch (Exception $e) {}
+        try { $db->exec("ALTER TABLE reviews ADD COLUMN deleted_at DATETIME NULL"); } catch (Exception $e) {}
+        try { $db->exec("ALTER TABLE products ADD COLUMN ip_address TEXT NULL"); } catch (Exception $e) {}
+        try { $db->exec("ALTER TABLE products ADD COLUMN user_agent TEXT NULL"); } catch (Exception $e) {}
+        try { $db->exec("ALTER TABLE orders ADD COLUMN ip_address TEXT NULL"); } catch (Exception $e) {}
+        try { $db->exec("ALTER TABLE orders ADD COLUMN user_agent TEXT NULL"); } catch (Exception $e) {}
+        try {
+            $db->exec("CREATE TABLE IF NOT EXISTS audit_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NULL,
+                action TEXT NOT NULL,
+                details TEXT NULL,
+                ip_address TEXT NULL,
+                user_agent TEXT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+            )");
+        } catch (Exception $e) {}
+        try {
+            $db->exec("CREATE TABLE IF NOT EXISTS audit_reviews (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                original_review_id INTEGER NOT NULL,
+                product_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                order_id INTEGER NULL,
+                rating INTEGER NOT NULL,
+                comment TEXT,
+                images_json TEXT NULL,
+                deleted_by_user_id INTEGER NOT NULL,
+                ip_address TEXT NULL,
+                user_agent TEXT NULL,
+                deleted_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )");
+        } catch (Exception $e) {}
     } else {
         try { $db->exec("ALTER TABLE orders ADD COLUMN coupon_code VARCHAR(50) NULL"); } catch (Exception $e) {}
         try { $db->exec("ALTER TABLE orders ADD COLUMN discount_amount DECIMAL(10,2) DEFAULT 0.00"); } catch (Exception $e) {}
@@ -152,6 +186,39 @@ function initializeDatabase() {
                 $db->exec("ALTER TABLE products MODIFY COLUMN status ENUM('active', 'sold', 'inactive', 'deleted') NOT NULL DEFAULT 'active'");
             } catch (Exception $e2) {}
         }
+        try { $db->exec("ALTER TABLE reviews ADD COLUMN deleted_at TIMESTAMP NULL DEFAULT NULL"); } catch (Exception $e) {}
+        try { $db->exec("ALTER TABLE products ADD COLUMN ip_address VARCHAR(45) NULL"); } catch (Exception $e) {}
+        try { $db->exec("ALTER TABLE products ADD COLUMN user_agent VARCHAR(255) NULL"); } catch (Exception $e) {}
+        try { $db->exec("ALTER TABLE orders ADD COLUMN ip_address VARCHAR(45) NULL"); } catch (Exception $e) {}
+        try { $db->exec("ALTER TABLE orders ADD COLUMN user_agent VARCHAR(255) NULL"); } catch (Exception $e) {}
+        try {
+            $db->exec("CREATE TABLE IF NOT EXISTS audit_logs (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NULL,
+                action VARCHAR(100) NOT NULL,
+                details TEXT NULL,
+                ip_address VARCHAR(45) NULL,
+                user_agent VARCHAR(255) NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+            )");
+        } catch (Exception $e) {}
+        try {
+            $db->exec("CREATE TABLE IF NOT EXISTS audit_reviews (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                original_review_id INT NOT NULL,
+                product_id INT NOT NULL,
+                user_id INT NOT NULL,
+                order_id INT NULL,
+                rating INT NOT NULL,
+                comment TEXT,
+                images_json TEXT NULL,
+                deleted_by_user_id INT NOT NULL,
+                ip_address VARCHAR(45) NULL,
+                user_agent VARCHAR(255) NULL,
+                deleted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )");
+        } catch (Exception $e) {}
     }
 
     try {
@@ -374,6 +441,30 @@ function initializeDatabase() {
             is_read INTEGER DEFAULT 0,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )",
+            "CREATE TABLE IF NOT EXISTS audit_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NULL,
+            action TEXT NOT NULL,
+            details TEXT NULL,
+            ip_address TEXT NULL,
+            user_agent TEXT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+        )",
+            "CREATE TABLE IF NOT EXISTS audit_reviews (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            original_review_id INTEGER NOT NULL,
+            product_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            order_id INTEGER NULL,
+            rating INTEGER NOT NULL,
+            comment TEXT,
+            images_json TEXT NULL,
+            deleted_by_user_id INTEGER NOT NULL,
+            ip_address TEXT NULL,
+            user_agent TEXT NULL,
+            deleted_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )"
         ];
         foreach ($queries as $q) {

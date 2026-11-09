@@ -89,6 +89,7 @@ runTest('Verificação de arquivos fundamentais do projeto', function() {
         $baseDir . DIRECTORY_SEPARATOR . 'config' . DIRECTORY_SEPARATOR . 'mailer.php',
         $baseDir . DIRECTORY_SEPARATOR . 'config' . DIRECTORY_SEPARATOR . 'session.php',
         $baseDir . DIRECTORY_SEPARATOR . 'config' . DIRECTORY_SEPARATOR . 'upload_security.php',
+        $baseDir . DIRECTORY_SEPARATOR . 'config' . DIRECTORY_SEPARATOR . 'audit.php',
         $baseDir . DIRECTORY_SEPARATOR . 'api' . DIRECTORY_SEPARATOR . 'products.php',
         $baseDir . DIRECTORY_SEPARATOR . 'api' . DIRECTORY_SEPARATOR . 'auth.php',
         $baseDir . DIRECTORY_SEPARATOR . 'api' . DIRECTORY_SEPARATOR . 'orders.php',
@@ -122,7 +123,7 @@ runTest('Conexão e inicialização do esquema de banco de dados (SQLite)', func
         throw new Exception("Falha ao obter conexão com o banco de dados");
     }
 
-    $requiredTables = ['users', 'products', 'product_images', 'orders', 'order_items', 'reviews', 'review_images', 'messages', 'favorites', 'points_history', 'discounts'];
+    $requiredTables = ['users', 'products', 'product_images', 'orders', 'order_items', 'reviews', 'review_images', 'messages', 'favorites', 'points_history', 'discounts', 'audit_logs', 'audit_reviews'];
     $stmt = $db->query("SELECT name FROM sqlite_master WHERE type='table'");
     $existingTables = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
@@ -917,7 +918,111 @@ runTest('API: Busca com múltiplos filtros avançados (materiais, condição e o
     return true;
 });
 
+// --------------------------------------------------------------------------
+// 24. Teste de Não-Repúdio: Preservação de Evidências em audit_reviews e audit_logs
+// --------------------------------------------------------------------------
+runTest('Não-Repúdio (STRIDE R): Preservação indelével de evidências em audit_reviews após descarte e logs de auditoria', function() {
+    global $testDbFile;
+    $db = new PDO("sqlite:{$testDbFile}");
+    $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
+    // 1. Confirmar se a exclusão de avaliação realizada no teste 15 preservou o registro forense na tabela audit_reviews
+    $stmt = $db->query("SELECT * FROM audit_reviews ORDER BY id DESC LIMIT 1");
+    $auditRow = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$auditRow) {
+        throw new Exception("Falha de Não-Repúdio: A avaliação foi excluída mas nenhum registro forense foi arquivado em audit_reviews");
+    }
+
+    if (empty($auditRow['original_review_id']) || empty($auditRow['user_id']) || empty($auditRow['rating'])) {
+        throw new Exception("Registro em audit_reviews possui dados incompletos da avaliação original");
+    }
+
+    if (empty($auditRow['ip_address']) || empty($auditRow['user_agent'])) {
+        throw new Exception("audit_reviews não armazenou metadados contextuais de rede (ip_address ou user_agent)");
+    }
+
+    // 2. Confirmar se o evento review_deleted foi gravado na trilha imutável audit_logs
+    $logStmt = $db->prepare("SELECT COUNT(*) as cnt FROM audit_logs WHERE action = 'review_deleted'");
+    $logStmt->execute();
+    $logCount = (int)$logStmt->fetchColumn();
+
+    if ($logCount === 0) {
+        throw new Exception("Evento 'review_deleted' não foi registrado na tabela audit_logs");
+    }
+
+    return true;
+});
+
+// --------------------------------------------------------------------------
+// 25. Teste de Não-Repúdio: Rastreabilidade na rota action=me e Contexto de Rede
+// --------------------------------------------------------------------------
+runTest('Não-Repúdio (STRIDE R): Rastreamento de metadados contextuais de rede ($_SERVER) e detecção de anomalia na rota action=me', function() {
+    global $testDbFile;
+    $db = new PDO("sqlite:{$testDbFile}");
+    $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+    // 1. Acesso autenticado com IP divergente do contexto inicial deve gerar registro de anomalia de sessão
+    $outMe = callApiIsolated('api/auth.php', [
+        'action' => 'me'
+    ], 'GET', [
+        'user_id' => 2,
+        'user_name' => 'Mariana Costa',
+        'auth_ip' => '192.168.1.100', // IP inicial da sessão
+        'auth_user_agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+    ]);
+    $jsonMe = json_decode($outMe, true);
+
+    if (empty($jsonMe['success']) || empty($jsonMe['logged_in'])) {
+        throw new Exception("Falha ao consultar action=me autenticado: " . ($jsonMe['error'] ?? ''));
+    }
+
+    // 2. Verificar se audit_logs registrou o acesso e a divergência de IP (127.0.0.1 != 192.168.1.100)
+    $chkAccess = $db->query("SELECT COUNT(*) FROM audit_logs WHERE user_id = 2 AND action = 'account_me_access'")->fetchColumn();
+    if ((int)$chkAccess === 0) {
+        throw new Exception("Falha: Telemetria de acesso a dados cadastrais em action=me não foi gravada em audit_logs");
+    }
+
+    $chkMismatch = $db->query("SELECT COUNT(*) FROM audit_logs WHERE user_id = 2 AND action = 'session_ip_mismatch'")->fetchColumn();
+    if ((int)$chkMismatch === 0) {
+        throw new Exception("Falha: Variação de contexto de rede (Session Hijacking threat) não foi auditada em audit_logs");
+    }
+
+    return true;
+});
+
+// --------------------------------------------------------------------------
+// 26. Teste de Divulgação de Informações: Proteção de Dados Pessoais do Vendedor
+// --------------------------------------------------------------------------
+runTest('Information Disclosure (STRIDE I): Omissão de dados cadastrais confidenciais (e-mail e telefone) na consulta pública de anúncios', function() {
+    // 1. Consultar produto por ID via endpoint público (sem login)
+    $out = callApiIsolated('api/products.php', [
+        'action' => 'detail',
+        'id' => 1
+    ], 'GET');
+    $json = json_decode($out, true);
+
+    if (empty($json['success']) || empty($json['product'])) {
+        throw new Exception("Falha ao obter detalhes do produto via API");
+    }
+
+    $prod = $json['product'];
+
+    // 2. Assegurar que os dados públicos do vendedor estão presentes
+    if (!isset($prod['seller_name']) || !isset($prod['seller_avatar'])) {
+        throw new Exception("Nome público ou avatar do vendedor ausente");
+    }
+
+    // 3. Garantir que telefone e e-mail pessoais do vendedor foram suprimidos do payload público
+    if (isset($prod['seller_email']) && !empty($prod['seller_email'])) {
+        throw new Exception("Vulnerabilidade Information Disclosure: Endpoint público expôs e-mail pessoal do vendedor ({$prod['seller_email']})!");
+    }
+    if (isset($prod['seller_phone']) && !empty($prod['seller_phone'])) {
+        throw new Exception("Vulnerabilidade Information Disclosure: Endpoint público expôs número de telefone pessoal do vendedor ({$prod['seller_phone']})!");
+    }
+
+    return true;
+});
 
 // Limpeza de arquivos temporários do teste
 // --------------------------------------------------------------------------
