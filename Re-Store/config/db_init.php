@@ -88,6 +88,7 @@ function initializeDatabase() {
         try { $db->exec("ALTER TABLE reviews ADD COLUMN deleted_at DATETIME NULL"); } catch (Exception $e) {}
         try { $db->exec("ALTER TABLE products ADD COLUMN ip_address TEXT NULL"); } catch (Exception $e) {}
         try { $db->exec("ALTER TABLE products ADD COLUMN user_agent TEXT NULL"); } catch (Exception $e) {}
+        try { $db->exec("ALTER TABLE products ADD COLUMN waste_saved_kg REAL NULL"); } catch (Exception $e) {}
         try { $db->exec("ALTER TABLE orders ADD COLUMN ip_address TEXT NULL"); } catch (Exception $e) {}
         try { $db->exec("ALTER TABLE orders ADD COLUMN user_agent TEXT NULL"); } catch (Exception $e) {}
         try {
@@ -189,6 +190,7 @@ function initializeDatabase() {
         try { $db->exec("ALTER TABLE reviews ADD COLUMN deleted_at TIMESTAMP NULL DEFAULT NULL"); } catch (Exception $e) {}
         try { $db->exec("ALTER TABLE products ADD COLUMN ip_address VARCHAR(45) NULL"); } catch (Exception $e) {}
         try { $db->exec("ALTER TABLE products ADD COLUMN user_agent VARCHAR(255) NULL"); } catch (Exception $e) {}
+        try { $db->exec("ALTER TABLE products ADD COLUMN waste_saved_kg DECIMAL(6,2) NULL"); } catch (Exception $e) {}
         try { $db->exec("ALTER TABLE orders ADD COLUMN ip_address VARCHAR(45) NULL"); } catch (Exception $e) {}
         try { $db->exec("ALTER TABLE orders ADD COLUMN user_agent VARCHAR(255) NULL"); } catch (Exception $e) {}
         try {

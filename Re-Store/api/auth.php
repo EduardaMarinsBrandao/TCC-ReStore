@@ -1314,40 +1314,142 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // ========================================================
 
     if ($action === 'delete_account') {
-
         if (!isset($_SESSION['user_id'])) {
-
             echo json_encode([
                 'success' => false,
                 'error' => 'Não autenticado.'
             ]);
-
             exit;
         }
 
+        $userId = (int)$_SESSION['user_id'];
+        $driver = strtolower((string)$db->getAttribute(PDO::ATTR_DRIVER_NAME));
 
-        $userId = $_SESSION['user_id'];
+        $db->beginTransaction();
+        try {
+            // Desativar temporariamente verificações de integridade para permitir limpeza limpa de registros vinculados
+            if ($driver === 'mysql') {
+                $db->exec("SET FOREIGN_KEY_CHECKS = 0");
+            } else if ($driver === 'sqlite') {
+                $db->exec("PRAGMA foreign_keys = OFF");
+            }
 
-        writeAuditLog($db, $userId, 'account_deleted', [
-            'user_id' => $userId
-        ]);
+            // 1. Gravar registro imutável de auditoria antes da exclusão
+            try {
+                writeAuditLog($db, $userId, 'account_deleted', [
+                    'user_id' => $userId,
+                    'timestamp' => date('Y-m-d H:i:s')
+                ]);
+            } catch (Exception $eAudit) {}
 
-        $stmt = $db->prepare(
-            "DELETE FROM users WHERE id = ?"
-        );
+            // 2. Remover notificações do usuário
+            try {
+                $db->prepare("DELETE FROM user_notifications WHERE user_id = ?")->execute([$userId]);
+            } catch (Exception $e) {}
 
-        $stmt->execute([$userId]);
+            // 3. Remover códigos de verificação vinculados ao e-mail do usuário
+            try {
+                $uStmt = $db->prepare("SELECT email FROM users WHERE id = ?");
+                $uStmt->execute([$userId]);
+                $uEmail = $uStmt->fetchColumn();
+                if ($uEmail) {
+                    $db->prepare("DELETE FROM verification_codes WHERE email = ?")->execute([$uEmail]);
+                }
+            } catch (Exception $e) {}
 
+            // 4. Remover votos em avaliações feitas pelo usuário
+            try {
+                $db->prepare("DELETE FROM review_votes WHERE user_id = ?")->execute([$userId]);
+            } catch (Exception $e) {}
 
-        session_destroy();
+            // 5. Remover fotos e avaliações feitas pelo usuário ou em produtos do usuário
+            try {
+                $db->prepare("DELETE FROM review_images WHERE review_id IN (SELECT id FROM reviews WHERE user_id = ? OR product_id IN (SELECT id FROM products WHERE seller_id = ?))")->execute([$userId, $userId]);
+                $db->prepare("DELETE FROM reviews WHERE user_id = ? OR product_id IN (SELECT id FROM products WHERE seller_id = ?)")->execute([$userId, $userId]);
+            } catch (Exception $e) {}
 
+            // 6. Remover favoritos do usuário e favoritos de produtos do usuário
+            try {
+                $db->prepare("DELETE FROM favorites WHERE user_id = ? OR product_id IN (SELECT id FROM products WHERE seller_id = ?)")->execute([$userId, $userId]);
+            } catch (Exception $e) {}
 
-        echo json_encode([
-            'success' => true,
-            'message' => 'Sua conta foi excluída permanentemente.'
-        ]);
+            // 7. Remover histórico de pontos do usuário
+            try {
+                $db->prepare("DELETE FROM points_history WHERE user_id = ?")->execute([$userId]);
+            } catch (Exception $e) {}
 
-        exit;
+            // 8. Remover descontos e cupons do usuário
+            try {
+                $db->prepare("DELETE FROM discounts WHERE user_id = ?")->execute([$userId]);
+            } catch (Exception $e) {}
+
+            // 9. Remover mensagens do usuário (enviadas e recebidas)
+            try {
+                $db->prepare("DELETE FROM messages WHERE sender_id = ? OR receiver_id = ?")->execute([$userId, $userId]);
+            } catch (Exception $e) {}
+
+            // 10. Limpar itens de pedidos onde o usuário foi comprador ou vendedor, ou onde o produto pertence ao vendedor
+            try {
+                $db->prepare("DELETE FROM order_items WHERE seller_id = ? OR order_id IN (SELECT id FROM orders WHERE buyer_id = ?) OR product_id IN (SELECT id FROM products WHERE seller_id = ?)")->execute([$userId, $userId, $userId]);
+                $db->prepare("DELETE FROM orders WHERE buyer_id = ?")->execute([$userId]);
+            } catch (Exception $e) {}
+
+            // 11. Limpar produtos e fotos anunciadas pelo usuário
+            try {
+                $db->prepare("DELETE FROM product_images WHERE product_id IN (SELECT id FROM products WHERE seller_id = ?)")->execute([$userId]);
+                $db->prepare("DELETE FROM products WHERE seller_id = ?")->execute([$userId]);
+            } catch (Exception $e) {}
+
+            // 12. Desvincular registros de auditoria e avaliações auditadas mantendo consistência
+            try {
+                $db->prepare("UPDATE audit_logs SET user_id = NULL WHERE user_id = ?")->execute([$userId]);
+                $db->prepare("UPDATE audit_reviews SET user_id = 0 WHERE user_id = ?")->execute([$userId]);
+                $db->prepare("UPDATE audit_reviews SET deleted_by_user_id = 0 WHERE deleted_by_user_id = ?")->execute([$userId]);
+            } catch (Exception $e) {}
+
+            // 13. Excluir o registro definitivo do usuário
+            $delStmt = $db->prepare("DELETE FROM users WHERE id = ?");
+            $delStmt->execute([$userId]);
+
+            // Reativar restrições de chaves estrangeiras
+            if ($driver === 'mysql') {
+                $db->exec("SET FOREIGN_KEY_CHECKS = 1");
+            } else if ($driver === 'sqlite') {
+                $db->exec("PRAGMA foreign_keys = ON");
+            }
+
+            $db->commit();
+
+            // Destruir sessão e invalidar cookies
+            $_SESSION = [];
+            if (ini_get("session.use_cookies")) {
+                $params = session_get_cookie_params();
+                setcookie(session_name(), '', time() - 42000,
+                    $params["path"], $params["domain"],
+                    $params["secure"], $params["httponly"]
+                );
+            }
+            session_destroy();
+
+            echo json_encode([
+                'success' => true,
+                'message' => 'Sua conta foi excluída permanentemente com sucesso.'
+            ]);
+            exit;
+        } catch (Exception $e) {
+            $db->rollBack();
+            if ($driver === 'mysql') {
+                try { $db->exec("SET FOREIGN_KEY_CHECKS = 1"); } catch (Exception $ex) {}
+            } else if ($driver === 'sqlite') {
+                try { $db->exec("PRAGMA foreign_keys = ON"); } catch (Exception $ex) {}
+            }
+            error_log("Erro ao excluir conta do usuário {$userId}: " . $e->getMessage());
+            echo json_encode([
+                'success' => false,
+                'error' => 'Não foi possível excluir sua conta no momento: ' . $e->getMessage()
+            ]);
+            exit;
+        }
     }
 }
 

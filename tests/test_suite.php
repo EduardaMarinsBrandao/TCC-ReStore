@@ -1124,6 +1124,125 @@ runTest('Área do Vendedor: Soma precisa de produtos vendidos, exclusão de canc
     return true;
 });
 
+// --------------------------------------------------------------------------
+// 28. Teste de Exclusão Real de Conta do Usuário
+// --------------------------------------------------------------------------
+runTest('Exclusão Real de Conta: Remoção definitiva com desvinculação em cascata (api/auth.php?action=delete_account)', function() {
+    global $testDbFile;
+    $db = new PDO("sqlite:{$testDbFile}");
+    $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+    // 1. Criar usuário temporário para teste de exclusão
+    $testEmail = 'user_to_delete_' . time() . '@restore.test';
+    $db->prepare("INSERT INTO users (name, email, password_hash, points) VALUES (?, ?, 'hash123', 200)")
+       ->execute(['Usuario Temporario', $testEmail]);
+    $userId = (int)$db->lastInsertId();
+
+    // 2. Inserir dados vinculados a este usuário em várias tabelas
+    $db->prepare("INSERT INTO user_notifications (user_id, title, message) VALUES (?, 'Bem vindo', 'Notificacao de teste')")
+       ->execute([$userId]);
+    $db->prepare("INSERT INTO points_history (user_id, points, type, description) VALUES (?, 200, 'purchase', 'Bonus teste')")
+       ->execute([$userId]);
+    $db->prepare("INSERT INTO discounts (user_id, discount_type, points_cost, code) VALUES (?, '10%', 100, 'CUPOM-TEMP-" . time() . "')")
+       ->execute([$userId]);
+    $db->prepare("INSERT INTO products (seller_id, name, description, price, category, product_condition, stock, location) 
+                  VALUES (?, 'Item a Ser Deletado', 'Desc', 40.00, 'Utilidades', 'used', 1, 'São Paulo, SP')")
+       ->execute([$userId]);
+    $pId = (int)$db->lastInsertId();
+    $db->prepare("INSERT INTO product_images (product_id, image_url, is_primary) VALUES (?, 'uploads/products/temp.jpg', 1)")
+       ->execute([$pId]);
+
+    // 3. Executar chamada de exclusão autenticado como o usuário temporário
+    $out = callApiIsolated('api/auth.php', [
+        'action' => 'delete_account'
+    ], 'POST', [
+        'user_id' => $userId,
+        'user_name' => 'Usuario Temporario'
+    ]);
+    $json = json_decode($out, true);
+
+    if (empty($json['success'])) {
+        throw new Exception("Falha ao excluir conta: " . ($json['error'] ?? 'desconhecido'));
+    }
+
+    // 4. Garantir que o usuário foi DELETADO DE VERDADE da tabela users
+    $chkUser = $db->prepare("SELECT COUNT(*) FROM users WHERE id = ?");
+    $chkUser->execute([$userId]);
+    if ((int)$chkUser->fetchColumn() !== 0) {
+        throw new Exception("Falha: Usuário ainda consta na tabela users após exclusão de conta!");
+    }
+
+    // 5. Garantir que produtos e registros vinculados foram devidamente limpos
+    $chkProd = $db->prepare("SELECT COUNT(*) FROM products WHERE seller_id = ?");
+    $chkProd->execute([$userId]);
+    if ((int)$chkProd->fetchColumn() !== 0) {
+        throw new Exception("Falha: Produtos do usuário continuam no banco após exclusão da conta!");
+    }
+
+    return true;
+});
+
+// --------------------------------------------------------------------------
+// 29. Teste de Sustentabilidade Verdadeira e Cálculo de Resíduos Economizados
+// --------------------------------------------------------------------------
+runTest('Sustentabilidade Real: Cálculo verdadeiro de resíduos economizados e impacto de CO2 (api/products.php)', function() {
+    global $testDbFile;
+    $db = new PDO("sqlite:{$testDbFile}");
+    $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+    // 1. Consultar produto padrão (ex: produto 1 ou 2)
+    $out = callApiIsolated('api/products.php', [
+        'action' => 'detail',
+        'id' => 1
+    ], 'GET');
+    $json = json_decode($out, true);
+
+    if (empty($json['success']) || empty($json['product'])) {
+        throw new Exception("Falha ao consultar detalhes do produto 1");
+    }
+
+    $prod = $json['product'];
+    if (empty($prod['sustainability']) || !isset($prod['sustainability']['waste_saved_kg'])) {
+        throw new Exception("Estrutura de sustentabilidade ausente no retorno de api/products.php?action=detail");
+    }
+
+    $sust = $prod['sustainability'];
+    if ((float)$sust['waste_saved_kg'] <= 0) {
+        throw new Exception("waste_saved_kg deve ser maior que 0 para um produto sustentável");
+    }
+    if (empty($sust['waste_saved_formatted']) || empty($sust['co2_saved_formatted'])) {
+        throw new Exception("Campos formatados de resíduos ou CO2 ausentes na resposta");
+    }
+    if (empty($sust['explanation']) || !str_contains($sust['explanation'], 'resíduos')) {
+        throw new Exception("Explicação detalhada e contextualizada ausente no impacto do produto");
+    }
+
+    // 2. Inserir produto com valor explícito de resíduos (ex: 8.4 kg de madeira recuperada)
+    $db->prepare("INSERT INTO products (seller_id, name, description, price, category, product_condition, material, stock, location, waste_saved_kg) 
+                  VALUES (2, 'Banco Rústico Demolição', 'Banco feito de peroba rosa', 180.00, 'Móveis & Decoração', 'restored', 'Madeira de Demolição', 2, 'Curitiba, PR', 8.4)")
+       ->execute();
+    $customProdId = (int)$db->lastInsertId();
+
+    $outCustom = callApiIsolated('api/products.php', [
+        'action' => 'detail',
+        'id' => $customProdId
+    ], 'GET');
+    $jsonCustom = json_decode($outCustom, true);
+
+    if (empty($jsonCustom['success']) || empty($jsonCustom['product'])) {
+        throw new Exception("Falha ao consultar detalhes do produto customizado");
+    }
+
+    $customProd = $jsonCustom['product'];
+    $customSust = $customProd['sustainability'];
+
+    if ((float)$customSust['waste_saved_kg'] !== 8.4) {
+        throw new Exception("O produto com valor explícito de resíduos não retornou o valor real cadastrado (esperado 8.4, recebido {$customSust['waste_saved_kg']})");
+    }
+
+    return true;
+});
+
 // Limpeza de arquivos temporários do teste
 // --------------------------------------------------------------------------
 if (file_exists($testDbFile)) {

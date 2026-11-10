@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS products (
     total_reviews INT DEFAULT 0,
     views INT DEFAULT 0,
     status VARCHAR(50) DEFAULT 'active', -- active, sold, deleted, inactive
+    waste_saved_kg DECIMAL(6,2) NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (seller_id) REFERENCES users(id) ON DELETE CASCADE

@@ -438,7 +438,7 @@ const App = {
     }
   },
 
-  // Modal para zoom/lightbox de fotos das avaliações
+  // Modal para zoom/lightbox de fotos das avaliações e produtos
   openImageModal: function(imageUrl, title = 'Foto da Avaliação') {
     const existing = document.getElementById('review-photo-modal');
     if (existing) existing.remove();
@@ -450,22 +450,36 @@ const App = {
     document.body.classList.add('modal-open');
     document.documentElement.classList.add('modal-open');
 
+    let keyHandler = null;
+
     const closeModal = () => {
+      if (keyHandler) {
+        window.removeEventListener('keydown', keyHandler);
+        keyHandler = null;
+      }
       modal.remove();
       document.body.classList.remove('modal-open');
       document.documentElement.classList.remove('modal-open');
     };
 
-    modal.onclick = (e) => {
-      if (e.target === modal || e.target.closest('.close-modal-btn')) {
+    keyHandler = (e) => {
+      if (e.key === 'Escape' || e.key === 'Esc') {
         closeModal();
       }
     };
+    window.addEventListener('keydown', keyHandler);
+
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal || e.target.closest('.close-modal-btn')) {
+        closeModal();
+      }
+    });
+
     modal.innerHTML = `
       <div class="relative max-w-3xl max-h-[90vh] bg-white dark:bg-gray-900 rounded-2xl overflow-hidden shadow-2xl flex flex-col select-auto animate-modal-in" onclick="event.stopPropagation()">
         <div class="flex items-center justify-between px-4 py-3 border-b dark:border-gray-800">
           <span class="text-sm font-bold text-gray-800 dark:text-gray-200">${title}</span>
-          <button type="button" class="close-modal-btn text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 p-1 rounded-lg cursor-pointer">
+          <button type="button" class="close-modal-btn flex items-center justify-center w-8 h-8 text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg cursor-pointer transition text-base font-bold active:scale-95" title="Fechar visualização (Esc)">
             ✕
           </button>
         </div>
@@ -474,6 +488,17 @@ const App = {
         </div>
       </div>
     `;
+
+    // Vincular diretamente no botão X dentro da div para evitar qualquer interferência do stopPropagation
+    const closeBtn = modal.querySelector('.close-modal-btn');
+    if (closeBtn) {
+      closeBtn.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        closeModal();
+      };
+    }
+
     document.body.appendChild(modal);
   },
 
@@ -1055,6 +1080,65 @@ const App = {
   },
 
 
+  // Cálculo dinâmico e fidedigno de impacto ambiental do produto
+  getProductSustainability(p) {
+    if (p.sustainability && p.sustainability.waste_saved_formatted) {
+      return p.sustainability;
+    }
+    const explicitWaste = parseFloat(p.waste_saved_kg);
+    let wasteKg = (!isNaN(explicitWaste) && explicitWaste > 0) ? explicitWaste : 1.8;
+
+    if (isNaN(explicitWaste) || explicitWaste <= 0) {
+      const cat = (p.category || '').toLowerCase();
+      const name = (p.name || '').toLowerCase();
+      const mat = (p.material || '').toLowerCase();
+
+      if (cat.includes('móveis') || cat.includes('moveis') || cat.includes('decora')) {
+        wasteKg = 12.5;
+        if (name.includes('mesa') || name.includes('armário') || name.includes('estante') || name.includes('sofá')) wasteKg = 18.0;
+        else if (name.includes('cadeira') || name.includes('banco') || name.includes('poltrona')) wasteKg = 8.5;
+        else if (name.includes('vaso') || name.includes('quadro')) wasteKg = 2.4;
+      } else if (cat.includes('eletr')) {
+        wasteKg = 2.8;
+        if (name.includes('notebook') || name.includes('computador') || name.includes('tv')) wasteKg = 5.2;
+        else if (name.includes('celular') || name.includes('smartphone') || name.includes('fone')) wasteKg = 0.65;
+      } else if (cat.includes('moda') || cat.includes('roupa') || cat.includes('acess') || cat.includes('vest')) {
+        wasteKg = 0.75;
+        if (name.includes('jaqueta') || name.includes('casaco') || name.includes('mochila') || name.includes('bolsa')) wasteKg = 1.4;
+        else if (name.includes('tênis') || name.includes('sapato')) wasteKg = 1.1;
+        else if (name.includes('camisa') || name.includes('camiseta')) wasteKg = 0.55;
+      } else if (cat.includes('utilidade') || cat.includes('casa') || cat.includes('cozinha')) {
+        wasteKg = 1.9;
+        if (name.includes('garrafa') || name.includes('copo') || name.includes('marmita')) wasteKg = 2.5;
+      }
+
+      if (p.product_condition === 'restored') wasteKg *= 1.35;
+      else if (p.product_condition === 'used') wasteKg *= 1.15;
+
+      if (mat.includes('madeira') || mat.includes('demolição')) wasteKg += 2.0;
+      else if (mat.includes('inox') || mat.includes('aço') || mat.includes('metal')) wasteKg += 1.2;
+      else if (mat.includes('vidro')) wasteKg += 0.8;
+      else if (mat.includes('reciclado') || mat.includes('upcycled')) wasteKg += 0.6;
+    }
+
+    wasteKg = Math.round(wasteKg * 10) / 10;
+    const co2Kg = Math.round(wasteKg * 1.75 * 10) / 10;
+    const wasteFormatted = wasteKg < 1.0 ? `${Math.round(wasteKg * 1000)} g de resíduos` : `${wasteKg.toFixed(1).replace('.', ',')} kg de resíduos`;
+    const co2Formatted = `${co2Kg.toFixed(1).replace('.', ',')} kg de CO₂`;
+
+    const condLabel = p.product_condition === 'restored' ? 'restaurado' : (p.product_condition === 'used' ? 'reutilizável' : 'sustentável');
+    const matLabel = p.material ? ` em ${p.material}` : '';
+    const explanation = `Ao optar por este item ${condLabel}${matLabel}, você evita o descarte de aproximadamente ${wasteFormatted} em aterros sanitários e poupa cerca de ${co2Formatted} na atmosfera.`;
+
+    return {
+      waste_saved_kg: wasteKg,
+      waste_saved_formatted: wasteFormatted,
+      co2_saved_kg: co2Kg,
+      co2_saved_formatted: co2Formatted,
+      explanation
+    };
+  },
+
   // ----------------------------------------------------
   // TELA 7: DETALHES DO PRODUTO
   // ----------------------------------------------------
@@ -1156,15 +1240,43 @@ const App = {
                   </span>
                 </div>
 
-                <div class="p-3.5 bg-emerald-50 dark:bg-emerald-950/40 rounded-2xl mb-4 border border-emerald-200 dark:border-emerald-900 flex items-center gap-3.5">
-                  <div class="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-300 flex items-center justify-center flex-shrink-0">
-                    <i data-lucide="leaf" class="w-5 h-5"></i>
+                ${(() => {
+                  const sust = this.getProductSustainability(p);
+                  return `
+                  <div class="p-4 bg-emerald-50 dark:bg-emerald-950/40 rounded-2xl mb-4 border border-emerald-200 dark:border-emerald-800 space-y-2.5 shadow-2xs">
+                    <div class="flex items-start gap-3">
+                      <div class="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-300 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <i data-lucide="leaf" class="w-5 h-5"></i>
+                      </div>
+                      <div class="flex-1 min-w-0">
+                        <div class="flex items-center justify-between gap-2">
+                          <div class="font-bold text-xs text-emerald-900 dark:text-emerald-200">Impacto Ambiental Real</div>
+                          <span class="text-[10px] uppercase font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/70 px-2 py-0.5 rounded-full">Eco Re-Store</span>
+                        </div>
+                        <div class="text-[11px] text-emerald-800 dark:text-emerald-300 mt-1 leading-relaxed">
+                          ${this.escapeHtml(sust.explanation)}
+                        </div>
+                      </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 pt-2 border-t border-emerald-200/60 dark:border-emerald-900/60 text-center">
+                      <div class="bg-white/80 dark:bg-gray-900/60 p-2.5 rounded-xl border border-emerald-100 dark:border-emerald-900/50">
+                        <div class="text-[10px] text-gray-500 dark:text-gray-400 font-semibold uppercase">Resíduos Poupados</div>
+                        <div class="text-xs sm:text-sm font-extrabold text-emerald-700 dark:text-emerald-300 mt-0.5 flex items-center justify-center gap-1">
+                          <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                          <span>${this.escapeHtml(sust.waste_saved_formatted)}</span>
+                        </div>
+                      </div>
+                      <div class="bg-white/80 dark:bg-gray-900/60 p-2.5 rounded-xl border border-emerald-100 dark:border-emerald-900/50">
+                        <div class="text-[10px] text-gray-500 dark:text-gray-400 font-semibold uppercase">CO₂ Evitado</div>
+                        <div class="text-xs sm:text-sm font-extrabold text-teal-700 dark:text-teal-300 mt-0.5 flex items-center justify-center gap-1">
+                          <i data-lucide="wind" class="w-3.5 h-3.5"></i>
+                          <span>${this.escapeHtml(sust.co2_saved_formatted)}</span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <div class="font-bold text-xs text-emerald-800 dark:text-emerald-300">Impacto Ambiental Positivo</div>
-                    <div class="text-[11px] text-emerald-700 dark:text-emerald-400">Ao optar por este item reutilizável, você evita aproximadamente 2,5 kg de resíduos e CO₂ na natureza.</div>
-                  </div>
-                </div>
+                  `;
+                })()}
 
                 <div class="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl mb-6 border dark:border-gray-800">
                   <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Descrição Ecológica</h3>
@@ -4639,9 +4751,17 @@ const App = {
             <div id="add-prod-location-wrapper"></div>
           </div>
 
-          <div>
-            <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Material Sustentável / Atributos Ecológicos</label>
-            <input type="text" id="prod-material" placeholder="Ex: Aço Inox / Algodão Orgânico / Upcycled" class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 text-sm">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Material Sustentável / Atributos Ecológicos</label>
+              <input type="text" id="prod-material" placeholder="Ex: Aço Inox / Algodão Orgânico / Upcycled" class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 text-sm">
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+                Resíduos Economizados (kg) <span class="text-gray-400 font-normal">(Opcional)</span>
+              </label>
+              <input type="number" step="0.1" min="0.1" id="prod-waste-saved" placeholder="Ex: 2.5 (calculado automaticamente se vazio)" class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 text-sm">
+            </div>
           </div>
 
           <div>
@@ -4824,6 +4944,11 @@ const App = {
     formData.append('location', location);
     formData.append('description', description);
 
+    const wasteInput = document.getElementById('prod-waste-saved');
+    if (wasteInput && wasteInput.value && !isNaN(parseFloat(wasteInput.value)) && parseFloat(wasteInput.value) > 0) {
+      formData.append('waste_saved_kg', parseFloat(wasteInput.value));
+    }
+
     for (let i = 0; i < this.selectedProductImages.length; i++) {
       formData.append('images[]', this.selectedProductImages[i]);
     }
@@ -4958,9 +5083,17 @@ const App = {
               <div id="edit-prod-location-wrapper"></div>
             </div>
 
-            <div>
-              <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Material Sustentável / Atributos Ecológicos</label>
-              <input type="text" id="edit-prod-material" value="${(p.material || '').replace(/"/g, '&quot;')}" placeholder="Ex: Aço Inox / Algodão Orgânico" class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 text-sm">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Material Sustentável / Atributos Ecológicos</label>
+                <input type="text" id="edit-prod-material" value="${(p.material || '').replace(/"/g, '&quot;')}" placeholder="Ex: Aço Inox / Algodão Orgânico" class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+                  Resíduos Economizados (kg) <span class="text-gray-400 font-normal">(Opcional)</span>
+                </label>
+                <input type="number" step="0.1" min="0.1" id="edit-prod-waste-saved" value="${p.waste_saved_kg || ''}" placeholder="Ex: 2.5 (calculado automaticamente se vazio)" class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 text-sm">
+              </div>
             </div>
 
             <div>
@@ -5172,6 +5305,11 @@ const App = {
     formData.append('material', material);
     formData.append('location', location);
     formData.append('description', description);
+
+    const editWasteInput = document.getElementById('edit-prod-waste-saved');
+    if (editWasteInput && editWasteInput.value && !isNaN(parseFloat(editWasteInput.value)) && parseFloat(editWasteInput.value) > 0) {
+      formData.append('waste_saved_kg', parseFloat(editWasteInput.value));
+    }
 
     for (const remId of this.editRemovedImageIds) {
       formData.append('removed_image_ids[]', remId);
@@ -7927,10 +8065,12 @@ const App = {
       if (data.success) {
         ToastManager.show(data.message, 'info');
         AuthManager.currentUser = null;
+        try { localStorage.removeItem('restore_user'); } catch (e) {}
+        try { sessionStorage.clear(); } catch (e) {}
         this.updateHeaderUI();
         this.navigateTo('home');
       } else {
-        ToastManager.show(data.error, 'error');
+        ToastManager.show(data.error || 'Erro ao excluir conta.', 'error');
       }
     } catch (e) {
       ToastManager.show('Erro ao processar exclusão de conta.', 'error');

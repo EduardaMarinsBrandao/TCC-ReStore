@@ -260,6 +260,14 @@ if ($method === 'GET' && $action === 'detail') {
         // Sincronizar pontos com a regra 1 pt por R$ 1,00
         $product['points'] = max(1, (int)round((float)$product['price'] * BUYER_POINTS_PER_REAL));
 
+        // Calcular impacto ecológico e resíduos economizados verdadeiros
+        $sustainabilityImpact = calculateProductSustainabilityImpact($product);
+        $product['sustainability'] = $sustainabilityImpact;
+        $product['waste_saved_kg'] = $sustainabilityImpact['waste_saved_kg'];
+        $product['waste_saved_formatted'] = $sustainabilityImpact['waste_saved_formatted'];
+        $product['co2_saved_formatted'] = $sustainabilityImpact['co2_saved_formatted'];
+        $product['sustainability_explanation'] = $sustainabilityImpact['explanation'];
+
         echo json_encode([
             'success' => true,
             'product' => $product,
@@ -352,7 +360,23 @@ if ($method === 'POST' && ($action === 'create' || $action === 'add')) {
         exit;
     }
 
-    // Cálculo automático de pontos verdes sustentáveis (1 ponto por cada R$ 1,00)
+    // Cálculo de resíduos economizados verdadeiros (customizado ou calculado de forma justa)
+    $wasteSavedInput = isset($_POST['waste_saved_kg']) && is_numeric($_POST['waste_saved_kg']) && (float)$_POST['waste_saved_kg'] > 0
+        ? round((float)$_POST['waste_saved_kg'], 2)
+        : null;
+
+    if ($wasteSavedInput === null) {
+        $calcSust = calculateProductSustainabilityImpact([
+            'category' => $category,
+            'product_condition' => $condition,
+            'material' => $material,
+            'name' => $name
+        ]);
+        $wasteSavedKg = $calcSust['waste_saved_kg'];
+    } else {
+        $wasteSavedKg = $wasteSavedInput;
+    }
+
     // Processamento de Upload Local de Múltiplas Imagens (1 foto obrigatória, até 5 fotos)
     $uploadDir = __DIR__ . '/../uploads/products/';
     if (!is_dir($uploadDir)) {
@@ -367,11 +391,16 @@ if ($method === 'POST' && ($action === 'create' || $action === 'add')) {
         $clientIp = getClientIp();
         $clientUa = getClientUserAgent();
         try {
-            $stmt = $db->prepare("INSERT INTO products (seller_id, name, description, price, category, product_condition, material, stock, location, points, ip_address, user_agent) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-            $stmt->execute([$sellerId, $name, $description, $price, $category, $condition, $material, $stock, $location, $points, $clientIp, $clientUa]);
+            $stmt = $db->prepare("INSERT INTO products (seller_id, name, description, price, category, product_condition, material, stock, location, points, waste_saved_kg, ip_address, user_agent) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([$sellerId, $name, $description, $price, $category, $condition, $material, $stock, $location, $points, $wasteSavedKg, $clientIp, $clientUa]);
         } catch (Exception $e) {
-            $stmt = $db->prepare("INSERT INTO products (seller_id, name, description, price, category, product_condition, material, stock, location, points) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-            $stmt->execute([$sellerId, $name, $description, $price, $category, $condition, $material, $stock, $location, $points]);
+            try {
+                $stmt = $db->prepare("INSERT INTO products (seller_id, name, description, price, category, product_condition, material, stock, location, points, waste_saved_kg) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                $stmt->execute([$sellerId, $name, $description, $price, $category, $condition, $material, $stock, $location, $points, $wasteSavedKg]);
+            } catch (Exception $e2) {
+                $stmt = $db->prepare("INSERT INTO products (seller_id, name, description, price, category, product_condition, material, stock, location, points) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                $stmt->execute([$sellerId, $name, $description, $price, $category, $condition, $material, $stock, $location, $points]);
+            }
         }
         $productId = $db->lastInsertId();
 
@@ -518,6 +547,23 @@ if ($method === 'POST' && ($action === 'update' || $action === 'edit')) {
         exit;
     }
 
+    // Cálculo ou atualização de resíduos economizados verdadeiros
+    $wasteSavedInput = isset($_POST['waste_saved_kg']) && is_numeric($_POST['waste_saved_kg']) && (float)$_POST['waste_saved_kg'] > 0
+        ? round((float)$_POST['waste_saved_kg'], 2)
+        : null;
+
+    if ($wasteSavedInput === null) {
+        $calcSust = calculateProductSustainabilityImpact([
+            'category' => $category,
+            'product_condition' => $condition,
+            'material' => $material,
+            'name' => $name
+        ]);
+        $wasteSavedKg = $calcSust['waste_saved_kg'];
+    } else {
+        $wasteSavedKg = $wasteSavedInput;
+    }
+
     // 1. Identificar imagens marcadas para remoção (apenas imagens pertencentes a este produto)
     $removedImageIds = $_POST['removed_image_ids'] ?? [];
     if (!is_array($removedImageIds) && !empty($removedImageIds)) {
@@ -583,15 +629,29 @@ if ($method === 'POST' && ($action === 'update' || $action === 'edit')) {
     $db->beginTransaction();
     try {
         if ($isAdmin) {
-            $upStmt = $db->prepare("UPDATE products SET 
-                name = ?, description = ?, price = ?, category = ?, product_condition = ?, material = ?, stock = ?, location = ?, points = ? 
-                WHERE id = ?");
-            $upStmt->execute([$name, $description, $price, $category, $condition, $material, $stock, $location, $points, $productId]);
+            try {
+                $upStmt = $db->prepare("UPDATE products SET 
+                    name = ?, description = ?, price = ?, category = ?, product_condition = ?, material = ?, stock = ?, location = ?, points = ?, waste_saved_kg = ? 
+                    WHERE id = ?");
+                $upStmt->execute([$name, $description, $price, $category, $condition, $material, $stock, $location, $points, $wasteSavedKg, $productId]);
+            } catch (Exception $eUp) {
+                $upStmt = $db->prepare("UPDATE products SET 
+                    name = ?, description = ?, price = ?, category = ?, product_condition = ?, material = ?, stock = ?, location = ?, points = ? 
+                    WHERE id = ?");
+                $upStmt->execute([$name, $description, $price, $category, $condition, $material, $stock, $location, $points, $productId]);
+            }
         } else {
-            $upStmt = $db->prepare("UPDATE products SET 
-                name = ?, description = ?, price = ?, category = ?, product_condition = ?, material = ?, stock = ?, location = ?, points = ? 
-                WHERE id = ? AND seller_id = ?");
-            $upStmt->execute([$name, $description, $price, $category, $condition, $material, $stock, $location, $points, $productId, $sellerId]);
+            try {
+                $upStmt = $db->prepare("UPDATE products SET 
+                    name = ?, description = ?, price = ?, category = ?, product_condition = ?, material = ?, stock = ?, location = ?, points = ?, waste_saved_kg = ? 
+                    WHERE id = ? AND seller_id = ?");
+                $upStmt->execute([$name, $description, $price, $category, $condition, $material, $stock, $location, $points, $wasteSavedKg, $productId, $sellerId]);
+            } catch (Exception $eUp) {
+                $upStmt = $db->prepare("UPDATE products SET 
+                    name = ?, description = ?, price = ?, category = ?, product_condition = ?, material = ?, stock = ?, location = ?, points = ? 
+                    WHERE id = ? AND seller_id = ?");
+                $upStmt->execute([$name, $description, $price, $category, $condition, $material, $stock, $location, $points, $productId, $sellerId]);
+            }
         }
 
         // Remover registros das imagens excluídas pelo usuário
