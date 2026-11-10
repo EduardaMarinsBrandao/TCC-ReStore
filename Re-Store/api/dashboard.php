@@ -31,25 +31,33 @@ $lowStockStmt = $db->prepare("SELECT COUNT(*) as total FROM products WHERE selle
 $lowStockStmt->execute([$sellerId]);
 $lowStockCount = (int)$lowStockStmt->fetch()['total'];
 
-// 3. Vendas Realizadas e Faturamento Total
-$salesStmt = $db->prepare("SELECT COUNT(DISTINCT oi.order_id) as total_sales, SUM(oi.price * oi.quantity) as total_revenue 
-                           FROM order_items oi 
-                           JOIN orders o ON oi.order_id = o.id 
-                           WHERE oi.seller_id = ? AND o.status != 'cancelled'");
+// 3. Vendas Realizadas, Produtos Vendidos e Faturamento Total (excluindo pedidos cancelados)
+$salesStmt = $db->prepare("SELECT 
+    COALESCE(SUM(CASE WHEN LOWER(o.status) != 'cancelled' THEN oi.quantity ELSE 0 END), 0) as total_products_sold,
+    COUNT(DISTINCT CASE WHEN LOWER(o.status) != 'cancelled' THEN oi.order_id ELSE NULL END) as total_orders,
+    COALESCE(SUM(CASE WHEN LOWER(o.status) != 'cancelled' THEN (oi.price * oi.quantity) ELSE 0 END), 0.0) as total_revenue,
+    COALESCE(SUM(CASE WHEN LOWER(o.status) = 'cancelled' THEN oi.quantity ELSE 0 END), 0) as total_cancelled_products,
+    COUNT(DISTINCT CASE WHEN LOWER(o.status) = 'cancelled' THEN oi.order_id ELSE NULL END) as total_cancelled_orders
+FROM order_items oi 
+JOIN orders o ON oi.order_id = o.id 
+WHERE oi.seller_id = ?");
 $salesStmt->execute([$sellerId]);
 $salesData = $salesStmt->fetch();
 
-$totalSales = (int)($salesData['total_sales'] ?? 0);
+$totalProductsSold = (int)($salesData['total_products_sold'] ?? 0);
+$totalOrders = (int)($salesData['total_orders'] ?? 0);
 $totalRevenue = (float)($salesData['total_revenue'] ?? 0.0);
+$totalCancelledProducts = (int)($salesData['total_cancelled_products'] ?? 0);
+$totalCancelledOrders = (int)($salesData['total_cancelled_orders'] ?? 0);
 
-// 4. Últimas Vendas
-$recentSalesStmt = $db->prepare("SELECT oi.*, p.name as product_name, o.order_number, o.created_at as order_date, u.name as buyer_name 
+// 4. Últimas Vendas (incluindo status do pedido para detecção de cancelamentos)
+$recentSalesStmt = $db->prepare("SELECT oi.*, p.name as product_name, o.order_number, o.status as order_status, o.created_at as order_date, u.name as buyer_name 
                                  FROM order_items oi 
                                  JOIN products p ON oi.product_id = p.id 
                                  JOIN orders o ON oi.order_id = o.id 
                                  JOIN users u ON o.buyer_id = u.id 
                                  WHERE oi.seller_id = ? 
-                                 ORDER BY oi.id DESC LIMIT 5");
+                                 ORDER BY oi.id DESC LIMIT 10");
 $recentSalesStmt->execute([$sellerId]);
 $recentSales = $recentSalesStmt->fetchAll();
 
@@ -61,8 +69,12 @@ echo json_encode([
     'metrics' => [
         'active_products' => $totalActiveProducts,
         'low_stock_count' => $lowStockCount,
-        'total_sales' => $totalSales,
-        'total_revenue' => $totalRevenue
+        'total_sales' => $totalProductsSold,
+        'total_products_sold' => $totalProductsSold,
+        'total_orders' => $totalOrders,
+        'total_revenue' => $totalRevenue,
+        'total_cancelled_products' => $totalCancelledProducts,
+        'total_cancelled_orders' => $totalCancelledOrders
     ],
     'seller_tier' => $sellerTier,
     'recent_sales' => $recentSales

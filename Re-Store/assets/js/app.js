@@ -3698,8 +3698,14 @@ const App = {
               <div class="text-2xl font-bold text-teal-600 mt-1">${metrics.active_products}</div>
             </div>
             <div class="p-4 rounded-2xl border dark:border-gray-800 bg-white dark:bg-gray-800">
-              <div class="text-xs text-gray-500 font-semibold">Total de Vendas</div>
-              <div class="text-2xl font-bold text-emerald-600 mt-1">${metrics.total_sales}</div>
+              <div class="text-xs text-gray-500 font-semibold">Produtos Vendidos</div>
+              <div class="text-2xl font-bold text-emerald-600 mt-1">${metrics.total_products_sold ?? metrics.total_sales ?? 0} <span class="text-xs font-normal text-gray-400">un.</span></div>
+              ${(metrics.total_cancelled_products && metrics.total_cancelled_products > 0) ? `
+                <div class="text-[11px] text-red-500 font-medium mt-0.5 flex items-center gap-1">
+                  <i data-lucide="info" class="w-3 h-3"></i>
+                  <span>${metrics.total_cancelled_products} item(ns) cancelado(s)</span>
+                </div>
+              ` : ''}
             </div>
             <div class="p-4 rounded-2xl border dark:border-gray-800 bg-white dark:bg-gray-800">
               <div class="text-xs text-gray-500 font-semibold">Faturamento Total</div>
@@ -3734,17 +3740,50 @@ const App = {
                       <th class="py-2.5 font-bold">Pedido</th>
                       <th class="py-2.5 font-bold">Produto</th>
                       <th class="py-2.5 font-bold">Comprador</th>
+                      <th class="py-2.5 font-bold">Status</th>
                       <th class="py-2.5 font-bold">Valor</th>
                       <th class="py-2.5 font-bold text-right">Data & Horário Local</th>
                     </tr>
                   </thead>
                   <tbody class="divide-y dark:divide-gray-700/60 font-medium">
-                    ${recentSales.map(s => `
-                      <tr class="hover:bg-gray-50/70 dark:hover:bg-gray-700/30 transition">
+                    ${recentSales.map(s => {
+                      const isCancelled = String(s.order_status || '').toLowerCase() === 'cancelled';
+                      return `
+                      <tr class="hover:bg-gray-50/70 dark:hover:bg-gray-700/30 transition ${isCancelled ? 'bg-red-50/30 dark:bg-red-950/20' : ''}">
                         <td class="py-3 font-bold text-teal-600">#${this.escapeHtml(s.order_number)}</td>
-                        <td class="py-3 text-gray-900 dark:text-white">${this.escapeHtml(s.product_name)} <span class="text-gray-400">(${s.quantity}x)</span></td>
+                        <td class="py-3 text-gray-900 dark:text-white">
+                          <span class="${isCancelled ? 'line-through text-gray-400 dark:text-gray-500' : ''}">${this.escapeHtml(s.product_name)}</span>
+                          <span class="text-gray-400">(${s.quantity}x)</span>
+                          ${isCancelled ? `
+                            <span class="inline-flex items-center gap-1 text-[10px] font-bold text-red-600 dark:text-red-400 bg-red-100/80 dark:bg-red-950/70 px-2 py-0.5 rounded-full border border-red-200 dark:border-red-800 ml-1.5">
+                              (Cancelado)
+                            </span>
+                          ` : ''}
+                        </td>
                         <td class="py-3 text-gray-600 dark:text-gray-300">${this.escapeHtml(s.buyer_name || 'Comprador')}</td>
-                        <td class="py-3 font-bold text-emerald-600">R$ ${parseFloat(s.price * s.quantity).toFixed(2).replace('.', ',')}</td>
+                        <td class="py-3">
+                          ${isCancelled ? `
+                            <span class="inline-flex items-center gap-1 text-[11px] font-bold text-red-600 dark:text-red-400 bg-red-100/90 dark:bg-red-950/70 px-2.5 py-1 rounded-full border border-red-200 dark:border-red-800">
+                              <i data-lucide="x-circle" class="w-3.5 h-3.5"></i>
+                              <span>(Cancelado)</span>
+                            </span>
+                          ` : `
+                            <span class="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-1 rounded-full border border-emerald-200 dark:border-emerald-800">
+                              <i data-lucide="check-circle" class="w-3.5 h-3.5"></i>
+                              <span>Concluído</span>
+                            </span>
+                          `}
+                        </td>
+                        <td class="py-3 font-bold">
+                          ${isCancelled ? `
+                            <div class="flex flex-col">
+                              <span class="line-through text-gray-400 dark:text-gray-500 text-xs">R$ ${parseFloat(s.price * s.quantity).toFixed(2).replace('.', ',')}</span>
+                              <span class="text-[11px] font-bold text-red-600 dark:text-red-400">(Cancelado)</span>
+                            </div>
+                          ` : `
+                            <span class="text-emerald-600">R$ ${parseFloat(s.price * s.quantity).toFixed(2).replace('.', ',')}</span>
+                          `}
+                        </td>
                         <td class="py-3 text-right text-gray-500 dark:text-gray-400" title="${DateHelper.formatDateTime(s.order_date)}">
                           <span class="inline-flex items-center gap-1 font-semibold text-gray-700 dark:text-gray-300">
                             <i data-lucide="clock" class="w-3.5 h-3.5 text-teal-600 inline"></i>
@@ -3752,7 +3791,7 @@ const App = {
                           </span>
                         </td>
                       </tr>
-                    `).join('')}
+                    `}).join('')}
                   </tbody>
                 </table>
               </div>

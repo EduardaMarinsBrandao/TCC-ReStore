@@ -1024,6 +1024,106 @@ runTest('Information Disclosure (STRIDE I): Omissão de dados cadastrais confide
     return true;
 });
 
+// --------------------------------------------------------------------------
+// 27. Teste da Área do Vendedor: Soma de Produtos Vendidos e Status de Cancelamento
+// --------------------------------------------------------------------------
+runTest('Área do Vendedor: Soma precisa de produtos vendidos, exclusão de cancelados e marcação (Cancelado)', function() {
+    global $testDbFile;
+    $db = new PDO("sqlite:{$testDbFile}");
+    $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+    $sellerId = 2; // Usuário Mariana Costa (vendedora)
+    $buyerId = 1;  // Usuário Carlos Silva (comprador)
+
+    // Inserir Pedido Ativo com múltiplos itens/unidades (2 unidades do prod 1 + 3 unidades do prod 2 = 5 produtos vendidos)
+    $orderNumberActive = 'ORD-TEST-ACTIVE-' . time();
+    $db->prepare("INSERT INTO orders (order_number, buyer_id, total, points_earned, payment_method, shipping_address, status, created_at) 
+                  VALUES (?, ?, 150.00, 15, 'pix', 'Rua Teste, 123', 'confirmed', datetime('now'))")
+       ->execute([$orderNumberActive, $buyerId]);
+    $orderActiveId = (int)$db->lastInsertId();
+
+    $db->prepare("INSERT INTO order_items (order_id, product_id, seller_id, quantity, price, points) 
+                  VALUES (?, 1, ?, 2, 25.00, 10)")
+       ->execute([$orderActiveId, $sellerId]);
+
+    $db->prepare("INSERT INTO order_items (order_id, product_id, seller_id, quantity, price, points) 
+                  VALUES (?, 2, ?, 3, 33.33, 15)")
+       ->execute([$orderActiveId, $sellerId]);
+
+    // Inserir Pedido Cancelado (4 unidades canceladas pelo comprador)
+    $orderNumberCancelled = 'ORD-TEST-CANC-' . time();
+    $db->prepare("INSERT INTO orders (order_number, buyer_id, total, points_earned, payment_method, shipping_address, status, created_at) 
+                  VALUES (?, ?, 80.00, 8, 'pix', 'Rua Teste, 123', 'cancelled', datetime('now'))")
+       ->execute([$orderNumberCancelled, $buyerId]);
+    $orderCancelledId = (int)$db->lastInsertId();
+
+    $db->prepare("INSERT INTO order_items (order_id, product_id, seller_id, quantity, price, points) 
+                  VALUES (?, 3, ?, 4, 20.00, 8)")
+       ->execute([$orderCancelledId, $sellerId]);
+
+    // Chamar API do Dashboard do Vendedor
+    $out = callApiIsolated('api/dashboard.php', [], 'GET', [
+        'user_id' => $sellerId,
+        'user_name' => 'Mariana Costa'
+    ]);
+    $json = json_decode($out, true);
+
+    if (empty($json['success'])) {
+        throw new Exception("Falha ao consultar api/dashboard.php: " . ($json['error'] ?? 'desconhecido'));
+    }
+
+    $metrics = $json['metrics'] ?? [];
+    $recentSales = $json['recent_sales'] ?? [];
+
+    // Validar soma de produtos vendidos (deve ser pelo menos 5, somando as quantidades de produtos ativos)
+    if (!isset($metrics['total_products_sold']) || (int)$metrics['total_products_sold'] < 5) {
+        throw new Exception("total_products_sold incorreto: esperado >= 5 itens vendidos, retornado " . ($metrics['total_products_sold'] ?? 'nulo'));
+    }
+
+    // Validar que total_sales reflete a soma dos produtos vendidos
+    if (!isset($metrics['total_sales']) || (int)$metrics['total_sales'] !== (int)$metrics['total_products_sold']) {
+        throw new Exception("total_sales divergente de total_products_sold");
+    }
+
+    // Validar que itens cancelados foram contabilizados na métrica de cancelados
+    if (!isset($metrics['total_cancelled_products']) || (int)$metrics['total_cancelled_products'] < 4) {
+        throw new Exception("total_cancelled_products incorreto: esperado >= 4 itens cancelados, retornado " . ($metrics['total_cancelled_products'] ?? 'nulo'));
+    }
+
+    // Validar que as vendas recentes incluem o status do pedido (order_status)
+    $cancelledSaleFound = false;
+    $activeSaleFound = false;
+
+    foreach ($recentSales as $sale) {
+        if (!isset($sale['order_status'])) {
+            throw new Exception("Campo 'order_status' ausente nas vendas recentes do dashboard");
+        }
+
+        if ($sale['order_number'] === $orderNumberCancelled) {
+            if ($sale['order_status'] !== 'cancelled') {
+                throw new Exception("Pedido cancelado veio com order_status divergente de 'cancelled': {$sale['order_status']}");
+            }
+            $cancelledSaleFound = true;
+        }
+
+        if ($sale['order_number'] === $orderNumberActive) {
+            if ($sale['order_status'] !== 'confirmed') {
+                throw new Exception("Pedido ativo veio com order_status divergente de 'confirmed': {$sale['order_status']}");
+            }
+            $activeSaleFound = true;
+        }
+    }
+
+    if (!$cancelledSaleFound) {
+        throw new Exception("Venda do pedido cancelado não foi localizada no histórico recente do vendedor");
+    }
+    if (!$activeSaleFound) {
+        throw new Exception("Venda do pedido ativo não foi localizada no histórico recente do vendedor");
+    }
+
+    return true;
+});
+
 // Limpeza de arquivos temporários do teste
 // --------------------------------------------------------------------------
 if (file_exists($testDbFile)) {
