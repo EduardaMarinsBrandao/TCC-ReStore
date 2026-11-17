@@ -12,10 +12,12 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/db_init.php';
 require_once __DIR__ . '/../config/gamification.php';
 require_once __DIR__ . '/../config/audit.php';
+require_once __DIR__ . '/../config/rate_limit.php';
 
 // Garantir que as tabelas e dados iniciais foram carregados
 initializeDatabase();
 $db = getDbConnection();
+enforceMaxPayloadSize();
 
 $rawInput = file_get_contents('php://input');
 $data = json_decode($rawInput, true) ?? [];
@@ -25,6 +27,13 @@ if (empty($data) && !empty($_POST)) {
 }
 
 $action = $_GET['action'] ?? $_POST['action'] ?? $data['action'] ?? '';
+
+$strictAuthActions = ['login', 'google_login', 'send_register_code', 'verify_register_code', 'register', 'forgot_password', 'verify_code', 'reset_password'];
+if (in_array($action, $strictAuthActions, true)) {
+    enforceRateLimit('auth_strict_' . $action, 15, 60);
+} else {
+    enforceRateLimit('auth_general_' . $action, 60, 60);
+}
 
 // ============================================================
 // FUNÇÕES AUXILIARES DE VALIDAÇÃO
@@ -1017,8 +1026,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (
             isset($_FILES['avatar']) &&
+            ($_FILES['avatar']['error'] === UPLOAD_ERR_INI_SIZE || $_FILES['avatar']['error'] === UPLOAD_ERR_FORM_SIZE)
+        ) {
+            echo json_encode([
+                'success' => false,
+                'error' => 'A imagem de avatar deve ter no máximo 5 MB.'
+            ]);
+            exit;
+        }
+
+        if (
+            isset($_FILES['avatar']) &&
             $_FILES['avatar']['error'] === UPLOAD_ERR_OK
         ) {
+            $maxAvatarBytes = 5 * 1024 * 1024; // 5 MB
+            $avatarSize = (int)($_FILES['avatar']['size'] ?? 0);
+            if ($avatarSize <= 0 || $avatarSize > $maxAvatarBytes) {
+                echo json_encode([
+                    'success' => false,
+                    'error' => 'A imagem de avatar deve ter no máximo 5 MB.'
+                ]);
+                exit;
+            }
 
             $fileTmp = $_FILES['avatar']['tmp_name'];
             $fileName = $_FILES['avatar']['name'];

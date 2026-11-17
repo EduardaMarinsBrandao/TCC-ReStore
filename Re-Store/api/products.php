@@ -14,12 +14,20 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/db_init.php';
 require_once __DIR__ . '/../config/gamification.php';
 require_once __DIR__ . '/../config/audit.php';
+require_once __DIR__ . '/../config/rate_limit.php';
 
 initializeDatabase();
 $db = getDbConnection();
+enforceMaxPayloadSize();
 
 $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? $_POST['action'] ?? 'list';
+
+if ($method === 'GET') {
+    enforceRateLimit('products_read_' . $action, 120, 60);
+} else {
+    enforceRateLimit('products_write_' . $action, 30, 60);
+}
 
 /**
  * Remove metadados forenses internos antes de expor produto nas respostas públicas/vendedor.
@@ -43,11 +51,16 @@ if ($method === 'GET' && $action === 'list') {
         $location = trim($_GET['location'] ?? '');
         $materials = trim($_GET['materials'] ?? $_GET['material'] ?? '');
         $sort = trim($_GET['sort'] ?? 'recent');
+        $page = max(1, (int)($_GET['page'] ?? 1));
+        $limit = max(1, min(50, (int)($_GET['limit'] ?? 50)));
+        $offset = ($page - 1) * $limit;
 
-        $sql = "SELECT p.*, COALESCE(u.name, 'Vendedor Sustentável') as seller_name, u.avatar as seller_avatar, COALESCE(u.is_verified_business, 0) as is_verified_business, u.business_name 
-                FROM products p 
+        $fromWhere = "FROM products p 
                 LEFT JOIN users u ON p.seller_id = u.id 
                 WHERE p.status = 'active'";
+        $sql = "SELECT p.*, COALESCE(u.name, 'Vendedor Sustentável') as seller_name, u.avatar as seller_avatar, COALESCE(u.is_verified_business, 0) as is_verified_business, u.business_name,
+                (SELECT image_url FROM product_images WHERE product_id = p.id ORDER BY is_primary DESC, id ASC LIMIT 1) as primary_image 
+                " . $fromWhere;
         $params = [];
 
         if (!empty($location)) {
@@ -106,6 +119,13 @@ if ($method === 'GET' && $action === 'list') {
             $params[] = $sellerId;
         }
 
+        // Contagem total para paginação usando os mesmos filtros
+        $wherePos = strpos($sql, 'FROM products p');
+        $countSql = "SELECT COUNT(*) " . substr($sql, $wherePos);
+        $countStmt = $db->prepare($countSql);
+        $countStmt->execute($params);
+        $totalProducts = (int)$countStmt->fetchColumn();
+
         if ($sort === 'price_asc') {
             $sql .= " ORDER BY p.price ASC, p.id DESC";
         } elseif ($sort === 'price_desc') {
@@ -118,22 +138,32 @@ if ($method === 'GET' && $action === 'list') {
             $sql .= " ORDER BY p.id DESC";
         }
 
+        $sql .= " LIMIT " . (int)$limit . " OFFSET " . (int)$offset;
+
         $stmt = $db->prepare($sql);
         $stmt->execute($params);
         $products = $stmt->fetchAll();
 
-        // Carregar imagem principal e sincronizar pontos (1 pt por R$ 1,00)
+        // Normalizar imagem padrão e sincronizar pontos (1 pt por R$ 1,00)
         foreach ($products as &$prod) {
-            $imgStmt = $db->prepare("SELECT image_url FROM product_images WHERE product_id = ? ORDER BY is_primary DESC, id ASC LIMIT 1");
-            $imgStmt->execute([$prod['id']]);
-            $primaryImg = $imgStmt->fetch();
-            $prod['primary_image'] = $primaryImg ? $primaryImg['image_url'] : 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=600';
+            if (empty($prod['primary_image'])) {
+                $prod['primary_image'] = 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=600';
+            }
             $prod['points'] = max(1, (int)round((float)$prod['price'] * BUYER_POINTS_PER_REAL));
             $prod = sanitizeProductRow($prod);
         }
         unset($prod);
 
-        echo json_encode(['success' => true, 'products' => $products]);
+        echo json_encode([
+            'success' => true,
+            'products' => $products,
+            'pagination' => [
+                'page' => $page,
+                'limit' => $limit,
+                'total' => $totalProducts,
+                'total_pages' => max(1, (int)ceil($totalProducts / $limit))
+            ]
+        ]);
         exit;
     } catch (Exception $e) {
         error_log('Erro em api/products.php?action=list: ' . $e->getMessage());
@@ -200,7 +230,8 @@ if ($method === 'GET' && $action === 'detail') {
                                     FROM reviews r 
                                     LEFT JOIN users u ON r.user_id = u.id 
                                     WHERE r.product_id = ? 
-                                    ORDER BY r.id DESC");
+                                    ORDER BY r.id DESC
+                                    LIMIT 50");
             $revStmt->execute([$currentUserId, $id]);
             $reviews = $revStmt->fetchAll();
 
@@ -222,7 +253,8 @@ if ($method === 'GET' && $action === 'detail') {
                                         FROM reviews r 
                                         LEFT JOIN users u ON r.user_id = u.id 
                                         WHERE r.product_id = ? 
-                                        ORDER BY r.id DESC");
+                                        ORDER BY r.id DESC
+                                        LIMIT 50");
                 $revStmt->execute([$id]);
                 $reviews = $revStmt->fetchAll();
                 foreach ($reviews as &$rev) {
@@ -447,12 +479,21 @@ if ($method === 'POST' && ($action === 'create' || $action === 'add')) {
         $productId = $db->lastInsertId();
 
         $uploadedImages = [];
+        $maxImageBytes = 5 * 1024 * 1024; // 5 MB por imagem
         if (isset($_FILES['images']) && is_array($_FILES['images']['name'])) {
             $count = count($_FILES['images']['name']);
             $maxUploads = min($count, 5);
 
             for ($key = 0; $key < $maxUploads; $key++) {
-                if ($_FILES['images']['error'][$key] === UPLOAD_ERR_OK) {
+                $errCode = $_FILES['images']['error'][$key] ?? UPLOAD_ERR_NO_FILE;
+                if ($errCode === UPLOAD_ERR_INI_SIZE || $errCode === UPLOAD_ERR_FORM_SIZE) {
+                    throw new InvalidArgumentException('Cada imagem do produto deve ter no máximo 5 MB.');
+                }
+                if ($errCode === UPLOAD_ERR_OK) {
+                    $fileSize = (int)($_FILES['images']['size'][$key] ?? 0);
+                    if ($fileSize <= 0 || $fileSize > $maxImageBytes) {
+                        throw new InvalidArgumentException('Cada imagem do produto deve ter no máximo 5 MB.');
+                    }
                     $fileTmp = $_FILES['images']['tmp_name'][$key];
                     $filename = $_FILES['images']['name'][$key];
                     $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
@@ -473,19 +514,29 @@ if ($method === 'POST' && ($action === 'create' || $action === 'add')) {
                     }
                 }
             }
-        } elseif (isset($_FILES['images']) && is_string($_FILES['images']['name']) && $_FILES['images']['error'] === UPLOAD_ERR_OK) {
-            $fileTmp = $_FILES['images']['tmp_name'];
-            $filename = $_FILES['images']['name'];
-            $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
-            if (in_array($ext, $allowedExts, true) && isRealImageUpload($fileTmp, $ext)) {
-                $newFileName = 'prod_' . $productId . '_' . uniqid() . '_0.' . $ext;
-                $targetPath = $uploadDir . $newFileName;
-                if (move_uploaded_file($fileTmp, $targetPath)) {
-                    $movedFiles[] = $targetPath;
-                    $relUrl = 'uploads/products/' . $newFileName;
-                    $imgStmt = $db->prepare("INSERT INTO product_images (product_id, image_url, is_primary, image_order) VALUES (?, ?, 1, 0)");
-                    $imgStmt->execute([$productId, $relUrl]);
-                    $uploadedImages[] = $relUrl;
+        } elseif (isset($_FILES['images']) && is_string($_FILES['images']['name'])) {
+            $errCode = $_FILES['images']['error'] ?? UPLOAD_ERR_NO_FILE;
+            if ($errCode === UPLOAD_ERR_INI_SIZE || $errCode === UPLOAD_ERR_FORM_SIZE) {
+                throw new InvalidArgumentException('Cada imagem do produto deve ter no máximo 5 MB.');
+            }
+            if ($errCode === UPLOAD_ERR_OK) {
+                $fileSize = (int)($_FILES['images']['size'] ?? 0);
+                if ($fileSize <= 0 || $fileSize > $maxImageBytes) {
+                    throw new InvalidArgumentException('Cada imagem do produto deve ter no máximo 5 MB.');
+                }
+                $fileTmp = $_FILES['images']['tmp_name'];
+                $filename = $_FILES['images']['name'];
+                $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+                if (in_array($ext, $allowedExts, true) && isRealImageUpload($fileTmp, $ext)) {
+                    $newFileName = 'prod_' . $productId . '_' . uniqid() . '_0.' . $ext;
+                    $targetPath = $uploadDir . $newFileName;
+                    if (move_uploaded_file($fileTmp, $targetPath)) {
+                        $movedFiles[] = $targetPath;
+                        $relUrl = 'uploads/products/' . $newFileName;
+                        $imgStmt = $db->prepare("INSERT INTO product_images (product_id, image_url, is_primary, image_order) VALUES (?, ?, 1, 0)");
+                        $imgStmt->execute([$productId, $relUrl]);
+                        $uploadedImages[] = $relUrl;
+                    }
                 }
             }
         }
@@ -648,16 +699,27 @@ if ($method === 'POST' && ($action === 'update' || $action === 'edit')) {
     }
     $remainingImageCount = count($currentImages) - count($imagesToRemove);
 
-    // 2. Selecionar novas imagens válidas (limite de 5 fotos no total, validando o conteúdo real)
+    // 2. Selecionar novas imagens válidas (limite de 5 fotos no total e máximo de 5 MB por arquivo)
     $allowedExts = ['jpg', 'jpeg', 'png', 'webp'];
+    $maxImageBytes = 5 * 1024 * 1024;
     $availableSlots = max(0, 5 - $remainingImageCount);
     $newUploads = [];
 
     if (isset($_FILES['images']) && is_array($_FILES['images']['name'])) {
         $count = count($_FILES['images']['name']);
         for ($key = 0; $key < $count && count($newUploads) < $availableSlots; $key++) {
-            if ($_FILES['images']['error'][$key] !== UPLOAD_ERR_OK) {
+            $errCode = $_FILES['images']['error'][$key] ?? UPLOAD_ERR_NO_FILE;
+            if ($errCode === UPLOAD_ERR_INI_SIZE || $errCode === UPLOAD_ERR_FORM_SIZE) {
+                echo json_encode(['success' => false, 'error' => 'Cada imagem do produto deve ter no máximo 5 MB.']);
+                exit;
+            }
+            if ($errCode !== UPLOAD_ERR_OK) {
                 continue;
+            }
+            $fileSize = (int)($_FILES['images']['size'][$key] ?? 0);
+            if ($fileSize <= 0 || $fileSize > $maxImageBytes) {
+                echo json_encode(['success' => false, 'error' => 'Cada imagem do produto deve ter no máximo 5 MB.']);
+                exit;
             }
             $fileTmp = $_FILES['images']['tmp_name'][$key];
             $ext = strtolower(pathinfo($_FILES['images']['name'][$key], PATHINFO_EXTENSION));
@@ -665,11 +727,23 @@ if ($method === 'POST' && ($action === 'update' || $action === 'edit')) {
                 $newUploads[] = ['tmp' => $fileTmp, 'ext' => $ext, 'key' => $key];
             }
         }
-    } elseif (isset($_FILES['images']) && is_string($_FILES['images']['name']) && $_FILES['images']['error'] === UPLOAD_ERR_OK && $availableSlots > 0) {
-        $fileTmp = $_FILES['images']['tmp_name'];
-        $ext = strtolower(pathinfo($_FILES['images']['name'], PATHINFO_EXTENSION));
-        if (in_array($ext, $allowedExts, true) && isRealImageUpload($fileTmp, $ext)) {
-            $newUploads[] = ['tmp' => $fileTmp, 'ext' => $ext, 'key' => 0];
+    } elseif (isset($_FILES['images']) && is_string($_FILES['images']['name']) && $availableSlots > 0) {
+        $errCode = $_FILES['images']['error'] ?? UPLOAD_ERR_NO_FILE;
+        if ($errCode === UPLOAD_ERR_INI_SIZE || $errCode === UPLOAD_ERR_FORM_SIZE) {
+            echo json_encode(['success' => false, 'error' => 'Cada imagem do produto deve ter no máximo 5 MB.']);
+            exit;
+        }
+        if ($errCode === UPLOAD_ERR_OK) {
+            $fileSize = (int)($_FILES['images']['size'] ?? 0);
+            if ($fileSize <= 0 || $fileSize > $maxImageBytes) {
+                echo json_encode(['success' => false, 'error' => 'Cada imagem do produto deve ter no máximo 5 MB.']);
+                exit;
+            }
+            $fileTmp = $_FILES['images']['tmp_name'];
+            $ext = strtolower(pathinfo($_FILES['images']['name'], PATHINFO_EXTENSION));
+            if (in_array($ext, $allowedExts, true) && isRealImageUpload($fileTmp, $ext)) {
+                $newUploads[] = ['tmp' => $fileTmp, 'ext' => $ext, 'key' => 0];
+            }
         }
     }
 

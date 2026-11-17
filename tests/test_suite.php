@@ -1398,6 +1398,113 @@ runTest('Segurança: Proteção CSRF por Origin cruzada e rejeição de imagem P
     return true;
 });
 
+// --------------------------------------------------------------------------
+// 33. Teste de Segurança (DoS - D): Paginação em Produtos e Avaliações
+// --------------------------------------------------------------------------
+runTest('Segurança (DoS - D): Paginação limitada em api/products.php e api/reviews.php', function() {
+    // 1. Produtos com limit=2&page=1
+    $outP1 = callApiIsolated('api/products.php', ['action' => 'list', 'limit' => 2, 'page' => 1], 'GET');
+    $jsonP1 = json_decode($outP1, true);
+
+    if (empty($jsonP1['success']) || !isset($jsonP1['pagination'])) {
+        throw new Exception("Paginação ausente em api/products.php?action=list: " . substr($outP1, 0, 200));
+    }
+    if (count($jsonP1['products']) > 2) {
+        throw new Exception("Paginação não limitou retorno de produtos: retornou " . count($jsonP1['products']));
+    }
+    if ((int)$jsonP1['pagination']['limit'] !== 2 || (int)$jsonP1['pagination']['page'] !== 1) {
+        throw new Exception("Metadados de paginação inválidos em products.php");
+    }
+
+    // 2. Avaliações com limit=1&page=1
+    $outR1 = callApiIsolated('api/reviews.php', ['action' => 'list', 'product_id' => 1, 'limit' => 1, 'page' => 1], 'GET');
+    $jsonR1 = json_decode($outR1, true);
+
+    if (empty($jsonR1['success']) || !isset($jsonR1['pagination'])) {
+        throw new Exception("Paginação ausente em api/reviews.php?action=list: " . substr($outR1, 0, 200));
+    }
+    if (count($jsonR1['reviews']) > 1) {
+        throw new Exception("Paginação não limitou retorno de avaliações");
+    }
+
+    return true;
+});
+
+// --------------------------------------------------------------------------
+// 34. Teste de Segurança (DoS - D): Rate Limiting e Limite de Payload/Upload
+// --------------------------------------------------------------------------
+runTest('Segurança (DoS - D): Rate Limiting (HTTP 429) e rejeição de payload/upload > 5MB', function() {
+    $rateLimitScript = dirname(__DIR__) . '/Re-Store/config/rate_limit.php';
+    $bucket = 'test_bucket_' . uniqid();
+
+    // 1. Testar enforceRateLimit em subprocesso isolado usando arquivo temporário (cross-platform)
+    $tmpRate = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'test_rl_' . uniqid() . '.php';
+    file_put_contents($tmpRate, "<?php\n"
+        . "require " . var_export($rateLimitScript, true) . ";\n"
+        . "\$_SERVER['HTTP_X_TEST_RATE_LIMIT'] = '1';\n"
+        . "\$_SERVER['REMOTE_ADDR'] = '198.51.100.77';\n"
+        . "enforceRateLimit(" . var_export($bucket, true) . ", 2, 60);\n"
+        . "enforceRateLimit(" . var_export($bucket, true) . ", 2, 60);\n"
+        . "enforceRateLimit(" . var_export($bucket, true) . ", 2, 60);\n"
+    );
+    $out = shell_exec(escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($tmpRate));
+    @unlink($tmpRate);
+
+    $jsonRate = json_decode((string)$out, true);
+    if (!is_array($jsonRate) || !empty($jsonRate['success']) || stripos((string)($jsonRate['error'] ?? ''), 'Muitas requisições') === false) {
+        throw new Exception("Rate limiting não bloqueou na 3a requisição: " . substr((string)$out, 0, 200));
+    }
+
+    // 2. Testar enforceMaxPayloadSize rejeitando payload > 1MB
+    $tmpPayload = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'test_pl_' . uniqid() . '.php';
+    file_put_contents($tmpPayload, "<?php\n"
+        . "require " . var_export($rateLimitScript, true) . ";\n"
+        . "\$_SERVER['CONTENT_TYPE'] = 'application/json';\n"
+        . "\$_SERVER['CONTENT_LENGTH'] = '2097152';\n"
+        . "enforceMaxPayloadSize(1048576);\n"
+    );
+    $outPayload = shell_exec(escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($tmpPayload));
+    @unlink($tmpPayload);
+
+    $jsonPayload = json_decode((string)$outPayload, true);
+    if (!is_array($jsonPayload) || !empty($jsonPayload['success'])) {
+        throw new Exception("enforceMaxPayloadSize não bloqueou payload > 1MB");
+    }
+
+    return true;
+});
+
+// --------------------------------------------------------------------------
+// 35. Teste de Segurança (EoP - E): Blindagem de Privilégios e Rota Admin
+// --------------------------------------------------------------------------
+runTest('Segurança (EoP - E): Usuário comum bloqueado em admin.php e blindagem de mass assignment', function() {
+    // 1. Usuário comum (ID 2) não pode listar usuários via admin.php
+    $outAdmin = callApiIsolated('api/admin.php', ['action' => 'list_users'], 'GET', ['user_id' => 2]);
+    $jsonAdmin = json_decode($outAdmin, true);
+    if (!is_array($jsonAdmin) || !empty($jsonAdmin['success'])) {
+        throw new Exception("Vulnerabilidade EoP: usuário comum acessou api/admin.php?action=list_users!");
+    }
+
+    // 2. Usuário comum tentando injetar is_admin=1 e points=99999 no update_profile
+    $db = getDbConnection();
+    $before = $db->query("SELECT is_admin, points FROM users WHERE id = 2")->fetch(PDO::FETCH_ASSOC);
+
+    callApiIsolated('api/auth.php', [
+        'action' => 'update_profile',
+        'name' => 'Comprador Teste',
+        'is_admin' => 1,
+        'points' => 99999,
+        'level' => 99
+    ], 'POST', ['user_id' => 2]);
+
+    $after = $db->query("SELECT is_admin, points FROM users WHERE id = 2")->fetch(PDO::FETCH_ASSOC);
+    if ((int)$after['is_admin'] !== 0 || (int)$after['points'] !== (int)$before['points']) {
+        throw new Exception("Vulnerabilidade EoP (Mass Assignment): update_profile alterou is_admin ou points!");
+    }
+
+    return true;
+});
+
 // Limpeza de arquivos temporários do teste
 // --------------------------------------------------------------------------
 if (file_exists($testDbFile)) {

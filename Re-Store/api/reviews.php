@@ -11,9 +11,11 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/db_init.php';
 require_once __DIR__ . '/../config/gamification.php';
 require_once __DIR__ . '/../config/audit.php';
+require_once __DIR__ . '/../config/rate_limit.php';
 
 initializeDatabase();
 $db = getDbConnection();
+enforceMaxPayloadSize();
 
 $rawInput = file_get_contents('php://input');
 $data = json_decode($rawInput, true) ?? [];
@@ -23,6 +25,12 @@ if (empty($data) && !empty($_POST)) {
 
 $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? $_POST['action'] ?? $data['action'] ?? 'list';
+
+if ($method === 'GET') {
+    enforceRateLimit('reviews_read_' . $action, 120, 60);
+} else {
+    enforceRateLimit('reviews_write_' . $action, 30, 60);
+}
 
 // Diretório para upload de fotos das avaliações
 $uploadDir = __DIR__ . '/../uploads/reviews/';
@@ -103,17 +111,26 @@ if ($method === 'GET' && ($action === 'list' || $action === 'my_reviews')) {
     $productId = (int)($_GET['product_id'] ?? 0);
     $userIdParam = (int)($_GET['user_id'] ?? 0);
     $currentUserId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 0;
+    $page = max(1, (int)($_GET['page'] ?? 1));
+    $limit = max(1, min(50, (int)($_GET['limit'] ?? 50)));
+    $offset = ($page - 1) * $limit;
 
-    // Listar avaliações de um produto (com fallback resiliente)
+    // Listar avaliações de um produto (com fallback resiliente e paginação)
     if ($productId > 0 && $action !== 'my_reviews') {
         $reviews = [];
+        $totalReviews = 0;
         try {
+            $cntStmt = $db->prepare("SELECT COUNT(*) FROM reviews WHERE product_id = ?");
+            $cntStmt->execute([$productId]);
+            $totalReviews = (int)$cntStmt->fetchColumn();
+
             $stmt = $db->prepare("SELECT r.*, u.name as user_name, u.avatar as user_avatar,
                                   EXISTS(SELECT 1 FROM review_votes rv WHERE rv.review_id = r.id AND rv.user_id = ?) as user_voted 
                                   FROM reviews r 
                                   JOIN users u ON r.user_id = u.id 
                                   WHERE r.product_id = ? 
-                                  ORDER BY r.id DESC");
+                                  ORDER BY r.id DESC
+                                  LIMIT " . (int)$limit . " OFFSET " . (int)$offset);
             $stmt->execute([$currentUserId, $productId]);
             $reviews = $stmt->fetchAll();
 
@@ -134,7 +151,8 @@ if ($method === 'GET' && ($action === 'list' || $action === 'my_reviews')) {
                                       FROM reviews r 
                                       JOIN users u ON r.user_id = u.id 
                                       WHERE r.product_id = ? 
-                                      ORDER BY r.id DESC");
+                                      ORDER BY r.id DESC
+                                      LIMIT " . (int)$limit . " OFFSET " . (int)$offset);
                 $stmt->execute([$productId]);
                 $reviews = $stmt->fetchAll();
                 foreach ($reviews as &$rev) {
@@ -148,7 +166,16 @@ if ($method === 'GET' && ($action === 'list' || $action === 'my_reviews')) {
             }
         }
 
-        echo json_encode(['success' => true, 'reviews' => $reviews]);
+        echo json_encode([
+            'success' => true,
+            'reviews' => $reviews,
+            'pagination' => [
+                'page' => $page,
+                'limit' => $limit,
+                'total' => $totalReviews,
+                'total_pages' => max(1, (int)ceil($totalReviews / $limit))
+            ]
+        ]);
         exit;
     }
 
@@ -167,12 +194,17 @@ if ($method === 'GET' && ($action === 'list' || $action === 'my_reviews')) {
             exit;
         }
 
+        $cntStmt = $db->prepare("SELECT COUNT(*) FROM reviews WHERE user_id = ?");
+        $cntStmt->execute([$targetUserId]);
+        $totalMyReviews = (int)$cntStmt->fetchColumn();
+
         $stmt = $db->prepare("SELECT r.*, p.name as product_name, p.id as product_id,
                               (SELECT image_url FROM product_images WHERE product_id = p.id ORDER BY is_primary DESC LIMIT 1) as product_image
                               FROM reviews r 
                               JOIN products p ON r.product_id = p.id 
                               WHERE r.user_id = ? 
-                              ORDER BY r.id DESC");
+                              ORDER BY r.id DESC
+                              LIMIT " . (int)$limit . " OFFSET " . (int)$offset);
         $stmt->execute([$targetUserId]);
         $reviews = $stmt->fetchAll();
 
@@ -185,7 +217,16 @@ if ($method === 'GET' && ($action === 'list' || $action === 'my_reviews')) {
         }
         unset($rev);
 
-        echo json_encode(['success' => true, 'reviews' => $reviews]);
+        echo json_encode([
+            'success' => true,
+            'reviews' => $reviews,
+            'pagination' => [
+                'page' => $page,
+                'limit' => $limit,
+                'total' => $totalMyReviews,
+                'total_pages' => max(1, (int)ceil($totalMyReviews / $limit))
+            ]
+        ]);
         exit;
     }
 

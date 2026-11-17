@@ -13,9 +13,12 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/db_init.php';
 require_once __DIR__ . '/../config/gamification.php';
 require_once __DIR__ . '/../config/audit.php';
+require_once __DIR__ . '/../config/rate_limit.php';
 
 initializeDatabase();
 $db = getDbConnection();
+enforceMaxPayloadSize();
+enforceRateLimit('admin_api', 60, 60, isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null);
 
 $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? $_POST['action'] ?? 'list_users';

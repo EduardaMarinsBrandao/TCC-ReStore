@@ -9,9 +9,12 @@ if (!headers_sent()) {
 
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/db_init.php';
+require_once __DIR__ . '/../config/audit.php';
+require_once __DIR__ . '/../config/rate_limit.php';
 
 initializeDatabase();
 $db = getDbConnection();
+enforceRateLimit('notifications_api', 90, 60, isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null);
 
 if (!isset($_SESSION['user_id'])) {
     echo json_encode(['success' => true, 'notifications' => []]);
