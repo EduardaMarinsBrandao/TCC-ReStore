@@ -34,10 +34,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'list') {
                           FROM favorites f 
                           JOIN products p ON f.product_id = p.id 
                           JOIN users u ON p.seller_id = u.id 
-                          WHERE f.user_id = ? 
+                          WHERE f.user_id = ? AND p.status = 'active'
                           ORDER BY f.id DESC");
     $stmt->execute([$userId]);
     $favorites = $stmt->fetchAll();
+
+    foreach ($favorites as &$favItem) {
+        unset($favItem['ip_address'], $favItem['user_agent']);
+    }
+    unset($favItem);
 
     echo json_encode(['success' => true, 'favorites' => $favorites]);
     exit;
@@ -65,6 +70,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'toggle') {
         echo json_encode(['success' => true, 'is_favorite' => false, 'message' => 'Removido dos favoritos.']);
         exit;
     } else {
+        // Validar que o produto existe e está ativo antes de favoritar
+        $pCheck = $db->prepare("SELECT id FROM products WHERE id = ? AND status = 'active'");
+        $pCheck->execute([$productId]);
+        if (!$pCheck->fetch()) {
+            echo json_encode(['success' => false, 'error' => 'Produto indisponível ou não encontrado.']);
+            exit;
+        }
         // Adicionar aos favoritos
         $addStmt = $db->prepare("INSERT INTO favorites (user_id, product_id) VALUES (?, ?)");
         $addStmt->execute([$userId, $productId]);

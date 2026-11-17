@@ -97,12 +97,18 @@ if ($method === 'POST' && $action === 'redeem') {
     $db->beginTransaction();
 
     try {
-        // Deduzir pontos do usuário
-        $db->prepare("UPDATE users SET points = points - ? WHERE id = ?")->execute([$pointsCost, $userId]);
+        // Deduzir pontos do usuário de forma atômica (previne condição de corrida / double-spending)
+        $updStmt = $db->prepare("UPDATE users SET points = points - ? WHERE id = ? AND points >= ?");
+        $updStmt->execute([$pointsCost, $userId, $pointsCost]);
+        if ($updStmt->rowCount() <= 0) {
+            $db->rollBack();
+            echo json_encode(['success' => false, 'error' => "Pontos insuficientes! Você precisa de {$pointsCost} pontos."]);
+            exit;
+        }
 
-        // Gerar código único de cupom
+        // Gerar código único e criptograficamente seguro de cupom
         $prefix = strtoupper(str_replace(['%', '_'], '', $discountType));
-        $code = 'ECO' . $prefix . '-' . rand(1000, 9999);
+        $code = 'ECO' . $prefix . '-' . random_int(100000, 999999);
 
         // Inserir cupom na tabela discounts
         $db->prepare("INSERT INTO discounts (user_id, discount_type, points_cost, code) VALUES (?, ?, ?, ?)")
@@ -115,6 +121,11 @@ if ($method === 'POST' && $action === 'redeem') {
         // Atualizar nível de engajamento do usuário
         $newLevel = updateUserEngagementLevel($db, $userId);
 
+        // Ler saldo atualizado após dedução atômica
+        $balStmt = $db->prepare("SELECT points FROM users WHERE id = ?");
+        $balStmt->execute([$userId]);
+        $remainingPoints = (int)($balStmt->fetchColumn() ?? 0);
+
         $db->commit();
 
         echo json_encode([
@@ -122,14 +133,15 @@ if ($method === 'POST' && $action === 'redeem') {
             'message' => "Cupom de {$discountType} resgatado com sucesso! Código: {$code}",
             'code' => $code,
             'discount_type' => $discountType,
-            'remaining_points' => $userPoints - $pointsCost,
+            'remaining_points' => $remainingPoints,
             'new_level' => $newLevel
         ]);
         exit;
 
     } catch (Exception $e) {
         $db->rollBack();
-        echo json_encode(['success' => false, 'error' => 'Erro ao resgatar cupom: ' . $e->getMessage()]);
+        error_log('Erro em api/points.php?action=redeem: ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => 'Erro interno ao resgatar cupom.']);
         exit;
     }
 }

@@ -17,32 +17,51 @@ if (!defined('RESTORE_AUDIT_INITIALIZED')) {
  * @return string
  */
 function getClientIp() {
-    $ipKeys = [
-        'HTTP_CF_CONNECTING_IP', // Cloudflare
-        'HTTP_X_FORWARDED_FOR',  // Proxies / Load Balancers
-        'HTTP_X_FORWARDED',
-        'HTTP_X_CLUSTER_CLIENT_IP',
-        'HTTP_FORWARDED_FOR',
-        'HTTP_FORWARDED',
-        'HTTP_CLIENT_IP',
-        'REMOTE_ADDR'
-    ];
+    $remoteAddr = trim((string)($_SERVER['REMOTE_ADDR'] ?? ''));
+    $isTrustedProxy = false;
 
-    foreach ($ipKeys as $key) {
-        if (!empty($_SERVER[$key])) {
-            $raw = (string)$_SERVER[$key];
-            // Se houver múltiplos IPs (ex: "cliente, proxy1, proxy2"), pega o primeiro
-            $parts = explode(',', $raw);
-            foreach ($parts as $ip) {
-                $ip = trim($ip);
-                if (filter_var($ip, FILTER_VALIDATE_IP)) {
-                    return $ip;
+    if ($remoteAddr !== '' && filter_var($remoteAddr, FILTER_VALIDATE_IP)) {
+        $isPublicRemote = filter_var(
+            $remoteAddr,
+            FILTER_VALIDATE_IP,
+            FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE
+        );
+        if ($isPublicRemote === false) {
+            $isTrustedProxy = true;
+        } else {
+            return $remoteAddr;
+        }
+    } else {
+        $isTrustedProxy = true;
+    }
+
+    if ($isTrustedProxy) {
+        $ipKeys = [
+            'HTTP_CF_CONNECTING_IP', // Cloudflare
+            'HTTP_X_FORWARDED_FOR',  // Proxies / Load Balancers
+            'HTTP_X_FORWARDED',
+            'HTTP_X_CLUSTER_CLIENT_IP',
+            'HTTP_FORWARDED_FOR',
+            'HTTP_FORWARDED',
+            'HTTP_CLIENT_IP'
+        ];
+
+        foreach ($ipKeys as $key) {
+            if (!empty($_SERVER[$key])) {
+                $raw = (string)$_SERVER[$key];
+                // Se houver múltiplos IPs (ex: "cliente, proxy1, proxy2"), pega o primeiro válido
+                $parts = explode(',', $raw);
+                foreach ($parts as $ip) {
+                    $ip = trim($ip);
+                    if (filter_var($ip, FILTER_VALIDATE_IP)) {
+                        return $ip;
+                    }
                 }
             }
         }
     }
 
-    return '127.0.0.1';
+    return ($remoteAddr !== '' && filter_var($remoteAddr, FILTER_VALIDATE_IP)) ? $remoteAddr : '127.0.0.1';
 }
 
 /**

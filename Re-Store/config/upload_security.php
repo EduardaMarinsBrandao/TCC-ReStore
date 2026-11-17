@@ -17,6 +17,16 @@ function isRealImageUpload($tmpPath, $ext) {
         return false;
     }
 
+    $fileSize = @filesize($tmpPath);
+    if ($fileSize === false || $fileSize <= 0 || $fileSize > 5 * 1024 * 1024) {
+        return false;
+    }
+
+    $content = @file_get_contents($tmpPath);
+    if ($content === false || preg_match('/<\?php|<\?=|<script[\s>]|<html[\s>]|<svg[\s>]|phar:\/\//i', $content)) {
+        return false;
+    }
+
     $extToMimes = [
         'jpg'  => ['image/jpeg', 'image/pjpeg'],
         'jpeg' => ['image/jpeg', 'image/pjpeg'],
@@ -32,6 +42,11 @@ function isRealImageUpload($tmpPath, $ext) {
     // 1. Tentar inspecionar os bytes da imagem via getimagesize
     $info = @getimagesize($tmpPath);
     if (is_array($info) && !empty($info['mime'])) {
+        $width = (int)($info[0] ?? 0);
+        $height = (int)($info[1] ?? 0);
+        if ($width <= 0 || $height <= 0 || $width > 8192 || $height > 8192) {
+            return false;
+        }
         return in_array($info['mime'], $allowedMimes, true);
     }
 

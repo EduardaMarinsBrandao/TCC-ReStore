@@ -21,6 +21,14 @@ $db = getDbConnection();
 $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? $_POST['action'] ?? 'list';
 
+/**
+ * Remove metadados forenses internos antes de expor produto nas respostas públicas/vendedor.
+ */
+function sanitizeProductRow(array $prod): array {
+    unset($prod['ip_address'], $prod['user_agent']);
+    return $prod;
+}
+
 // ----------------------------------------------------
 // 1. LISTAR PRODUTOS (COM FILTROS)
 // ----------------------------------------------------
@@ -121,13 +129,15 @@ if ($method === 'GET' && $action === 'list') {
             $primaryImg = $imgStmt->fetch();
             $prod['primary_image'] = $primaryImg ? $primaryImg['image_url'] : 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=600';
             $prod['points'] = max(1, (int)round((float)$prod['price'] * BUYER_POINTS_PER_REAL));
+            $prod = sanitizeProductRow($prod);
         }
         unset($prod);
 
         echo json_encode(['success' => true, 'products' => $products]);
         exit;
     } catch (Exception $e) {
-        echo json_encode(['success' => false, 'error' => 'Erro ao carregar lista de produtos: ' . $e->getMessage()]);
+        error_log('Erro em api/products.php?action=list: ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => 'Erro interno ao carregar lista de produtos.']);
         exit;
     }
 }
@@ -143,11 +153,6 @@ if ($method === 'GET' && $action === 'detail') {
             exit;
         }
 
-        // Incrementa contagem de visualizações
-        try {
-            $db->prepare("UPDATE products SET views = views + 1 WHERE id = ?")->execute([$id]);
-        } catch (Exception $e) {}
-
         $stmt = $db->prepare("SELECT p.*, COALESCE(u.name, 'Vendedor Sustentável') as seller_name, u.avatar as seller_avatar, u.city as seller_city, u.state as seller_state, COALESCE(u.is_verified_business, 0) as is_verified_business, u.business_name 
                               FROM products p 
                               LEFT JOIN users u ON p.seller_id = u.id 
@@ -155,9 +160,27 @@ if ($method === 'GET' && $action === 'detail') {
         $stmt->execute([$id]);
         $product = $stmt->fetch();
 
-        if (!$product || ($product['status'] ?? '') === 'deleted') {
+        $currentUserId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 0;
+        $isSeller = ($product && $currentUserId > 0 && $currentUserId === (int)$product['seller_id']);
+        $isAdmin = isUserAdmin($db, $currentUserId);
+
+        if (!$product || ($product['status'] ?? '') === 'deleted' || (($product['status'] ?? '') !== 'active' && !$isSeller && !$isAdmin)) {
             echo json_encode(['success' => false, 'error' => 'Este anúncio não está mais disponível ou foi removido da plataforma.']);
             exit;
+        }
+
+        // Incrementa contagem de visualizações apenas uma vez por sessão e não para o próprio anunciante
+        if (($product['status'] ?? '') === 'active' && !$isSeller) {
+            if (!isset($_SESSION['viewed_products']) || !is_array($_SESSION['viewed_products'])) {
+                $_SESSION['viewed_products'] = [];
+            }
+            if (empty($_SESSION['viewed_products'][$id])) {
+                try {
+                    $db->prepare("UPDATE products SET views = views + 1 WHERE id = ?")->execute([$id]);
+                    $_SESSION['viewed_products'][$id] = true;
+                    $product['views'] = (int)($product['views'] ?? 0) + 1;
+                } catch (Exception $e) {}
+            }
         }
 
         // Buscar todas as imagens do produto
@@ -168,8 +191,6 @@ if ($method === 'GET' && $action === 'detail') {
         if (empty($images)) {
             $images = [['id' => 0, 'image_url' => 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=600', 'is_primary' => 1]];
         }
-
-        $currentUserId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 0;
 
         // Buscar avaliações do produto com fotos e status de voto (com fallback resiliente)
         $reviews = [];
@@ -191,6 +212,7 @@ if ($method === 'GET' && $action === 'detail') {
                     $rev['images'] = $imgStmt->fetchAll();
                 } catch (Exception $e) {}
                 $rev['is_verified_purchase'] = !empty($rev['order_id']);
+                unset($rev['order_id'], $rev['deleted_at']);
             }
             unset($rev);
         } catch (Exception $e) {
@@ -206,6 +228,7 @@ if ($method === 'GET' && $action === 'detail') {
                 foreach ($reviews as &$rev) {
                     $rev['images'] = [];
                     $rev['is_verified_purchase'] = !empty($rev['order_id']);
+                    unset($rev['order_id'], $rev['deleted_at']);
                 }
                 unset($rev);
             } catch (Exception $e2) {
@@ -214,7 +237,6 @@ if ($method === 'GET' && $action === 'detail') {
         }
 
         // Verificar elegibilidade de avaliação do usuário logado
-        $isSeller = ($currentUserId > 0 && $currentUserId === (int)$product['seller_id']);
         $purchased = false;
         $userOrderId = null;
         $userReview = null;
@@ -253,6 +275,7 @@ if ($method === 'GET' && $action === 'detail') {
                         $userReview['images'] = $myImgStmt->fetchAll();
                     } catch (Exception $e) {}
                     $userReview['is_verified_purchase'] = !empty($userReview['order_id']);
+                    unset($userReview['deleted_at']);
                 }
             } catch (Exception $e) {}
         }
@@ -267,6 +290,7 @@ if ($method === 'GET' && $action === 'detail') {
         $product['waste_saved_formatted'] = $sustainabilityImpact['waste_saved_formatted'];
         $product['co2_saved_formatted'] = $sustainabilityImpact['co2_saved_formatted'];
         $product['sustainability_explanation'] = $sustainabilityImpact['explanation'];
+        $product = sanitizeProductRow($product);
 
         echo json_encode([
             'success' => true,
@@ -276,13 +300,14 @@ if ($method === 'GET' && $action === 'detail') {
             'user_can_review' => ($currentUserId > 0 && !$isSeller && $purchased && !$userReview),
             'user_has_purchased' => $purchased,
             'user_is_seller' => $isSeller,
-            'user_is_admin' => isUserAdmin($db, $currentUserId),
+            'user_is_admin' => $isAdmin,
             'user_review' => $userReview,
             'user_order_id' => $userOrderId
         ]);
         exit;
     } catch (Exception $e) {
-        echo json_encode(['success' => false, 'error' => 'Erro ao carregar detalhes do produto: ' . $e->getMessage()]);
+        error_log('Erro em api/products.php?action=detail: ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => 'Erro interno ao carregar detalhes do produto.']);
         exit;
     }
 }
@@ -307,13 +332,15 @@ if ($method === 'GET' && $action === 'my_products') {
 
         foreach ($products as &$prod) {
             $prod['points'] = max(1, (int)round((float)$prod['price'] * BUYER_POINTS_PER_REAL));
+            $prod = sanitizeProductRow($prod);
         }
         unset($prod);
 
         echo json_encode(['success' => true, 'products' => $products]);
         exit;
     } catch (Exception $e) {
-        echo json_encode(['success' => false, 'error' => 'Erro ao carregar produtos do vendedor: ' . $e->getMessage()]);
+        error_log('Erro em api/products.php?action=my_products: ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => 'Erro interno ao carregar produtos do vendedor.']);
         exit;
     }
 }
@@ -333,6 +360,9 @@ if ($method === 'POST' && ($action === 'create' || $action === 'add')) {
     $price = (float)($_POST['price'] ?? 0);
     $category = trim($_POST['category'] ?? '');
     $condition = trim($_POST['product_condition'] ?? $_POST['condition'] ?? 'used');
+    if (!in_array($condition, ['new', 'used', 'restored'], true)) {
+        $condition = 'used';
+    }
     $material = trim($_POST['material'] ?? '');
     $stock = (int)($_POST['stock'] ?? 1);
     $location = trim($_POST['location'] ?? '');
@@ -349,10 +379,22 @@ if ($method === 'POST' && ($action === 'create' || $action === 'add')) {
         exit;
     }
 
-    if ($stock < 1) {
-        echo json_encode(['success' => false, 'error' => 'O estoque deve ser de pelo menos 1 unidade.']);
+    if (mb_strlen($name, 'UTF-8') > 150 || mb_strlen($description, 'UTF-8') > 5000 || mb_strlen($category, 'UTF-8') > 100 || mb_strlen($material, 'UTF-8') > 150) {
+        echo json_encode(['success' => false, 'error' => 'Um ou mais campos de texto excedem o limite máximo de caracteres permitido.']);
         exit;
     }
+
+    if (!is_finite($price) || $price <= 0 || $price > 1000000) {
+        echo json_encode(['success' => false, 'error' => 'O preço deve estar entre R$ 0,01 e R$ 1.000.000,00.']);
+        exit;
+    }
+
+    if ($stock < 1 || $stock > 100000) {
+        echo json_encode(['success' => false, 'error' => 'O estoque deve ser entre 1 e 100.000 unidades.']);
+        exit;
+    }
+
+    $points = max(1, (int)round($price * BUYER_POINTS_PER_REAL));
 
     require_once __DIR__ . '/../config/locations.php';
     if (!isValidBrazilLocation($location)) {
@@ -450,7 +492,7 @@ if ($method === 'POST' && ($action === 'create' || $action === 'add')) {
 
         // Se nenhuma imagem válida foi enviada, cancelar o cadastro e retornar erro (1 foto obrigatória)
         if (empty($uploadedImages)) {
-            throw new Exception('É obrigatório enviar pelo menos 1 foto válida do produto (JPG, PNG ou WEBP).');
+            throw new InvalidArgumentException('É obrigatório enviar pelo menos 1 foto válida do produto (JPG, PNG ou WEBP).');
         }
 
         $db->commit();
@@ -479,7 +521,12 @@ if ($method === 'POST' && ($action === 'create' || $action === 'add')) {
                 @unlink($mf);
             }
         }
-        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+        if ($e instanceof InvalidArgumentException) {
+            echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+        } else {
+            error_log('Erro em api/products.php?action=create: ' . $e->getMessage());
+            echo json_encode(['success' => false, 'error' => 'Não foi possível cadastrar o produto. Tente novamente.']);
+        }
         exit;
     }
 }
@@ -522,11 +569,24 @@ if ($method === 'POST' && ($action === 'update' || $action === 'edit')) {
     $price = (float)($_POST['price'] ?? 0);
     $category = trim($_POST['category'] ?? '');
     $condition = trim($_POST['product_condition'] ?? $_POST['condition'] ?? 'used');
+    if (!in_array($condition, ['new', 'used', 'restored'], true)) {
+        $condition = 'used';
+    }
     $material = trim($_POST['material'] ?? '');
     $stock = (int)($_POST['stock'] ?? 0);
 
     if (empty($name) || empty($description) || $price <= 0 || empty($category)) {
         echo json_encode(['success' => false, 'error' => 'Preencha os campos obrigatórios (Nome, Descrição, Preço e Categoria).']);
+        exit;
+    }
+
+    if (mb_strlen($name, 'UTF-8') > 150 || mb_strlen($description, 'UTF-8') > 5000 || mb_strlen($category, 'UTF-8') > 100 || mb_strlen($material, 'UTF-8') > 150) {
+        echo json_encode(['success' => false, 'error' => 'Um ou mais campos de texto excedem o limite máximo de caracteres permitido.']);
+        exit;
+    }
+
+    if (!is_finite($price) || $price <= 0 || $price > 1000000) {
+        echo json_encode(['success' => false, 'error' => 'O preço deve estar entre R$ 0,01 e R$ 1.000.000,00.']);
         exit;
     }
 
@@ -542,8 +602,8 @@ if ($method === 'POST' && ($action === 'update' || $action === 'edit')) {
         exit;
     }
 
-    if ($stock < 0) {
-        echo json_encode(['success' => false, 'error' => 'O estoque não pode ser negativo.']);
+    if ($stock < 0 || $stock > 100000) {
+        echo json_encode(['success' => false, 'error' => 'O estoque deve ser entre 0 e 100.000 unidades.']);
         exit;
     }
 
@@ -677,7 +737,7 @@ if ($method === 'POST' && ($action === 'update' || $action === 'edit')) {
         $finalImages = $finalImgStmt->fetchAll();
 
         if (empty($finalImages)) {
-            throw new Exception('O produto precisa ter pelo menos 1 foto. Não é possível remover todas as fotos.');
+            throw new InvalidArgumentException('O produto precisa ter pelo menos 1 foto. Não é possível remover todas as fotos.');
         }
 
         // Garantir que pelo menos uma imagem esteja marcada como is_primary = 1
@@ -704,7 +764,12 @@ if ($method === 'POST' && ($action === 'update' || $action === 'edit')) {
                 @unlink($movedFile);
             }
         }
-        echo json_encode(['success' => false, 'error' => 'Não foi possível atualizar o produto: ' . $e->getMessage()]);
+        if ($e instanceof InvalidArgumentException) {
+            echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+        } else {
+            error_log('Erro em api/products.php?action=update: ' . $e->getMessage());
+            echo json_encode(['success' => false, 'error' => 'Não foi possível atualizar o produto. Tente novamente.']);
+        }
         exit;
     }
 
@@ -836,7 +901,8 @@ if ($method === 'POST' && $action === 'delete') {
             $upd = $db->prepare("UPDATE products SET status = 'deleted', stock = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?");
             $upd->execute([$productId]);
         } catch (Exception $ex) {
-            echo json_encode(['success' => false, 'error' => 'Erro ao processar exclusão do produto: ' . $ex->getMessage()]);
+            error_log('Erro em api/products.php?action=delete: ' . $ex->getMessage());
+            echo json_encode(['success' => false, 'error' => 'Erro ao processar exclusão do produto.']);
             exit;
         }
     }

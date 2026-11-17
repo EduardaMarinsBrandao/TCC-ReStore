@@ -60,6 +60,7 @@ if ($method === 'POST' && ($action === 'create' || $action === 'checkout')) {
     }
 
     // Validação no servidor: cada item precisa de produto válido e quantidade inteira positiva
+    $consolidatedItems = [];
     foreach ($items as $chkItem) {
         $chkProductId = is_array($chkItem) ? ($chkItem['product_id'] ?? $chkItem['id'] ?? null) : null;
         $chkQty = is_array($chkItem) ? ($chkItem['quantity'] ?? 1) : null;
@@ -69,6 +70,13 @@ if ($method === 'POST' && ($action === 'create' || $action === 'checkout')) {
             filter_var($chkQty, FILTER_VALIDATE_INT) === false || (int)$chkQty < 1 || (int)$chkQty > 1000
         ) {
             echo json_encode(['success' => false, 'error' => 'Item inválido no carrinho: a quantidade deve ser um número inteiro maior que zero.']);
+            exit;
+        }
+        $pid = (int)$chkProductId;
+        $q = (int)$chkQty;
+        $consolidatedItems[$pid] = ($consolidatedItems[$pid] ?? 0) + $q;
+        if ($consolidatedItems[$pid] > 1000) {
+            echo json_encode(['success' => false, 'error' => 'Quantidade máxima por produto excedida.']);
             exit;
         }
     }
@@ -83,22 +91,18 @@ if ($method === 'POST' && ($action === 'create' || $action === 'checkout')) {
 
     try {
         $totalAmount = 0.0;
-        $totalPointsEarned = 0;
         $orderItemsData = [];
 
-        foreach ($items as $item) {
-            $productId = (int)($item['product_id'] ?? $item['id'] ?? 0);
-            $qty = (int)($item['quantity'] ?? 1);
-
-            // Buscar produto atualizado do banco
-            $pStmt = $db->prepare("SELECT id, seller_id, price, stock, points, name FROM products WHERE id = ?");
+        foreach ($consolidatedItems as $productId => $qty) {
+            // Buscar produto atualizado e ativo do banco
+            $pStmt = $db->prepare("SELECT id, seller_id, price, stock, points, name, status FROM products WHERE id = ?");
             $pStmt->execute([$productId]);
             $product = $pStmt->fetch();
 
-            if (!$product || $product['stock'] < $qty) {
+            if (!$product || ($product['status'] ?? '') !== 'active' || (int)$product['stock'] < $qty) {
                 $db->rollBack();
                 $pName = $product ? $product['name'] : 'Produto';
-                echo json_encode(['success' => false, 'error' => "Estoque insuficiente para o produto: {$pName}"]);
+                echo json_encode(['success' => false, 'error' => "Estoque insuficiente ou anúncio indisponível para o produto: {$pName}"]);
                 exit;
             }
 
@@ -113,13 +117,21 @@ if ($method === 'POST' && ($action === 'create' || $action === 'checkout')) {
                 exit;
             }
 
+            // Decrementar estoque no banco de forma atômica
+            $updStock = $db->prepare("UPDATE products SET stock = stock - ? WHERE id = ? AND stock >= ? AND status = 'active'");
+            $updStock->execute([$qty, $productId, $qty]);
+            if ($updStock->rowCount() <= 0) {
+                $db->rollBack();
+                $pName = $product ? $product['name'] : 'Produto';
+                echo json_encode(['success' => false, 'error' => "Estoque insuficiente para o produto: {$pName}"]);
+                exit;
+            }
+
             $itemPrice = (float)$product['price'];
-            // 1 Ponto Verde por cada R$ 1,00 gasto
             $itemPoints = max(1, (int)round($itemPrice * BUYER_POINTS_PER_REAL)) * $qty;
             $subtotal = $itemPrice * $qty;
 
             $totalAmount += $subtotal;
-            $totalPointsEarned += $itemPoints;
 
             $orderItemsData[] = [
                 'product_id' => $productId,
@@ -128,9 +140,6 @@ if ($method === 'POST' && ($action === 'create' || $action === 'checkout')) {
                 'price' => $itemPrice,
                 'points' => $itemPoints
             ];
-
-            // Decrementar estoque no banco
-            $db->prepare("UPDATE products SET stock = stock - ? WHERE id = ?")->execute([$qty, $productId]);
         }
 
         $couponCode = trim($data['coupon_code'] ?? '');
@@ -165,12 +174,25 @@ if ($method === 'POST' && ($action === 'create' || $action === 'checkout')) {
         }
 
         $finalTotal = max(0, $totalAmount - $discountAmount);
+        // Pontos Verdes proporcionais ao valor efetivamente pago após desconto
+        $totalPointsEarned = $finalTotal > 0 ? max(1, (int)round($finalTotal * BUYER_POINTS_PER_REAL)) : 0;
 
         // Gerar número de pedido único ex: RES-2026-98341
-        $orderNumber = 'RES-' . date('Y') . '-' . strtoupper(substr(uniqid(), -5));
+        $orderNumber = 'RES-' . date('Y') . '-' . strtoupper(bin2hex(random_bytes(3)));
         $status = 'confirmed'; // Confirmação imediata no fluxo 100% simulado
         $clientIp = getClientIp();
         $clientUa = getClientUserAgent();
+
+        // Se usou cupom, consumir atomicamente antes de gravar o pedido (USO ÚNICO)
+        if ($discountId) {
+            $useCouponStmt = $db->prepare("UPDATE discounts SET is_used = 1 WHERE id = ? AND user_id = ? AND is_used = 0");
+            $useCouponStmt->execute([$discountId, $userId]);
+            if ($useCouponStmt->rowCount() <= 0) {
+                $db->rollBack();
+                echo json_encode(['success' => false, 'error' => 'Este cupom já foi utilizado em outra compra.']);
+                exit;
+            }
+        }
 
         try {
             $orderStmt = $db->prepare("INSERT INTO orders 
@@ -197,11 +219,6 @@ if ($method === 'POST' && ($action === 'create' || $action === 'checkout')) {
         }
         $orderId = $db->lastInsertId();
 
-        // Se usou cupom, marcar como utilizado no banco (USO ÚNICO)
-        if ($discountId) {
-            $db->prepare("UPDATE discounts SET is_used = 1 WHERE id = ?")->execute([$discountId]);
-        }
-
         // Inserir itens do pedido
         $itemStmt = $db->prepare("INSERT INTO order_items (order_id, product_id, seller_id, quantity, price, points) VALUES (?, ?, ?, ?, ?, ?)");
         foreach ($orderItemsData as $oi) {
@@ -209,15 +226,16 @@ if ($method === 'POST' && ($action === 'create' || $action === 'checkout')) {
         }
 
         // 1. Creditar pontos ao comprador na tabela users
-        $db->prepare("UPDATE users SET points = points + ? WHERE id = ?")->execute([$totalPointsEarned, $userId]);
+        if ($totalPointsEarned > 0) {
+            $db->prepare("UPDATE users SET points = points + ? WHERE id = ?")->execute([$totalPointsEarned, $userId]);
+            // Registrar no histórico de pontos do comprador
+            $db->prepare("INSERT INTO points_history (user_id, points, type, description, order_id) VALUES (?, ?, 'purchase', ?, ?)")
+               ->execute([$userId, $totalPointsEarned, "Pontos ganhos no pedido #{$orderNumber}", $orderId]);
+        }
 
         // Atualizar endereço no cadastro do usuário para futuras compras
         $db->prepare("UPDATE users SET address = ?, city = ?, state = ?, zip_code = ? WHERE id = ?")
            ->execute([$shippingAddress, $shippingCity, $shippingState, $shippingZip, $userId]);
-
-        // Registrar no histórico de pontos do comprador
-        $db->prepare("INSERT INTO points_history (user_id, points, type, description, order_id) VALUES (?, ?, 'purchase', ?, ?)")
-           ->execute([$userId, $totalPointsEarned, "Pontos ganhos no pedido #{$orderNumber}", $orderId]);
 
         // Atualizar nível de engajamento do comprador
         $newBuyerLevel = updateUserEngagementLevel($db, $userId);
@@ -301,7 +319,8 @@ if ($method === 'POST' && ($action === 'create' || $action === 'checkout')) {
 
     } catch (Exception $e) {
         $db->rollBack();
-        echo json_encode(['success' => false, 'error' => 'Ocorreu um erro ao processar o pedido: ' . $e->getMessage()]);
+        error_log('Erro em api/orders.php?action=checkout: ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => 'Ocorreu um erro interno ao processar o pedido. Tente novamente.']);
         exit;
     }
 }
@@ -315,6 +334,7 @@ if ($method === 'GET' && ($action === 'list_buyer' || $action === 'my_orders')) 
     $orders = $stmt->fetchAll();
 
     foreach ($orders as &$ord) {
+        unset($ord['ip_address'], $ord['user_agent']);
         $itemStmt = $db->prepare("SELECT oi.*, p.name as product_name, p.category, 
                                  (SELECT image_url FROM product_images WHERE product_id = p.id ORDER BY is_primary DESC LIMIT 1) as product_image,
                                  u.name as seller_name,
@@ -326,6 +346,7 @@ if ($method === 'GET' && ($action === 'list_buyer' || $action === 'my_orders')) 
         $itemStmt->execute([$userId, $ord['id']]);
         $ord['items'] = $itemStmt->fetchAll();
     }
+    unset($ord);
 
     echo json_encode(['success' => true, 'orders' => $orders]);
     exit;
@@ -335,7 +356,7 @@ if ($method === 'GET' && ($action === 'list_buyer' || $action === 'my_orders')) 
 // 3. LISTAR VENDAS DO VENDEDOR
 // ----------------------------------------------------
 if ($method === 'GET' && $action === 'list_seller') {
-    $stmt = $db->prepare("SELECT DISTINCT o.*, u.name as buyer_name, u.email as buyer_email 
+    $stmt = $db->prepare("SELECT DISTINCT o.id, o.order_number, o.status, o.shipping_city, o.shipping_state, o.created_at, o.updated_at, u.name as buyer_name 
                           FROM orders o 
                           JOIN order_items oi ON o.id = oi.order_id 
                           JOIN users u ON o.buyer_id = u.id 
@@ -352,7 +373,14 @@ if ($method === 'GET' && $action === 'list_seller') {
                                  WHERE oi.order_id = ? AND oi.seller_id = ?");
         $itemStmt->execute([$sale['id'], $userId]);
         $sale['items'] = $itemStmt->fetchAll();
+
+        $sellerSubtotal = 0.0;
+        foreach ($sale['items'] as $si) {
+            $sellerSubtotal += ((float)$si['price'] * (int)$si['quantity']);
+        }
+        $sale['seller_subtotal'] = round($sellerSubtotal, 2);
     }
+    unset($sale);
 
     echo json_encode(['success' => true, 'sales' => $sales]);
     exit;
@@ -384,26 +412,47 @@ if ($method === 'POST' && $action === 'cancel') {
     try {
         $db->prepare("UPDATE orders SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = ?")->execute([$orderId]);
 
-        // 1. Reativar o cupom de desconto para ficar disponível novamente!
-        $couponRestored = false;
-        if (!empty($order['coupon_code'])) {
-            $db->prepare("UPDATE discounts SET is_used = 0 WHERE code = ? AND user_id = ?")->execute([$order['coupon_code'], $userId]);
-            $couponRestored = true;
-        }
-
-        // 2. Restaurar estoque dos produtos comprados
-        $itemsStmt = $db->prepare("SELECT product_id, quantity FROM order_items WHERE order_id = ?");
-        $itemsStmt->execute([$orderId]);
-        $orderItems = $itemsStmt->fetchAll();
-        foreach ($orderItems as $oi) {
-            $db->prepare("UPDATE products SET stock = stock + ? WHERE id = ?")->execute([$oi['quantity'], $oi['product_id']]);
-        }
-
-        // 3. Estornar pontos ganhos com a compra (comprador)
+        // 1. Estornar pontos ganhos com a compra (comprador), revogando cupons não utilizados se o saldo atual não cobrir o estorno
         if ((int)$order['points_earned'] > 0) {
             $buyerPts = (int)$order['points_earned'];
-            $db->prepare("UPDATE users SET points = CASE WHEN points >= ? THEN points - ? ELSE 0 END WHERE id = ?")
-               ->execute([$buyerPts, $buyerPts, $userId]);
+            $ptsStmt = $db->prepare("SELECT points FROM users WHERE id = ?");
+            $ptsStmt->execute([$userId]);
+            $currentPoints = (int)($ptsStmt->fetchColumn() ?? 0);
+
+            if ($currentPoints < $buyerPts) {
+                $unusedStmt = $db->prepare("SELECT id, code, points_cost FROM discounts WHERE user_id = ? AND is_used = 0 ORDER BY id DESC");
+                $unusedStmt->execute([$userId]);
+                $unusedCoupons = $unusedStmt->fetchAll();
+
+                foreach ($unusedCoupons as $uc) {
+                    if ($currentPoints >= $buyerPts) {
+                        break;
+                    }
+                    $delCouponStmt = $db->prepare("DELETE FROM discounts WHERE id = ? AND user_id = ? AND is_used = 0");
+                    $delCouponStmt->execute([(int)$uc['id'], $userId]);
+                    if ($delCouponStmt->rowCount() > 0) {
+                        $refundCost = (int)$uc['points_cost'];
+                        $currentPoints += $refundCost;
+                        try {
+                            $db->prepare("INSERT INTO points_history (user_id, points, type, description, order_id) VALUES (?, ?, 'reversal', ?, ?)")
+                               ->execute([$userId, $refundCost, "Cancelamento automático do cupom #{$uc['code']} para estorno do pedido #{$order['order_number']}", $orderId]);
+                        } catch (Exception $eUc) {}
+                    }
+                }
+            }
+
+            if ($currentPoints < $buyerPts) {
+                $db->rollBack();
+                echo json_encode([
+                    'success' => false,
+                    'error' => 'Não é possível cancelar este pedido pois os Pontos Verdes gerados por ele já foram utilizados no resgate de cupons consumidos.'
+                ]);
+                exit;
+            }
+
+            $newBalance = $currentPoints - $buyerPts;
+            $db->prepare("UPDATE users SET points = ? WHERE id = ?")->execute([$newBalance, $userId]);
+
             try {
                 $db->prepare("INSERT INTO points_history (user_id, points, type, description, order_id) VALUES (?, ?, 'reversal', ?, ?)")
                    ->execute([$userId, -$buyerPts, "Estorno de pontos pelo cancelamento do pedido #{$order['order_number']}", $orderId]);
@@ -414,6 +463,21 @@ if ($method === 'POST' && $action === 'cancel') {
                 } catch (Exception $ePh2) {}
             }
             updateUserEngagementLevel($db, $userId);
+        }
+
+        // 2. Reativar o cupom de desconto usado nesta compra para ficar disponível novamente!
+        $couponRestored = false;
+        if (!empty($order['coupon_code'])) {
+            $db->prepare("UPDATE discounts SET is_used = 0 WHERE code = ? AND user_id = ?")->execute([$order['coupon_code'], $userId]);
+            $couponRestored = true;
+        }
+
+        // 3. Restaurar estoque dos produtos comprados
+        $itemsStmt = $db->prepare("SELECT product_id, quantity FROM order_items WHERE order_id = ?");
+        $itemsStmt->execute([$orderId]);
+        $orderItems = $itemsStmt->fetchAll();
+        foreach ($orderItems as $oi) {
+            $db->prepare("UPDATE products SET stock = stock + ? WHERE id = ?")->execute([$oi['quantity'], $oi['product_id']]);
         }
 
         // 4. Estornar pontos de incentivo concedidos ao(s) vendedor(es) neste pedido
@@ -465,7 +529,8 @@ if ($method === 'POST' && $action === 'cancel') {
         exit;
     } catch (Exception $e) {
         $db->rollBack();
-        echo json_encode(['success' => false, 'error' => 'Erro ao cancelar pedido: ' . $e->getMessage()]);
+        error_log('Erro em api/orders.php?action=cancel: ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => 'Erro interno ao cancelar pedido.']);
         exit;
     }
 }

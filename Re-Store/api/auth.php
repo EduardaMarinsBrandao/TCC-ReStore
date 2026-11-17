@@ -63,6 +63,76 @@ function isValidCNPJ($cnpj) {
 }
 
 /**
+ * Mascara o CPF antes de retornar dados do usuário para a camada cliente.
+ */
+function maskCpf($cpf) {
+    $cpf = trim((string)$cpf);
+    if ($cpf === '') {
+        return null;
+    }
+    $digits = preg_replace('/\D/', '', $cpf);
+    if (strlen($digits) === 11) {
+        return '***.***.' . substr($digits, 6, 3) . '-' . substr($digits, 9, 2);
+    }
+    $len = strlen($cpf);
+    if ($len <= 4) {
+        return str_repeat('*', $len);
+    }
+    return str_repeat('*', $len - 4) . substr($cpf, -4);
+}
+
+/**
+ * Filtra e formata estritamente os campos seguros do usuário para respostas da API.
+ */
+function formatSafeUserPayload($db, array $user): array {
+    $safeKeys = [
+        'id',
+        'email',
+        'name',
+        'phone',
+        'cpf',
+        'avatar',
+        'address',
+        'city',
+        'state',
+        'zip_code',
+        'points',
+        'level',
+        'is_verified_business',
+        'business_name',
+        'cnpj',
+        'is_admin',
+        'created_at'
+    ];
+
+    $safe = [];
+    foreach ($safeKeys as $key) {
+        if (array_key_exists($key, $user)) {
+            $safe[$key] = $user[$key];
+        }
+    }
+
+    if (isset($safe['id'])) {
+        $safe['id'] = (int)$safe['id'];
+    }
+    if (array_key_exists('cpf', $safe)) {
+        $safe['cpf'] = maskCpf($safe['cpf']);
+    }
+    if (isset($safe['points'])) {
+        $safe['points'] = (int)$safe['points'];
+    }
+    if (isset($safe['level'])) {
+        $safe['level'] = (int)$safe['level'];
+    }
+    if (isset($safe['is_verified_business'])) {
+        $safe['is_verified_business'] = (int)$safe['is_verified_business'];
+    }
+    $safe['is_admin'] = !empty($safe['id']) && isUserAdmin($db, $safe['id']) ? 1 : 0;
+
+    return $safe;
+}
+
+/**
  * Valida o ID Token do Google exclusivamente pelo endpoint oficial (tokeninfo),
  * que verifica a assinatura criptográfica do token. A verificação do certificado
  * SSL e do nome do servidor permanece sempre habilitada. Se a validação oficial
@@ -216,11 +286,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'me') {
         $user = $stmt->fetch();
 
         if ($user) {
-            $user['is_admin'] = isUserAdmin($db, $user['id']) ? 1 : 0;
             echo json_encode([
                 'success' => true,
                 'logged_in' => true,
-                'user' => $user
+                'csrf_token' => getCsrfToken(),
+                'user' => formatSafeUserPayload($db, $user)
             ]);
             exit;
         }
@@ -228,7 +298,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'me') {
 
     echo json_encode([
         'success' => true,
-        'logged_in' => false
+        'logged_in' => false,
+        'csrf_token' => getCsrfToken()
     ]);
 
     exit;
@@ -301,12 +372,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'email' => $user['email']
             ]);
 
-            unset($user['password_hash']);
-
             echo json_encode([
                 'success' => true,
                 'message' => 'Login realizado com sucesso via Google! Bem-vindo(a), ' . htmlspecialchars($user['name']) . '.',
-                'user' => $user
+                'csrf_token' => getCsrfToken(),
+                'user' => formatSafeUserPayload($db, $user)
             ]);
             exit;
 
@@ -345,7 +415,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ]);
 
             $uStmt = $db->prepare("
-                SELECT id, email, name, phone, cpf, avatar, address, city, state, zip_code, points, level, is_verified_business, business_name, cnpj, created_at
+                SELECT id, email, name, phone, cpf, avatar, address, city, state, zip_code, points, level, is_verified_business, business_name, cnpj, is_admin, created_at
                 FROM users WHERE id = ?
             ");
             $uStmt->execute([$newUserId]);
@@ -354,7 +424,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             echo json_encode([
                 'success' => true,
                 'message' => "Conta criada com sucesso via Google! Você ganhou +{$initialPoints} Pontos Verdes.",
-                'user' => $newUser
+                'csrf_token' => getCsrfToken(),
+                'user' => $newUser ? formatSafeUserPayload($db, $newUser) : null
             ]);
             exit;
         }
@@ -378,6 +449,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
+        // Proteção contra força bruta por IP, e-mail e sessão (janela de 15 minutos)
+        $clientIp = getClientIp();
+        $windowStart = gmdate('Y-m-d H:i:s', time() - 900);
+        $recentFailCount = 0;
+        try {
+            $attemptedDetails = json_encode(['attempted_email' => $email], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            $bfStmt = $db->prepare("
+                SELECT COUNT(*) FROM audit_logs
+                WHERE action = 'login_failed'
+                  AND created_at >= ?
+                  AND (ip_address = ? OR details = ?)
+            ");
+            $bfStmt->execute([$windowStart, $clientIp, $attemptedDetails]);
+            $recentFailCount = (int)$bfStmt->fetchColumn();
+        } catch (Exception $e) {
+            $recentFailCount = 0;
+        }
+
+        if (!empty($_SESSION['login_fail_reset_at']) && time() > (int)$_SESSION['login_fail_reset_at']) {
+            unset($_SESSION['login_fail_count'], $_SESSION['login_fail_reset_at']);
+        }
+        $sessionFailCount = (int)($_SESSION['login_fail_count'] ?? 0);
+
+        if ($recentFailCount >= 8 || $sessionFailCount >= 8) {
+            writeAuditLog($db, null, 'login_rate_limited', [
+                'attempted_email' => $email
+            ]);
+            http_response_code(429);
+            echo json_encode([
+                'success' => false,
+                'error' => 'Muitas tentativas de login malsucedidas. Por segurança, aguarde alguns minutos antes de tentar novamente.'
+            ]);
+            exit;
+        }
+
         $stmt = $db->prepare("SELECT * FROM users WHERE email = ?");
         $stmt->execute([$email]);
 
@@ -385,6 +491,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($user && password_verify($password, $user['password_hash'])) {
 
+            unset($_SESSION['login_fail_count'], $_SESSION['login_fail_reset_at']);
             restoreRegenerateSession();
             $_SESSION['user_id'] = $user['id'];
             $_SESSION['user_name'] = $user['name'];
@@ -396,18 +503,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'email' => $user['email']
             ]);
 
-            unset($user['password_hash']);
-            $user['is_admin'] = isUserAdmin($db, $user['id']) ? 1 : 0;
-
             echo json_encode([
                 'success' => true,
                 'message' => 'Login realizado com sucesso!',
-                'user' => $user
+                'csrf_token' => getCsrfToken(),
+                'user' => formatSafeUserPayload($db, $user)
             ]);
 
             exit;
 
         } else {
+
+            $_SESSION['login_fail_count'] = $sessionFailCount + 1;
+            if (empty($_SESSION['login_fail_reset_at'])) {
+                $_SESSION['login_fail_reset_at'] = time() + 900;
+            }
 
             writeAuditLog($db, null, 'login_failed', [
                 'attempted_email' => $email
@@ -555,6 +665,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             echo json_encode([
                 'success' => false,
                 'error' => 'Preencha todos os campos obrigatórios.'
+            ]);
+            exit;
+        }
+
+        if (mb_strlen($name, 'UTF-8') > 120 || mb_strlen($email, 'UTF-8') > 190) {
+            echo json_encode([
+                'success' => false,
+                'error' => 'Nome ou e-mail excede o tamanho máximo permitido.'
             ]);
             exit;
         }
@@ -765,14 +883,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $userStmt->execute([$userId]);
         $newUser = $userStmt->fetch();
-        if ($newUser) {
-            $newUser['is_admin'] = isUserAdmin($db, $newUser['id']) ? 1 : 0;
-        }
 
         echo json_encode([
             'success' => true,
             'message' => "Conta criada e e-mail validado com sucesso! Você ganhou +{$initialPoints} Pontos Verdes.",
-            'user' => $newUser
+            'csrf_token' => getCsrfToken(),
+            'user' => $newUser ? formatSafeUserPayload($db, $newUser) : null
         ]);
 
         exit;
@@ -795,10 +911,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             setcookie(session_name(), '', time() - 42000, $cp['path'], $cp['domain'], $cp['secure'], $cp['httponly']);
         }
         session_destroy();
+        @session_start();
+        $_SESSION = [];
+        $newCsrf = getCsrfToken();
 
         echo json_encode([
             'success' => true,
-            'message' => 'Sessão encerrada com sucesso.'
+            'message' => 'Sessão encerrada com sucesso.',
+            'csrf_token' => $newCsrf
         ]);
 
         exit;
@@ -856,6 +976,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $data['cnpj'] ??
             ''
         );
+
+        if (empty($name) || mb_strlen($name, 'UTF-8') > 120) {
+            echo json_encode([
+                'success' => false,
+                'error' => 'Por favor, informe um nome válido (até 120 caracteres).'
+            ]);
+            exit;
+        }
 
         if (!empty($phone) && !isValidPhone($phone)) {
             echo json_encode([
@@ -1090,6 +1218,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 is_verified_business,
                 business_name,
                 cnpj,
+                is_admin,
                 created_at
             FROM users
             WHERE id = ?
@@ -1104,7 +1233,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         echo json_encode([
             'success' => true,
             'message' => 'Perfil atualizado com sucesso!',
-            'user' => $updatedUser
+            'user' => $updatedUser ? formatSafeUserPayload($db, $updatedUser) : null
         ]);
 
         exit;
@@ -1323,7 +1452,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $userId = (int)$_SESSION['user_id'];
+        if (isUserAdmin($db, $userId)) {
+            http_response_code(403);
+            echo json_encode([
+                'success' => false,
+                'error' => 'A conta oficial de suporte/administrador não pode ser excluída.'
+            ]);
+            exit;
+        }
+
         $driver = strtolower((string)$db->getAttribute(PDO::ATTR_DRIVER_NAME));
+        $filesToUnlink = [];
+
+        // Coletar arquivos locais do usuário (avatar, fotos de produtos e fotos de avaliações) para limpeza após commit
+        try {
+            $avStmt = $db->prepare("SELECT avatar FROM users WHERE id = ?");
+            $avStmt->execute([$userId]);
+            $avUrl = (string)($avStmt->fetchColumn() ?: '');
+            if (strpos($avUrl, 'uploads/avatars/') === 0 && strpos($avUrl, '..') === false) {
+                $filesToUnlink[] = __DIR__ . '/../' . $avUrl;
+            }
+        } catch (Exception $e) {}
+
+        try {
+            $piStmt = $db->prepare("SELECT image_url FROM product_images WHERE product_id IN (SELECT id FROM products WHERE seller_id = ?)");
+            $piStmt->execute([$userId]);
+            foreach ($piStmt->fetchAll(PDO::FETCH_COLUMN) as $imgUrl) {
+                $imgUrl = (string)$imgUrl;
+                if (strpos($imgUrl, 'uploads/products/') === 0 && strpos($imgUrl, '..') === false) {
+                    $filesToUnlink[] = __DIR__ . '/../' . $imgUrl;
+                }
+            }
+        } catch (Exception $e) {}
+
+        try {
+            $riStmt = $db->prepare("SELECT image_url FROM review_images WHERE review_id IN (SELECT id FROM reviews WHERE user_id = ? OR product_id IN (SELECT id FROM products WHERE seller_id = ?))");
+            $riStmt->execute([$userId, $userId]);
+            foreach ($riStmt->fetchAll(PDO::FETCH_COLUMN) as $imgUrl) {
+                $imgUrl = (string)$imgUrl;
+                if (strpos($imgUrl, 'uploads/reviews/') === 0 && strpos($imgUrl, '..') === false) {
+                    $filesToUnlink[] = __DIR__ . '/../' . $imgUrl;
+                }
+            }
+        } catch (Exception $e) {}
 
         $db->beginTransaction();
         try {
@@ -1420,6 +1591,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $db->commit();
 
+            // Remover arquivos locais pertencentes ao usuário após confirmação do banco
+            foreach (array_unique($filesToUnlink) as $filePath) {
+                if (is_string($filePath) && file_exists($filePath)) {
+                    @unlink($filePath);
+                }
+            }
+
             // Destruir sessão e invalidar cookies
             $_SESSION = [];
             if (ini_get("session.use_cookies")) {
@@ -1446,7 +1624,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             error_log("Erro ao excluir conta do usuário {$userId}: " . $e->getMessage());
             echo json_encode([
                 'success' => false,
-                'error' => 'Não foi possível excluir sua conta no momento: ' . $e->getMessage()
+                'error' => 'Não foi possível excluir sua conta no momento. Tente novamente mais tarde.'
             ]);
             exit;
         }

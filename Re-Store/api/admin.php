@@ -41,7 +41,8 @@ if ($action === 'my_moderation_notices') {
         ]);
         exit;
     } catch (Exception $e) {
-        echo json_encode(['success' => false, 'error' => 'Erro ao buscar avisos: ' . $e->getMessage(), 'notices' => []]);
+        error_log('Erro em api/admin.php?action=my_moderation_notices: ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => 'Erro interno ao buscar avisos.', 'notices' => []]);
         exit;
     }
 }
@@ -50,6 +51,12 @@ if ($action === 'my_moderation_notices') {
 // 2. AÇÃO PÚBLICA / VENDEDOR: Dispensar / Marcar Aviso como Lido
 // --------------------------------------------------------------------------
 if ($action === 'dismiss_notice') {
+    if ($method !== 'POST') {
+        http_response_code(405);
+        echo json_encode(['success' => false, 'error' => 'Método não permitido. Use POST.']);
+        exit;
+    }
+
     if (!$currentUserId) {
         echo json_encode(['success' => false, 'error' => 'Não autenticado.']);
         exit;
@@ -153,7 +160,8 @@ if ($action === 'list_users') {
         ]);
         exit;
     } catch (Exception $e) {
-        echo json_encode(['success' => false, 'error' => 'Erro ao carregar usuários: ' . $e->getMessage()]);
+        error_log('Erro em api/admin.php?action=list_users: ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => 'Erro interno ao carregar usuários.']);
         exit;
     }
 }
@@ -195,6 +203,7 @@ if ($action === 'user_products') {
                 $prod['primary_image'] = 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=600';
             }
             $prod['points'] = max(1, (int)round((float)$prod['price'] * BUYER_POINTS_PER_REAL));
+            unset($prod['ip_address'], $prod['user_agent']);
         }
         unset($prod);
 
@@ -205,7 +214,8 @@ if ($action === 'user_products') {
         ]);
         exit;
     } catch (Exception $e) {
-        echo json_encode(['success' => false, 'error' => 'Erro ao buscar produtos do usuário: ' . $e->getMessage()]);
+        error_log('Erro em api/admin.php?action=user_products: ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => 'Erro interno ao buscar produtos do usuário.']);
         exit;
     }
 }
@@ -231,7 +241,8 @@ if ($action === 'stats') {
         ]);
         exit;
     } catch (Exception $e) {
-        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+        error_log('Erro em api/admin.php?action=stats: ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => 'Erro interno ao carregar estatísticas.']);
         exit;
     }
 }

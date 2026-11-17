@@ -84,8 +84,9 @@ function getDbConnection() {
             $pdo->exec("PRAGMA journal_mode = WAL;");
             return $pdo;
         } catch (PDOException $ex) {
+            error_log('Falha na conexão com o banco de dados: ' . $ex->getMessage());
             http_response_code(500);
-            echo json_encode(['success' => false, 'error' => 'Falha na conexão com o banco de dados: ' . $ex->getMessage()]);
+            echo json_encode(['success' => false, 'error' => 'Falha interna na conexão com o banco de dados.']);
             exit;
         }
     }

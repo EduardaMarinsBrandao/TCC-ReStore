@@ -8,6 +8,92 @@ if (function_exists('date_default_timezone_set')) {
 }
 
 /**
+ * Emite cabeçalhos de segurança HTTP padrão contra MIME sniffing, clickjacking e vazamento de referrer.
+ */
+function sendSecurityHeaders() {
+    if (headers_sent()) {
+        return;
+    }
+    header('X-Content-Type-Options: nosniff');
+    header('X-Frame-Options: DENY');
+    header('Referrer-Policy: strict-origin-when-cross-origin');
+    header('Permissions-Policy: camera=(), microphone=(), payment=(), usb=()');
+    header('X-Permitted-Cross-Domain-Policies: none');
+}
+
+/**
+ * Gera ou retorna o token CSRF único armazenado na sessão atual.
+ */
+function getCsrfToken() {
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        return '';
+    }
+    if (empty($_SESSION['csrf_token']) || !is_string($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    }
+    return $_SESSION['csrf_token'];
+}
+
+/**
+ * Valida proteção Same-Origin (Origin/Referer) e token CSRF em requisições mutáveis.
+ */
+function verifySameOriginAndCsrf() {
+    static $alreadyChecked = false;
+    if ($alreadyChecked) {
+        return;
+    }
+    $alreadyChecked = true;
+
+    $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
+    if (!in_array($method, ['POST', 'PUT', 'DELETE', 'PATCH'], true)) {
+        return;
+    }
+
+    $serverHostRaw = $_SERVER['HTTP_HOST'] ?? $_SERVER['SERVER_NAME'] ?? 'localhost';
+    $serverHost = strtolower((string)(parse_url('http://' . $serverHostRaw, PHP_URL_HOST) ?: explode(':', $serverHostRaw)[0]));
+
+    $checkHeaderHost = function ($headerVal) use ($serverHost) {
+        if (empty($headerVal)) {
+            return true;
+        }
+        $parsedHost = parse_url((string)$headerVal, PHP_URL_HOST);
+        if (!$parsedHost) {
+            return false;
+        }
+        return hash_equals($serverHost, strtolower((string)$parsedHost));
+    };
+
+    if (!$checkHeaderHost($_SERVER['HTTP_ORIGIN'] ?? '') || !$checkHeaderHost($_SERVER['HTTP_REFERER'] ?? '')) {
+        if (!headers_sent()) {
+            http_response_code(403);
+            header('Content-Type: application/json; charset=utf-8');
+        }
+        echo json_encode([
+            'success' => false,
+            'error' => 'Requisição bloqueada: origem cruzada (CSRF) não autorizada.'
+        ]);
+        exit;
+    }
+
+    $submittedToken = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? ($_POST['csrf_token'] ?? null);
+    $hasSessionToken = !empty($_SESSION['csrf_token']) && is_string($_SESSION['csrf_token']);
+
+    if ($submittedToken !== null || (PHP_SAPI !== 'cli' && $hasSessionToken)) {
+        if (!$hasSessionToken || !is_string($submittedToken) || !hash_equals($_SESSION['csrf_token'], $submittedToken)) {
+            if (!headers_sent()) {
+                http_response_code(403);
+                header('Content-Type: application/json; charset=utf-8');
+            }
+            echo json_encode([
+                'success' => false,
+                'error' => 'Token de segurança (CSRF) inválido ou expirado. Recarregue a página.'
+            ]);
+            exit;
+        }
+    }
+}
+
+/**
  * Inicia a sessão com cookies endurecidos:
  *  - HttpOnly: o cookie não é acessível por JavaScript (mitiga roubo via XSS);
  *  - SameSite=Lax: reduz o risco de CSRF;
@@ -16,7 +102,10 @@ if (function_exists('date_default_timezone_set')) {
  *    (mitiga fixação de sessão).
  */
 function restoreStartSession() {
+    sendSecurityHeaders();
+
     if (session_status() !== PHP_SESSION_NONE) {
+        verifySameOriginAndCsrf();
         return;
     }
 
@@ -26,6 +115,7 @@ function restoreStartSession() {
 
     if (headers_sent()) {
         @session_start();
+        verifySameOriginAndCsrf();
         return;
     }
 
@@ -55,15 +145,17 @@ function restoreStartSession() {
     }
 
     @session_start();
+    verifySameOriginAndCsrf();
 }
 
 /**
- * Regenera o identificador da sessão após uma autenticação bem-sucedida,
- * descartando o identificador anterior (previne fixação de sessão).
+ * Regenera o identificador da sessão e rotaciona o token CSRF após uma
+ * autenticação bem-sucedida, descartando o identificador anterior (previne fixação de sessão).
  */
 function restoreRegenerateSession() {
     if (session_status() === PHP_SESSION_ACTIVE) {
         session_regenerate_id(true);
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
     }
 }
 

@@ -9,6 +9,8 @@ credentials.local.php
 *.sqlite-journal
 *.sqlite3-journal
 *.db-journal
+*.sqlite-wal
+*.sqlite-shm
 
 # Logs e arquivos de execucao
 *.log

@@ -35,15 +35,22 @@ function runTest($name, $callback) {
     }
 }
 
-function callApiIsolated($endpointRelPath, $params = [], $method = 'GET', $session = []) {
+function callApiIsolated($endpointRelPath, $params = [], $method = 'GET', $session = [], $serverOverrides = []) {
     global $testDbFile;
     $endpointFull = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'Re-Store' . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, ltrim($endpointRelPath, '/'));
     
     $queryStr = http_build_query($params);
     $sessionCode = !empty($session) ? '@session_start(); $_SESSION = ' . var_export($session, true) . '; ' : '';
+    $serverCode = '';
+    if (!empty($serverOverrides) && is_array($serverOverrides)) {
+        foreach ($serverOverrides as $k => $v) {
+            $serverCode .= '$_SERVER[' . var_export((string)$k, true) . '] = ' . var_export((string)$v, true) . '; ';
+        }
+    }
     $script = 'putenv("DB_DRIVER=sqlite"); ' .
               'putenv("SQLITE_PATH=' . addslashes($testDbFile) . '"); ' .
               '$_SERVER["REQUEST_METHOD"] = "' . $method . '"; ' .
+              $serverCode .
               'parse_str("' . addslashes($queryStr) . '", $_GET); ' .
               'parse_str("' . addslashes($queryStr) . '", $_POST); ' .
               $sessionCode .
@@ -1238,6 +1245,154 @@ runTest('Sustentabilidade Real: Cálculo verdadeiro de resíduos economizados e 
 
     if ((float)$customSust['waste_saved_kg'] !== 8.4) {
         throw new Exception("O produto com valor explícito de resíduos não retornou o valor real cadastrado (esperado 8.4, recebido {$customSust['waste_saved_kg']})");
+    }
+
+    return true;
+});
+
+// --------------------------------------------------------------------------
+// 30. Teste de Segurança: Prevenção de Vazamento de Dados (PII & Forense)
+// --------------------------------------------------------------------------
+runTest('Segurança: Omissão de metadados forenses (ip_address, user_agent) e PII (buyer_email) nas APIs', function() {
+    // 1. Produtos (list e detail)
+    $outList = callApiIsolated('api/products.php', ['action' => 'list'], 'GET');
+    $jsonList = json_decode($outList, true);
+    if (empty($jsonList['success']) || empty($jsonList['products'])) {
+        throw new Exception("Falha ao listar produtos para auditoria de campos");
+    }
+    foreach ($jsonList['products'] as $p) {
+        if (array_key_exists('ip_address', $p) || array_key_exists('user_agent', $p)) {
+            throw new Exception("Vazamento detectado em products?action=list: ip_address ou user_agent exposto!");
+        }
+    }
+
+    $outDetail = callApiIsolated('api/products.php', ['action' => 'detail', 'id' => 1], 'GET');
+    $jsonDetail = json_decode($outDetail, true);
+    if (empty($jsonDetail['success']) || empty($jsonDetail['product'])) {
+        throw new Exception("Falha ao consultar detalhes do produto 1");
+    }
+    if (array_key_exists('ip_address', $jsonDetail['product']) || array_key_exists('user_agent', $jsonDetail['product'])) {
+        throw new Exception("Vazamento detectado em products?action=detail: ip_address ou user_agent exposto!");
+    }
+
+    // 2. Favoritos (list)
+    $outFavs = callApiIsolated('api/favorites.php', ['action' => 'list'], 'GET', ['user_id' => 2]);
+    $jsonFavs = json_decode($outFavs, true);
+    if (empty($jsonFavs['success'])) {
+        throw new Exception("Falha ao consultar favoritos do usuário 2");
+    }
+    foreach (($jsonFavs['favorites'] ?? []) as $fav) {
+        if (array_key_exists('ip_address', $fav) || array_key_exists('user_agent', $fav)) {
+            throw new Exception("Vazamento detectado em favorites?action=list: ip_address ou user_agent exposto!");
+        }
+    }
+
+    // 3. Pedidos do Comprador e Vendas do Vendedor
+    $outOrders = callApiIsolated('api/orders.php', ['action' => 'my_orders'], 'GET', ['user_id' => 2]);
+    $jsonOrders = json_decode($outOrders, true);
+    if (empty($jsonOrders['success'])) {
+        throw new Exception("Falha ao consultar pedidos do comprador");
+    }
+    foreach (($jsonOrders['orders'] ?? []) as $ord) {
+        if (array_key_exists('ip_address', $ord) || array_key_exists('user_agent', $ord)) {
+            throw new Exception("Vazamento detectado em orders?action=my_orders: ip_address ou user_agent exposto!");
+        }
+    }
+
+    $outSales = callApiIsolated('api/orders.php', ['action' => 'list_seller'], 'GET', ['user_id' => 1]);
+    $jsonSales = json_decode($outSales, true);
+    if (empty($jsonSales['success'])) {
+        throw new Exception("Falha ao consultar vendas do vendedor");
+    }
+    foreach (($jsonSales['sales'] ?? []) as $sale) {
+        if (array_key_exists('buyer_email', $sale) || array_key_exists('ip_address', $sale) || array_key_exists('user_agent', $sale)) {
+            throw new Exception("Vazamento detectado em orders?action=list_seller: buyer_email, ip_address ou user_agent exposto!");
+        }
+    }
+
+    return true;
+});
+
+// --------------------------------------------------------------------------
+// 31. Teste de Segurança: Controle de Acesso (Anti-IDOR, Auto-voto e Admin)
+// --------------------------------------------------------------------------
+runTest('Segurança: Anti-IDOR em avaliações, bloqueio de auto-voto e proteção da conta Admin', function() {
+    global $testDbFile;
+    $db = new PDO("sqlite:{$testDbFile}");
+    $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+    // 1. Anônimo tentando listar avaliações privadas de outro usuário
+    $outAnon = callApiIsolated('api/reviews.php', ['action' => 'list', 'user_id' => 2], 'GET');
+    $jsonAnon = json_decode($outAnon, true);
+    if (!empty($jsonAnon['success'])) {
+        throw new Exception("Vulnerabilidade IDOR: usuário anônimo consultou avaliações privadas por user_id");
+    }
+
+    // 2. Usuário 1 tentando listar avaliações de Usuário 2 (IDOR)
+    $outIdor = callApiIsolated('api/reviews.php', ['action' => 'list', 'user_id' => 2], 'GET', ['user_id' => 1]);
+    $jsonIdor = json_decode($outIdor, true);
+    if (!empty($jsonIdor['success'])) {
+        throw new Exception("Vulnerabilidade IDOR: usuário 1 consultou avaliações privadas de usuário 2");
+    }
+
+    // 3. Bloqueio de auto-voto em avaliação própria (vote_helpful)
+    $existingOrderId = $db->query("SELECT id FROM orders WHERE buyer_id = 2 ORDER BY id DESC LIMIT 1")->fetchColumn();
+    $db->prepare("INSERT INTO reviews (product_id, user_id, order_id, rating, comment) VALUES (1, 2, ?, 5, 'Review teste auto-voto')")
+       ->execute([$existingOrderId ?: null]);
+    $tempRevId = (int)$db->lastInsertId();
+
+    $outSelfVote = callApiIsolated('api/reviews.php', ['action' => 'vote_helpful', 'review_id' => $tempRevId], 'POST', ['user_id' => 2]);
+    $jsonSelfVote = json_decode($outSelfVote, true);
+    $db->prepare("DELETE FROM reviews WHERE id = ?")->execute([$tempRevId]);
+    if (!empty($jsonSelfVote['success'])) {
+        throw new Exception("Falha de segurança: usuário conseguiu votar na própria avaliação!");
+    }
+
+    // 4. Proteção contra exclusão da conta oficial de Suporte/Admin
+    $supId = (int)$db->query("SELECT id FROM users WHERE email = 'tccdssuporte@gmail.com'")->fetchColumn();
+    $outDelAdmin = callApiIsolated('api/auth.php', ['action' => 'delete_account'], 'POST', ['user_id' => $supId]);
+    $jsonDelAdmin = json_decode($outDelAdmin, true);
+    if (!empty($jsonDelAdmin['success'])) {
+        throw new Exception("Vulnerabilidade crítica: API permitiu excluir a conta oficial de Suporte/Admin!");
+    }
+    $stillExists = (int)$db->query("SELECT COUNT(*) FROM users WHERE id = {$supId}")->fetchColumn();
+    if ($stillExists !== 1) {
+        throw new Exception("Conta oficial de Suporte/Admin foi removida do banco!");
+    }
+
+    return true;
+});
+
+// --------------------------------------------------------------------------
+// 32. Teste de Segurança: Proteção CSRF Cross-Origin e Upload Polyglot
+// --------------------------------------------------------------------------
+runTest('Segurança: Proteção CSRF por Origin cruzada e rejeição de imagem Polyglot com <?php', function() {
+    require_once dirname(__DIR__) . '/Re-Store/config/upload_security.php';
+
+    // 1. Criar imagem PNG 1x1 válida contendo payload PHP embutido (polyglot)
+    $tinyPngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    $polyglotBytes = base64_decode($tinyPngBase64) . "\n<?php echo 'hacked'; ?>";
+    $tmpPolyglot = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'polyglot_' . uniqid() . '.png';
+    file_put_contents($tmpPolyglot, $polyglotBytes);
+
+    $isAccepted = isRealImageUpload($tmpPolyglot, 'png');
+    @unlink($tmpPolyglot);
+
+    if ($isAccepted) {
+        throw new Exception("Vulnerabilidade de Upload: isRealImageUpload aceitou arquivo polyglot contendo código <?php!");
+    }
+
+    // 2. Bloqueio de requisição POST com HTTP_ORIGIN externo malicioso (CSRF Cross-Origin)
+    $outCsrf = callApiIsolated(
+        'api/points.php',
+        ['action' => 'redeem', 'discount_type' => '5%'],
+        'POST',
+        ['user_id' => 2],
+        ['HTTP_HOST' => 'restore.local', 'HTTP_ORIGIN' => 'https://atacante.evil.com']
+    );
+    $jsonCsrf = json_decode($outCsrf, true);
+    if (!is_array($jsonCsrf) || !empty($jsonCsrf['success'])) {
+        throw new Exception("Vulnerabilidade CSRF: requisição POST com Origin externa não foi bloqueada! Saída: " . substr($outCsrf, 0, 150));
     }
 
     return true;

@@ -1,0 +1,22 @@
+# Proteção do servidor web para Re-Store
+Options -Indexes
+
+# Bloquear acesso HTTP direto a arquivos sensíveis, dumps SQL, bancos SQLite, logs e credenciais
+<FilesMatch "(^\.env.*|^\.db_initialized$|^credentials.*\.php$|\.(sqlite|sqlite3|db|sql|log|bak|old|ini|sh)$)">
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+  <IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+  </IfModule>
+</FilesMatch>
+
+# Cabeçalhos de segurança HTTP
+<IfModule mod_headers.c>
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set X-Frame-Options "DENY"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+  Header always set Permissions-Policy "camera=(), microphone=(), payment=(), usb=()"
+  Header always set X-Permitted-Cross-Domain-Policies "none"
+</IfModule>

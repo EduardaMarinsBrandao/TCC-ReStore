@@ -252,7 +252,7 @@ const ToastManager = {
     toast.innerHTML = `
       <div class="flex items-center gap-3">
         <span class="inline-flex items-center justify-center">${svgIcon}</span>
-        <span>${message}</span>
+        <span>${ModalDialog._escapeHtml(message)}</span>
       </div>
       <button onclick="this.parentElement.remove()" class="ml-4 text-xs font-bold opacity-70 hover:opacity-100 cursor-pointer">✕</button>
     `;

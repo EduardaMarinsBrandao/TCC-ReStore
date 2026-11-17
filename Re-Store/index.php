@@ -62,6 +62,7 @@ $assetVersion = file_exists(__DIR__ . '/assets/js/app.js') ? filemtime(__DIR__ .
   <!-- Custom CSS & Accessibility -->
   <link rel="stylesheet" href="assets/css/style.css?v=<?= $assetVersion ?>">
   <link rel="icon" type="image/png" href="assets/images/favicon.png">
+  <meta name="csrf-token" content="<?= htmlspecialchars(getCsrfToken(), ENT_QUOTES, 'UTF-8') ?>">
 </head>
 
 <body class="bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-300 min-h-screen flex flex-col justify-between">
@@ -431,6 +432,53 @@ $assetVersion = file_exists(__DIR__ . '/assets/js/app.js') ? filemtime(__DIR__ .
 
     </div>
   </footer>
+
+  <!-- PROTEÇÃO CSRF AUTOMÁTICA PARA REQUISIÇÕES FETCH -->
+  <script>
+    (function () {
+      const originalFetch = window.fetch.bind(window);
+      function isSameOriginApi(input) {
+        try {
+          const urlStr = typeof input === 'string' ? input : (input && input.url ? input.url : '');
+          if (!urlStr) return false;
+          const resolved = new URL(urlStr, window.location.href);
+          return resolved.origin === window.location.origin;
+        } catch (e) {
+          return false;
+        }
+      }
+      window.fetch = async function (input, init) {
+        const opts = init ? { ...init } : {};
+        const sameOrigin = isSameOriginApi(input);
+        if (sameOrigin) {
+          const meta = document.querySelector('meta[name="csrf-token"]');
+          const csrfToken = meta ? meta.getAttribute('content') : '';
+          const headers = new Headers(opts.headers || (input instanceof Request ? input.headers : undefined) || {});
+          if (csrfToken && !headers.has('X-CSRF-Token')) {
+            headers.set('X-CSRF-Token', csrfToken);
+          }
+          if (!headers.has('X-Requested-With')) {
+            headers.set('X-Requested-With', 'XMLHttpRequest');
+          }
+          opts.headers = headers;
+        }
+        const response = await originalFetch(input, opts);
+        if (sameOrigin) {
+          try {
+            const ctype = response.headers.get('content-type') || '';
+            if (ctype.includes('application/json')) {
+              const data = await response.clone().json();
+              if (data && typeof data.csrf_token === 'string' && data.csrf_token.length > 0) {
+                const meta = document.querySelector('meta[name="csrf-token"]');
+                if (meta) meta.setAttribute('content', data.csrf_token);
+              }
+            }
+          } catch (e) {}
+        }
+        return response;
+      };
+    })();
+  </script>
 
   <!-- SCRIPTS JS DA APLICAÇÃO -->
   <script src="assets/js/toast.js?v=<?= $assetVersion ?>"></script>

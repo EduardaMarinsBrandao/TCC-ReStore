@@ -125,6 +125,7 @@ if ($method === 'GET' && ($action === 'list' || $action === 'my_reviews')) {
                     $rev['images'] = $imgStmt->fetchAll();
                 } catch (Exception $e) {}
                 $rev['is_verified_purchase'] = !empty($rev['order_id']);
+                unset($rev['order_id'], $rev['deleted_at']);
             }
             unset($rev);
         } catch (Exception $e) {
@@ -139,6 +140,7 @@ if ($method === 'GET' && ($action === 'list' || $action === 'my_reviews')) {
                 foreach ($reviews as &$rev) {
                     $rev['images'] = [];
                     $rev['is_verified_purchase'] = !empty($rev['order_id']);
+                    unset($rev['order_id'], $rev['deleted_at']);
                 }
                 unset($rev);
             } catch (Exception $e2) {
@@ -150,9 +152,21 @@ if ($method === 'GET' && ($action === 'list' || $action === 'my_reviews')) {
         exit;
     }
 
-    // Listar avaliações do usuário (Minhas Avaliações)
+    // Listar avaliações do usuário (Minhas Avaliações) - estritamente protegido contra IDOR
     $targetUserId = ($action === 'my_reviews' || $userIdParam > 0) ? ($userIdParam > 0 ? $userIdParam : $currentUserId) : 0;
-    if ($targetUserId > 0) {
+    if ($targetUserId > 0 || $action === 'my_reviews') {
+        if ($currentUserId <= 0) {
+            http_response_code(401);
+            echo json_encode(['success' => false, 'error' => 'É necessário estar autenticado para consultar suas avaliações.']);
+            exit;
+        }
+        if ($targetUserId !== $currentUserId && !isUserAdmin($db, $currentUserId)) {
+            writeAuditLog($db, $currentUserId, 'idor_reviews_blocked', ['target_user_id' => $targetUserId]);
+            http_response_code(403);
+            echo json_encode(['success' => false, 'error' => 'Acesso negado: você só pode consultar suas próprias avaliações.']);
+            exit;
+        }
+
         $stmt = $db->prepare("SELECT r.*, p.name as product_name, p.id as product_id,
                               (SELECT image_url FROM product_images WHERE product_id = p.id ORDER BY is_primary DESC LIMIT 1) as product_image
                               FROM reviews r 
@@ -167,6 +181,7 @@ if ($method === 'GET' && ($action === 'list' || $action === 'my_reviews')) {
             $imgStmt->execute([$rev['id']]);
             $rev['images'] = $imgStmt->fetchAll();
             $rev['is_verified_purchase'] = !empty($rev['order_id']);
+            unset($rev['deleted_at']);
         }
         unset($rev);
 
@@ -290,6 +305,11 @@ if ($method === 'POST' && $action === 'update') {
         exit;
     }
 
+    if (mb_strlen($comment, 'UTF-8') > 2000) {
+        echo json_encode(['success' => false, 'error' => 'O comentário não pode ultrapassar 2000 caracteres.']);
+        exit;
+    }
+
     // Localizar a avaliação e verificar se pertence ao usuário
     $stmt = $db->prepare("SELECT * FROM reviews WHERE id = ? AND user_id = ?");
     $stmt->execute([$reviewId, $userId]);
@@ -384,7 +404,8 @@ if ($method === 'POST' && $action === 'update') {
 
     } catch (Exception $e) {
         $db->rollBack();
-        echo json_encode(['success' => false, 'error' => 'Erro ao atualizar avaliação: ' . $e->getMessage()]);
+        error_log('Erro em api/reviews.php?action=update: ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => 'Erro interno ao atualizar avaliação.']);
         exit;
     }
 }
@@ -454,7 +475,8 @@ if ($method === 'POST' && $action === 'delete') {
         exit;
     } catch (Exception $e) {
         $db->rollBack();
-        echo json_encode(['success' => false, 'error' => 'Erro ao excluir: ' . $e->getMessage()]);
+        error_log('Erro em api/reviews.php?action=delete: ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => 'Erro interno ao excluir avaliação.']);
         exit;
     }
 }
@@ -475,6 +497,11 @@ if ($method === 'POST' && $action === 'create') {
 
     if ($productId <= 0 || $rating < 1 || $rating > 5) {
         echo json_encode(['success' => false, 'error' => 'Dados de avaliação inválidos.']);
+        exit;
+    }
+
+    if (mb_strlen($comment, 'UTF-8') > 2000) {
+        echo json_encode(['success' => false, 'error' => 'O comentário não pode ultrapassar 2000 caracteres.']);
         exit;
     }
 
@@ -593,7 +620,8 @@ if ($method === 'POST' && $action === 'create') {
 
     } catch (Exception $e) {
         $db->rollBack();
-        echo json_encode(['success' => false, 'error' => 'Erro ao salvar avaliação: ' . $e->getMessage()]);
+        error_log('Erro em api/reviews.php?action=create: ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => 'Erro interno ao salvar avaliação.']);
         exit;
     }
 }
@@ -615,6 +643,19 @@ if ($method === 'POST' && $action === 'vote_helpful') {
         exit;
     }
 
+    // Verificar se a avaliação existe e impedir auto-voto pelo autor
+    $revCheck = $db->prepare("SELECT id, user_id FROM reviews WHERE id = ?");
+    $revCheck->execute([$reviewId]);
+    $revRow = $revCheck->fetch();
+    if (!$revRow) {
+        echo json_encode(['success' => false, 'error' => 'Avaliação não encontrada.']);
+        exit;
+    }
+    if ((int)$revRow['user_id'] === $userId) {
+        echo json_encode(['success' => false, 'error' => 'Você não pode votar na sua própria avaliação.']);
+        exit;
+    }
+
     $db->beginTransaction();
     try {
         // Verifica se o usuário já votou nesta avaliação
@@ -625,7 +666,7 @@ if ($method === 'POST' && $action === 'vote_helpful') {
         if ($existingVote) {
             // Se já votou, remove o voto (Descurtir)
             $db->prepare("DELETE FROM review_votes WHERE id = ?")->execute([$existingVote['id']]);
-            $db->prepare("UPDATE reviews SET helpful_count = GREATEST(0, helpful_count - 1) WHERE id = ?")->execute([$reviewId]);
+            $db->prepare("UPDATE reviews SET helpful_count = CASE WHEN helpful_count > 0 THEN helpful_count - 1 ELSE 0 END WHERE id = ?")->execute([$reviewId]);
             $voted = false;
         } else {
             // Se não votou, insere o voto (Curtir)
@@ -650,7 +691,8 @@ if ($method === 'POST' && $action === 'vote_helpful') {
 
     } catch (Exception $e) {
         $db->rollBack();
-        echo json_encode(['success' => false, 'error' => 'Erro ao processar voto: ' . $e->getMessage()]);
+        error_log('Erro em api/reviews.php?action=vote_helpful: ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => 'Erro interno ao processar voto.']);
         exit;
     }
 }

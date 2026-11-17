@@ -91,7 +91,8 @@ if ($method === 'GET' && ($action === 'get_support_user' || $action === 'support
             echo json_encode(['success' => true, 'support_user' => $supportUser]);
             exit;
         }
-        echo json_encode(['success' => false, 'error' => 'Falha ao buscar conta de suporte: ' . $e->getMessage()]);
+        error_log('Erro em api/messenger.php?action=get_support_user: ' . $e->getMessage());
+        echo json_encode(['success' => false, 'error' => 'Falha ao buscar conta de suporte.']);
         exit;
     }
 }
@@ -303,6 +304,11 @@ if ($method === 'POST' && ($action === 'send' || $action === 'send_message')) {
         exit;
     }
 
+    if (mb_strlen($messageText, 'UTF-8') > 2000) {
+        echo json_encode(['success' => false, 'error' => 'A mensagem não pode exceder 2000 caracteres.']);
+        exit;
+    }
+
     if ($receiverId === $userId) {
         echo json_encode(['success' => false, 'error' => 'Você não pode enviar mensagem para si mesmo.']);
         exit;
@@ -313,6 +319,14 @@ if ($method === 'POST' && ($action === 'send' || $action === 'send_message')) {
     if (!$chkStmt->fetch()) {
         echo json_encode(['success' => false, 'error' => 'Destinatário não encontrado.']);
         exit;
+    }
+
+    if ($productId !== null) {
+        $prodChk = $db->prepare("SELECT id FROM products WHERE id = ? AND status NOT IN ('deleted', 'inactive')");
+        $prodChk->execute([$productId]);
+        if (!$prodChk->fetch()) {
+            $productId = null;
+        }
     }
 
     $stmt = $db->prepare("INSERT INTO messages (sender_id, receiver_id, product_id, message, is_read, created_at) VALUES (?, ?, ?, ?, 0, CURRENT_TIMESTAMP)");

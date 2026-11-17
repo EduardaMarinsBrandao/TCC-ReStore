@@ -240,6 +240,32 @@ const App = {
     return ModalDialog.alert(options);
   },
 
+  sanitizeUrl(url, fallback = '') {
+    const raw = (url === null || url === undefined) ? '' : String(url).trim();
+    if (!raw) return fallback;
+    const normalized = raw.replace(/[\u0000-\u0020]+/g, '').toLowerCase();
+    if (
+      normalized.startsWith('javascript:') ||
+      normalized.startsWith('vbscript:') ||
+      normalized.startsWith('data:text/html') ||
+      normalized.startsWith('data:image/svg+xml')
+    ) {
+      return fallback;
+    }
+    if (
+      normalized.startsWith('http://') ||
+      normalized.startsWith('https://') ||
+      normalized.startsWith('uploads/') ||
+      normalized.startsWith('assets/') ||
+      normalized.startsWith('/') ||
+      normalized.startsWith('data:image/') ||
+      normalized.startsWith('blob:')
+    ) {
+      return this.escapeHtml(raw);
+    }
+    return fallback;
+  },
+
   submitReview: async function(productId, formElement) {
     const formData = new FormData(formElement);
     formData.append('product_id', productId);
@@ -475,16 +501,19 @@ const App = {
       }
     });
 
+    const safeTitle = this.escapeHtml(title);
+    const safeImgUrl = this.sanitizeUrl(imageUrl, '');
+
     modal.innerHTML = `
       <div class="relative max-w-3xl max-h-[90vh] bg-white dark:bg-gray-900 rounded-2xl overflow-hidden shadow-2xl flex flex-col select-auto animate-modal-in" onclick="event.stopPropagation()">
         <div class="flex items-center justify-between px-4 py-3 border-b dark:border-gray-800">
-          <span class="text-sm font-bold text-gray-800 dark:text-gray-200">${title}</span>
+          <span class="text-sm font-bold text-gray-800 dark:text-gray-200">${safeTitle}</span>
           <button type="button" class="close-modal-btn flex items-center justify-center w-8 h-8 text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg cursor-pointer transition text-base font-bold active:scale-95" title="Fechar visualização (Esc)">
             ✕
           </button>
         </div>
         <div class="p-3 flex items-center justify-center bg-black/5 dark:bg-black/30 overflow-auto">
-          <img src="${imageUrl}" class="max-h-[75vh] max-w-full object-contain rounded-xl shadow-lg" alt="Foto ampliada">
+          <img src="${safeImgUrl}" class="max-h-[75vh] max-w-full object-contain rounded-xl shadow-lg" alt="Foto ampliada">
         </div>
       </div>
     `;
@@ -676,12 +705,12 @@ const App = {
       class="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-semibold hover:opacity-80 cursor-pointer pointer-events-auto border border-teal-500/50 rounded-full p-1 sm:px-2 sm:py-1 bg-white/10 shrink-0"
     >
       <img 
-        src="${user.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}" 
+        src="${this.sanitizeUrl(user.avatar, 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100')}" 
         class="w-6 h-6 sm:w-7 sm:h-7 rounded-full object-cover border border-teal-500 pointer-events-none" 
         alt="Avatar"
       >
       <span class="hidden md:inline pointer-events-none">
-        ${user.name.split(' ')[0]}
+        ${this.escapeHtml((user.name || '').split(' ')[0])}
       </span>
     </button>
   `;
@@ -993,7 +1022,7 @@ const App = {
           grid.innerHTML = data.products.map(p => this.renderProductCardHTML(p)).join('');
         }
       } else if (grid && !this.productsCache) {
-        grid.innerHTML = `<div class="col-span-full text-center py-10 text-gray-500">${data.error || 'Nenhum produto cadastrado até o momento.'}</div>`;
+        grid.innerHTML = `<div class="col-span-full text-center py-10 text-gray-500">${this.escapeHtml(data.error || 'Nenhum produto cadastrado até o momento.')}</div>`;
       }
     } catch (e) {
       console.error('Erro ao carregar produtos na home:', e);
@@ -1020,33 +1049,33 @@ const App = {
 
     return `
       <div class="card-restore flex flex-col h-full group animate-fade-in">
-        <div onclick="App.navigateTo('product-detail', { productId: ${p.id} })" class="relative overflow-hidden aspect-square bg-gray-100 dark:bg-gray-800 cursor-pointer">
-          <img src="${p.primary_image}" alt="${p.name}" class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy">
+        <div onclick="App.navigateTo('product-detail', { productId: ${parseInt(p.id, 10)} })" class="relative overflow-hidden aspect-square bg-gray-100 dark:bg-gray-800 cursor-pointer">
+          <img src="${this.sanitizeUrl(p.primary_image, 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=600')}" alt="${this.escapeHtml(p.name)}" class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy">
           <div class="absolute top-2 left-2 flex flex-col gap-1 items-start">
             ${conditionBadge}
             ${parseInt(p.stock !== undefined ? p.stock : 999) <= 0 ? '<span class="bg-red-500 text-white px-2 py-0.5 rounded text-[11px] font-semibold shadow-sm">Esgotado</span>' : ''}
           </div>
-          <button type="button" id="fav-btn-${p.id}" onclick="event.stopPropagation(); App.toggleFavorite(${p.id}, this)" title="${isFav ? 'Remover dos Favoritos' : 'Favoritar Produto'}" 
+          <button type="button" id="fav-btn-${parseInt(p.id, 10)}" onclick="event.stopPropagation(); App.toggleFavorite(${parseInt(p.id, 10)}, this)" title="${isFav ? 'Remover dos Favoritos' : 'Favoritar Produto'}" 
             class="absolute top-2 right-2 p-2 rounded-full transition shadow backdrop-blur cursor-pointer ${isFav ? 'bg-red-50 dark:bg-red-950/60 border border-red-200' : 'bg-white/80 dark:bg-gray-800/80 text-gray-400 hover:text-red-500'}">
             ${heartSvg}
           </button>
           <div class="absolute bottom-2 right-2">
-            <span class="badge-points">+${p.points} pts</span>
+            <span class="badge-points">+${parseInt(p.points, 10) || 0} pts</span>
           </div>
         </div>
         <div class="p-4 flex flex-col flex-grow justify-between">
           <div>
             <div class="flex items-center justify-between text-xs text-teal-600 font-semibold mb-1">
-              <span>${p.category}</span>
+              <span>${this.escapeHtml(p.category)}</span>
               <span class="text-gray-400 font-normal inline-flex items-center gap-1">
                 <svg class="w-3 h-3 text-teal-600 inline-block flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 21s-7-4.5-7-10a7 7 0 1 1 14 0c0 5.5-7 10-7 10z"/><circle cx="12" cy="10" r="2.5"/></svg>
-                ${p.location || 'São Paulo, SP'}
+                ${this.escapeHtml(p.location || 'São Paulo, SP')}
               </span>
             </div>
-            <h3 onclick="App.navigateTo('product-detail', { productId: ${p.id} })" class="font-bold text-gray-900 dark:text-white text-base hover:text-teal-600 cursor-pointer line-clamp-1">
-              ${p.name}
+            <h3 onclick="App.navigateTo('product-detail', { productId: ${parseInt(p.id, 10)} })" class="font-bold text-gray-900 dark:text-white text-base hover:text-teal-600 cursor-pointer line-clamp-1">
+              ${this.escapeHtml(p.name)}
             </h3>
-            <p class="text-xs text-gray-500 line-clamp-2 mt-1 mb-3">${p.description}</p>
+            <p class="text-xs text-gray-500 line-clamp-2 mt-1 mb-3">${this.escapeHtml(p.description)}</p>
           </div>
           <div>
             <div class="flex items-center justify-between mt-2 pt-2 border-t border-gray-100 dark:border-gray-800">
@@ -1175,7 +1204,7 @@ const App = {
       const data = await res.json();
 
       if (!data.success) {
-        container.innerHTML = `<div class="text-center py-12 text-red-500">${data.error}</div>`;
+        container.innerHTML = `<div class="text-center py-12 text-red-500">${this.escapeHtml(data.error || 'Erro ao carregar produto.')}</div>`;
         return;
       }
 
@@ -1201,7 +1230,7 @@ const App = {
             <!-- GALERIA DE IMAGENS -->
             <div>
               <div class="aspect-square product-image-container rounded-2xl overflow-hidden mb-4 shadow-md relative group">
-                <img id="main-product-img" src="${images[0].image_url}" class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.02] cursor-pointer" alt="${(p.name || '').replace(/"/g, '&quot;')}" onclick="App.openImageModal(this.src, '${(p.name || '').replace(/'/g, "\\'")}')" title="Clique para ampliar a foto do produto">
+                <img id="main-product-img" src="${this.sanitizeUrl(images[0].image_url, 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=600')}" class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.02] cursor-pointer" alt="${this.escapeHtml(p.name)}" data-modal-title="${this.escapeHtml(p.name)}" onclick="App.openImageModal(this.src, this.getAttribute('data-modal-title'))" title="Clique para ampliar a foto do produto">
                 <div class="absolute bottom-2 right-2 px-2.5 py-1 rounded-lg bg-black/60 text-white text-[11px] font-medium backdrop-blur flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition pointer-events-none">
                   <i data-lucide="zoom-in" class="w-3.5 h-3.5"></i>
                   <span>Ampliar</span>
@@ -1210,11 +1239,12 @@ const App = {
               <div class="flex gap-3 overflow-x-auto no-scrollbar pb-1">
                 ${images.map((img, idx) => `
                   <button type="button" 
-                    onclick="document.getElementById('main-product-img').src='${img.image_url}'; document.querySelectorAll('.product-thumb-item').forEach(b => b.classList.remove('active')); this.classList.add('active');" 
+                    data-image-url="${this.sanitizeUrl(img.image_url, 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=600')}"
+                    onclick="document.getElementById('main-product-img').src=this.getAttribute('data-image-url'); document.querySelectorAll('.product-thumb-item').forEach(b => b.classList.remove('active')); this.classList.add('active');" 
                     class="product-thumb-item w-16 h-16 rounded-xl overflow-hidden cursor-pointer flex-shrink-0 shadow-sm ${idx === 0 ? 'active' : ''}"
                     title="Foto ${idx + 1}"
                   >
-                    <img src="${img.image_url}" class="w-full h-full object-cover" alt="Thumb ${idx}">
+                    <img src="${this.sanitizeUrl(img.image_url, 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=600')}" class="w-full h-full object-cover" alt="Thumb ${idx}">
                   </button>
                 `).join('')}
               </div>
@@ -1224,11 +1254,11 @@ const App = {
             <div class="flex flex-col justify-between">
               <div>
                 <div class="flex items-center gap-2 mb-2">
-                  <span class="text-xs font-bold uppercase tracking-wider text-teal-600">${p.category}</span>
+                  <span class="text-xs font-bold uppercase tracking-wider text-teal-600">${this.escapeHtml(p.category)}</span>
                   <span class="text-gray-300">•</span>
                   <span class="text-xs text-gray-500">${p.product_condition === 'new' ? 'Novo' : (p.product_condition === 'restored' ? 'Restaurado' : 'Usado')}</span>
                 </div>
-                <h1 class="text-2xl md:text-3xl font-extrabold text-gray-900 dark:text-white mb-3">${p.name}</h1>
+                <h1 class="text-2xl md:text-3xl font-extrabold text-gray-900 dark:text-white mb-3">${this.escapeHtml(p.name)}</h1>
 
                 <div class="flex items-center gap-3 mb-4">
                   <div class="text-2xl font-black text-teal-600 dark:text-teal-400">
@@ -1236,7 +1266,7 @@ const App = {
                   </div>
                   <span class="badge-points text-xs inline-flex items-center gap-1.5">
                     <i data-lucide="sprout" class="w-4 h-4 pointer-events-none"></i>
-                    <span>Recompensa +${p.points} Pontos</span>
+                    <span>Recompensa +${parseInt(p.points, 10) || 0} Pontos</span>
                   </span>
                 </div>
 
@@ -1280,19 +1310,19 @@ const App = {
 
                 <div class="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl mb-6 border dark:border-gray-800">
                   <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Descrição Ecológica</h3>
-                  <p class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-line leading-relaxed">${p.description}</p>
-                  ${p.material ? `<div class="mt-3 text-xs text-gray-500"><strong>Material Sustentável:</strong> ${p.material}</div>` : ''}
-                  <div class="mt-2 text-xs text-gray-500 flex items-center gap-1"><strong class="text-gray-700 dark:text-gray-300 inline-flex items-center gap-1"><i data-lucide="map-pin" class="w-3.5 h-3.5 text-teal-600"></i> Local de venda:</strong> ${p.location || [p.seller_city, p.seller_state].filter(Boolean).join(', ') || 'Não informado'}</div>
-                  <div class="mt-2 text-xs text-gray-500"><strong>Disponibilidade:</strong> ${p.stock > 0 ? p.stock + ' un. em estoque' : 'Esgotado'}</div>
+                  <p class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-line leading-relaxed">${this.escapeHtml(p.description)}</p>
+                  ${p.material ? `<div class="mt-3 text-xs text-gray-500"><strong>Material Sustentável:</strong> ${this.escapeHtml(p.material)}</div>` : ''}
+                  <div class="mt-2 text-xs text-gray-500 flex items-center gap-1"><strong class="text-gray-700 dark:text-gray-300 inline-flex items-center gap-1"><i data-lucide="map-pin" class="w-3.5 h-3.5 text-teal-600"></i> Local de venda:</strong> ${this.escapeHtml(p.location || [p.seller_city, p.seller_state].filter(Boolean).join(', ') || 'Não informado')}</div>
+                  <div class="mt-2 text-xs text-gray-500"><strong>Disponibilidade:</strong> ${parseInt(p.stock, 10) > 0 ? parseInt(p.stock, 10) + ' un. em estoque' : 'Esgotado'}</div>
                 </div>
 
                 <!-- CARD DO VENDEDOR -->
                 <div class="flex flex-col xs:flex-row xs:items-center justify-between gap-3 p-3.5 sm:p-4 rounded-xl border dark:border-gray-800 mb-6 bg-white dark:bg-gray-800">
                   <div class="flex items-center gap-3 min-w-0">
-                    <img src="${p.seller_avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}" class="w-10 h-10 rounded-full object-cover border border-teal-500 shrink-0">
+                    <img src="${this.sanitizeUrl(p.seller_avatar, 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100')}" class="w-10 h-10 rounded-full object-cover border border-teal-500 shrink-0">
                     <div class="min-w-0">
                       <div class="font-bold text-sm text-gray-900 dark:text-white flex items-center gap-1 truncate">
-                        ${p.seller_name}
+                        ${this.escapeHtml(p.seller_name)}
                         ${p.is_verified_business ? '<span class="text-teal-500 text-xs shrink-0" title="Empresa Verificada">✓</span>' : ''}
                       </div>
                       <div class="text-xs text-gray-500 flex items-center gap-1 flex-wrap"><span>Reputação:</span> <span class="text-amber-500 font-bold inline-flex items-center gap-0.5"><i data-lucide="star" class="w-3 h-3 fill-amber-400 text-amber-400"></i> 4.9</span> <span>(Vendedor Confiável)</span></div>
@@ -1375,11 +1405,11 @@ const App = {
                     <span class="text-[10px] font-bold bg-amber-200 dark:bg-amber-900 text-amber-900 dark:text-amber-200 px-2 py-0.5 rounded-full">Acesso Oficial</span>
                   </div>
                   <div class="flex flex-col sm:flex-row gap-2 sm:gap-2.5 pt-1">
-                    <button type="button" onclick="App.navigateTo('edit-product', { productId: ${p.id} })" class="btn-primary w-full sm:flex-1 py-2.5 sm:py-2 text-xs font-bold cursor-pointer flex items-center justify-center gap-1.5 active:scale-98">
+                    <button type="button" onclick="App.navigateTo('edit-product', { productId: ${parseInt(p.id, 10)} })" class="btn-primary w-full sm:flex-1 py-2.5 sm:py-2 text-xs font-bold cursor-pointer flex items-center justify-center gap-1.5 active:scale-98">
                       <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
                       <span>Editar Anúncio</span>
                     </button>
-                    <button type="button" onclick="App.promptDeleteProductAsAdmin(${p.id}, '${(p.name || '').replace(/'/g, "\\'")}', ${p.seller_id})" class="bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold text-xs py-2.5 sm:py-2 px-3 w-full sm:flex-1 flex items-center justify-center gap-1.5 transition cursor-pointer shadow-sm active:scale-98">
+                    <button type="button" data-prod-name="${this.escapeHtml(p.name)}" onclick="App.promptDeleteProductAsAdmin(${parseInt(p.id, 10)}, this.getAttribute('data-prod-name'), ${parseInt(p.seller_id, 10)})" class="bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold text-xs py-2.5 sm:py-2 px-3 w-full sm:flex-1 flex items-center justify-center gap-1.5 transition cursor-pointer shadow-sm active:scale-98">
                       <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
                       <span>Excluir Anúncio (Moderação)</span>
                     </button>
@@ -1438,12 +1468,12 @@ const App = {
                       <span class="text-amber-400 text-sm font-bold">${'★'.repeat(Math.max(1, Math.min(5, parseInt(myReview.rating || 5, 10))))}${'☆'.repeat(5 - Math.max(1, Math.min(5, parseInt(myReview.rating || 5, 10))))}</span>
                       <span class="text-[11px] text-gray-400" title="${DateHelper.formatDateTime(myReview.created_at)}">${DateHelper.formatDateTime(myReview.created_at) || 'Recente'}</span>
                     </div>
-                    <p class="text-xs text-gray-700 dark:text-gray-300">${myReview.comment || 'Sem comentário por escrito.'}</p>
+                    <p class="text-xs text-gray-700 dark:text-gray-300">${this.escapeHtml(myReview.comment) || 'Sem comentário por escrito.'}</p>
                     ${myReview.images && myReview.images.length > 0 ? `
                       <div class="flex flex-wrap gap-2 mt-3">
                         ${myReview.images.map(img => `
-                          <div class="w-16 h-16 rounded-xl overflow-hidden border border-teal-200 dark:border-teal-700 cursor-pointer hover:opacity-90 hover:scale-105 transition shadow-sm" onclick="App.openImageModal('${img.image_url}', 'Foto da sua avaliação')">
-                            <img src="${img.image_url}" class="w-full h-full object-cover" alt="Foto da avaliação">
+                          <div class="w-16 h-16 rounded-xl overflow-hidden border border-teal-200 dark:border-teal-700 cursor-pointer hover:opacity-90 hover:scale-105 transition shadow-sm" data-modal-img="${this.sanitizeUrl(img.image_url)}" onclick="App.openImageModal(this.getAttribute('data-modal-img'), 'Foto da sua avaliação')">
+                            <img src="${this.sanitizeUrl(img.image_url)}" class="w-full h-full object-cover" alt="Foto da avaliação">
                           </div>
                         `).join('')}
                       </div>
@@ -1473,7 +1503,7 @@ const App = {
                     class="w-full p-2.5 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-teal-500"
                     placeholder="Atualize seu comentário sobre o produto..."
                     required
-                  >${myReview.comment || ''}</textarea>
+                  >${this.escapeHtml(myReview.comment)}</textarea>
 
                   <!-- Gestão de Fotos Existentes -->
                   ${myReview.images && myReview.images.length > 0 ? `
@@ -1482,8 +1512,8 @@ const App = {
                       <div class="flex flex-wrap gap-2">
                         ${myReview.images.map(img => `
                           <div class="review-existing-thumb relative group w-16 h-16 rounded-xl overflow-hidden border border-gray-300 dark:border-gray-700 shadow-sm flex-shrink-0">
-                            <img src="${img.image_url}" class="w-full h-full object-cover">
-                            <button type="button" onclick="App.markReviewImageForDeletion(${img.id}, this, this.closest('form'))" class="absolute top-0 right-0 bg-red-600 hover:bg-red-700 text-white text-[11px] w-5 h-5 flex items-center justify-center rounded-bl-lg font-bold cursor-pointer transition" title="Excluir esta foto">✕</button>
+                            <img src="${this.sanitizeUrl(img.image_url)}" class="w-full h-full object-cover">
+                            <button type="button" onclick="App.markReviewImageForDeletion(${parseInt(img.id, 10)}, this, this.closest('form'))" class="absolute top-0 right-0 bg-red-600 hover:bg-red-700 text-white text-[11px] w-5 h-5 flex items-center justify-center rounded-bl-lg font-bold cursor-pointer transition" title="Excluir esta foto">✕</button>
                           </div>
                         `).join('')}
                       </div>
@@ -1631,10 +1661,10 @@ const App = {
                       <div>
                         <div class="flex items-center justify-between mb-2">
                           <div class="flex items-center gap-2">
-                            <img src="${r.user_avatar || 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100'}" class="w-8 h-8 rounded-full object-cover border border-gray-200 dark:border-gray-700">
+                            <img src="${this.sanitizeUrl(r.user_avatar, 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100')}" class="w-8 h-8 rounded-full object-cover border border-gray-200 dark:border-gray-700">
                             <div>
                               <div class="flex items-center gap-1.5">
-                                <span class="font-bold text-xs text-gray-900 dark:text-white">${r.user_name}</span>
+                                <span class="font-bold text-xs text-gray-900 dark:text-white">${this.escapeHtml(r.user_name)}</span>
                                 ${isMyReview ? '<span class="text-[10px] text-teal-600 font-bold bg-teal-100 dark:bg-teal-900 px-1.5 py-0.2 rounded">Você</span>' : ''}
                               </div>
                               ${r.is_verified_purchase ? `
@@ -1649,14 +1679,14 @@ const App = {
                           </div>
                         </div>
 
-                        <p class="text-xs text-gray-700 dark:text-gray-300 mb-3 leading-relaxed">${r.comment || 'Sem comentário por escrito.'}</p>
+                        <p class="text-xs text-gray-700 dark:text-gray-300 mb-3 leading-relaxed">${this.escapeHtml(r.comment) || 'Sem comentário por escrito.'}</p>
 
                         <!-- FOTOS ANEXADAS NA AVALIAÇÃO (ATÉ 3) -->
                         ${r.images && r.images.length > 0 ? `
                           <div class="flex flex-wrap gap-2 mb-3">
                             ${r.images.map(img => `
-                              <div class="w-16 h-16 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 cursor-pointer hover:opacity-90 hover:scale-105 transition shadow-sm flex-shrink-0" onclick="App.openImageModal('${img.image_url}', 'Foto da avaliação de ${r.user_name}')">
-                                <img src="${img.image_url}" class="w-full h-full object-cover" alt="Foto da avaliação">
+                              <div class="w-16 h-16 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 cursor-pointer hover:opacity-90 hover:scale-105 transition shadow-sm flex-shrink-0" data-modal-img="${this.sanitizeUrl(img.image_url)}" data-modal-title="Foto da avaliação de ${this.escapeHtml(r.user_name)}" onclick="App.openImageModal(this.getAttribute('data-modal-img'), this.getAttribute('data-modal-title'))">
+                                <img src="${this.sanitizeUrl(img.image_url)}" class="w-full h-full object-cover" alt="Foto da avaliação">
                               </div>
                             `).join('')}
                           </div>
@@ -1716,7 +1746,7 @@ const App = {
                           name="comment" 
                           rows="3" 
                           class="w-full p-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                        >${r.comment || ''}</textarea>
+                        >${this.escapeHtml(r.comment)}</textarea>
 
                         <!-- Fotos atuais com botão de exclusão -->
                         ${r.images && r.images.length > 0 ? `
@@ -1725,8 +1755,8 @@ const App = {
                             <div class="flex flex-wrap gap-2">
                               ${r.images.map(img => `
                                 <div class="review-existing-thumb relative group w-14 h-14 rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600 flex-shrink-0">
-                                  <img src="${img.image_url}" class="w-full h-full object-cover">
-                                  <button type="button" onclick="App.markReviewImageForDeletion(${img.id}, this, this.closest('form'))" class="absolute top-0 right-0 bg-red-600 hover:bg-red-700 text-white text-[10px] w-4 h-4 flex items-center justify-center rounded-bl font-bold cursor-pointer" title="Remover foto">✕</button>
+                                  <img src="${this.sanitizeUrl(img.image_url)}" class="w-full h-full object-cover">
+                                  <button type="button" onclick="App.markReviewImageForDeletion(${parseInt(img.id, 10)}, this, this.closest('form'))" class="absolute top-0 right-0 bg-red-600 hover:bg-red-700 text-white text-[10px] w-4 h-4 flex items-center justify-center rounded-bl font-bold cursor-pointer" title="Remover foto">✕</button>
                                 </div>
                               `).join('')}
                             </div>
@@ -1855,10 +1885,10 @@ const App = {
               return `
               <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 p-4 rounded-2xl border ${isItemOwner ? 'border-amber-300 bg-amber-50/50 dark:bg-amber-950/20 dark:border-amber-800' : 'dark:border-gray-800 bg-white dark:bg-gray-800'}">
                 <div class="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
-                  <img src="${item.image}" onclick="App.navigateTo('product-detail', { productId: ${item.product_id} })" class="w-16 h-16 rounded-xl object-cover border dark:border-gray-700 cursor-pointer hover:opacity-80 transition shrink-0" title="Ver Detalhes">
+                  <img src="${this.sanitizeUrl(item.image, 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=200')}" onclick="App.navigateTo('product-detail', { productId: ${parseInt(item.product_id, 10)} })" class="w-16 h-16 rounded-xl object-cover border dark:border-gray-700 cursor-pointer hover:opacity-80 transition shrink-0" title="Ver Detalhes">
                   <div class="min-w-0 flex-1">
-                    <h3 onclick="App.navigateTo('product-detail', { productId: ${item.product_id} })" class="font-bold text-gray-900 dark:text-white text-sm truncate hover:text-teal-600 cursor-pointer" title="Ver Detalhes">${item.name}</h3>
-                    <div class="text-xs text-gray-500 truncate">Vendedor: ${item.seller_name}</div>
+                    <h3 onclick="App.navigateTo('product-detail', { productId: ${parseInt(item.product_id, 10)} })" class="font-bold text-gray-900 dark:text-white text-sm truncate hover:text-teal-600 cursor-pointer" title="Ver Detalhes">${this.escapeHtml(item.name)}</h3>
+                    <div class="text-xs text-gray-500 truncate">Vendedor: ${this.escapeHtml(item.seller_name)}</div>
                     ${isItemOwner ? `
                       <span class="inline-flex items-center gap-1 mt-1 text-[10px] font-bold text-amber-800 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/60 px-2 py-0.5 rounded-full border border-amber-300 dark:border-amber-700">
                         <i data-lucide="ban" class="w-3 h-3 inline"></i> Seu Próprio Anúncio (Remoção Obrigatória)
@@ -2181,7 +2211,7 @@ const App = {
                     </div>
                     <div>
                       <div class="text-xs font-bold text-emerald-800 dark:text-emerald-200">
-                        Cupom Ativo: <span class="font-mono bg-white dark:bg-gray-800 px-2 py-0.5 rounded border border-emerald-300 dark:border-emerald-700 font-extrabold">${appliedCoupon.code}</span> (${appliedCoupon.discount_type} OFF)
+                        Cupom Ativo: <span class="font-mono bg-white dark:bg-gray-800 px-2 py-0.5 rounded border border-emerald-300 dark:border-emerald-700 font-extrabold">${this.escapeHtml(appliedCoupon.code)}</span> (${this.escapeHtml(appliedCoupon.discount_type)} OFF)
                       </div>
                       <div class="text-[11px] text-emerald-700 dark:text-emerald-300 mt-0.5">
                         Economia aplicada: <strong>- R$ ${discountValue.toFixed(2).replace('.', ',')}</strong>
@@ -2209,9 +2239,9 @@ const App = {
                     ${availableCoupons.map(c => {
       const isSelected = this.appliedCouponCode.toUpperCase() === c.code.toUpperCase();
       return `
-                        <button type="button" onclick="App.applyCouponDirect('${c.code}')" class="text-xs font-mono ${isSelected ? 'bg-teal-600 text-white font-bold shadow' : 'bg-teal-50 dark:bg-teal-950 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 hover:bg-teal-100'} px-3 py-1 rounded-full cursor-pointer transition inline-flex items-center gap-1.5">
+                        <button type="button" data-coupon-code="${this.escapeHtml(c.code)}" onclick="App.applyCouponDirect(this.getAttribute('data-coupon-code'))" class="text-xs font-mono ${isSelected ? 'bg-teal-600 text-white font-bold shadow' : 'bg-teal-50 dark:bg-teal-950 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 hover:bg-teal-100'} px-3 py-1 rounded-full cursor-pointer transition inline-flex items-center gap-1.5">
                           <i data-lucide="tag" class="w-3.5 h-3.5"></i>
-                          <span>${c.code} (${c.discount_type}) ${isSelected ? '✓' : ''}</span>
+                          <span>${this.escapeHtml(c.code)} (${this.escapeHtml(c.discount_type)}) ${isSelected ? '✓' : ''}</span>
                         </button>
                       `;
 
@@ -2257,7 +2287,7 @@ const App = {
                 <div id="pay-box-credit" class="hidden p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl border dark:border-gray-600 space-y-3">
                   <div>
                     <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Nome Impresso no Cartão</label>
-                    <input type="text" placeholder="Nome Completo do Titular" value="${user.name}" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-800 text-sm">
+                    <input type="text" placeholder="Nome Completo do Titular" value="${this.escapeHtml(user.name)}" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-800 text-sm">
                   </div>
                   <div>
                     <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Número do Cartão</label>
@@ -2295,11 +2325,11 @@ const App = {
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
                       <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Nome do Titular do Boleto</label>
-                      <input type="text" value="${user.name}" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-800 text-sm">
+                      <input type="text" value="${this.escapeHtml(user.name)}" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-800 text-sm">
                     </div>
                     <div>
                       <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">CPF do Titular</label>
-                      <input type="text" value="${user.cpf || '123.456.789-00'}" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-800 text-sm font-mono">
+                      <input type="text" value="${this.escapeHtml(user.cpf || '123.456.789-00')}" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-800 text-sm font-mono">
                     </div>
                   </div>
                   <div>
@@ -2325,7 +2355,7 @@ const App = {
               </div>
               ${discountValue > 0 ? `
                 <div class="flex justify-between text-emerald-600 font-bold">
-                  <span>Desconto (${this.appliedCouponCode})</span>
+                  <span>Desconto (${this.escapeHtml(this.appliedCouponCode)})</span>
                   <span>- R$ ${discountValue.toFixed(2).replace('.', ',')}</span>
                 </div>
               ` : ''}
@@ -2821,7 +2851,7 @@ const App = {
               <div class="p-6 rounded-2xl border dark:border-gray-800 bg-white dark:bg-gray-800 space-y-4 shadow-sm">
                 <div class="flex flex-wrap items-center justify-between gap-2 border-b dark:border-gray-700 pb-3">
                   <div>
-                    <span class="font-bold text-sm text-teal-600">Pedido #${o.order_number}</span>
+                    <span class="font-bold text-sm text-teal-600">Pedido #${this.escapeHtml(o.order_number)}</span>
                     <span class="text-xs text-gray-400 ml-2" title="${DateHelper.formatDateTime(o.created_at)}">Data: ${DateHelper.formatDateTime(o.created_at)}</span>
                   </div>
                   <div>${statusBadge}</div>
@@ -2831,10 +2861,10 @@ const App = {
                   ${(o.items || []).map(i => `
                     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-2.5 sm:p-0 rounded-xl sm:rounded-none bg-gray-50/70 sm:bg-transparent dark:bg-gray-750/30 sm:dark:bg-transparent">
                       <div class="flex items-center gap-3 min-w-0 flex-1">
-                        <img src="${i.product_image || 'https://images.unsplash.com/photo-1544816155-12df9643f363?w=100'}" onclick="App.navigateTo('product-detail', { productId: ${i.product_id}, id: ${i.product_id} })" class="w-12 h-12 rounded-xl object-cover border dark:border-gray-700 cursor-pointer hover:opacity-85 transition shrink-0" title="Ver detalhes do produto">
+                        <img src="${this.sanitizeUrl(i.product_image, 'https://images.unsplash.com/photo-1544816155-12df9643f363?w=100')}" onclick="App.navigateTo('product-detail', { productId: ${parseInt(i.product_id, 10)}, id: ${parseInt(i.product_id, 10)} })" class="w-12 h-12 rounded-xl object-cover border dark:border-gray-700 cursor-pointer hover:opacity-85 transition shrink-0" title="Ver detalhes do produto">
                         <div class="min-w-0 flex-1">
-                          <div onclick="App.navigateTo('product-detail', { productId: ${i.product_id}, id: ${i.product_id} })" class="font-bold text-sm text-gray-900 dark:text-white hover:text-teal-600 cursor-pointer transition truncate">${i.product_name}</div>
-                          <div class="text-xs text-gray-500 truncate">Qtd: ${i.quantity} • Vendedor: ${i.seller_name}</div>
+                          <div onclick="App.navigateTo('product-detail', { productId: ${parseInt(i.product_id, 10)}, id: ${parseInt(i.product_id, 10)} })" class="font-bold text-sm text-gray-900 dark:text-white hover:text-teal-600 cursor-pointer transition truncate">${this.escapeHtml(i.product_name)}</div>
+                          <div class="text-xs text-gray-500 truncate">Qtd: ${parseInt(i.quantity, 10)} • Vendedor: ${this.escapeHtml(i.seller_name)}</div>
                           <div class="flex items-center gap-3 mt-1 flex-wrap">
                             ${i.seller_id ? `
                               <button type="button" onclick="App.openChatWithUser(${i.seller_id}, ${i.product_id})" class="text-[11px] text-teal-600 hover:text-teal-700 dark:text-teal-400 font-semibold hover:underline inline-flex items-center gap-1 cursor-pointer">
@@ -2868,12 +2898,12 @@ const App = {
                     ${o.coupon_code ? `
                       <div class="text-teal-600 dark:text-teal-400 font-semibold flex items-center gap-1.5">
                         <span class="inline-flex items-center gap-1"><i data-lucide="tag" class="w-3.5 h-3.5"></i> Cupom Aplicado:</span>
-                        <span class="font-mono bg-teal-50 dark:bg-teal-950 px-2 py-0.5 rounded border border-teal-200 dark:border-teal-800 font-bold">${o.coupon_code}</span>
+                        <span class="font-mono bg-teal-50 dark:bg-teal-950 px-2 py-0.5 rounded border border-teal-200 dark:border-teal-800 font-bold">${this.escapeHtml(o.coupon_code)}</span>
                         ${parseFloat(o.discount_amount) > 0 ? `<span class="text-emerald-600">(- R$ ${parseFloat(o.discount_amount).toFixed(2).replace('.', ',')})</span>` : ''}
                       </div>
                     ` : ''}
                     <div>
-                      Total Pago: <strong class="text-gray-900 dark:text-white text-sm">R$ ${parseFloat(o.total).toFixed(2).replace('.', ',')}</strong> | Pontos Ganhos: <strong class="text-emerald-600">+${o.points_earned} pts</strong>
+                      Total Pago: <strong class="text-gray-900 dark:text-white text-sm">R$ ${parseFloat(o.total).toFixed(2).replace('.', ',')}</strong> | Pontos Ganhos: <strong class="text-emerald-600">+${parseInt(o.points_earned, 10) || 0} pts</strong>
                     </div>
                     ${o.shipping_address ? `
                       <div class="text-[11px] text-gray-500 dark:text-gray-400 flex items-center gap-1.5 mt-1">
@@ -2884,9 +2914,9 @@ const App = {
                   </div>
                   <div class="flex gap-2">
                     ${!isCancelled ? `
-                      <button type="button" onclick="App.cancelOrder(${o.id})" class="text-xs font-semibold text-red-500 hover:underline px-2 py-1 cursor-pointer">Cancelar Pedido</button>
+                      <button type="button" onclick="App.cancelOrder(${parseInt(o.id, 10)})" class="text-xs font-semibold text-red-500 hover:underline px-2 py-1 cursor-pointer">Cancelar Pedido</button>
                     ` : ''}
-                    <button type="button" onclick="App.openSupportChat({ orderNumber: '${o.order_number}', orderId: ${o.id} })" class="btn-outline text-xs py-1.5 px-3 cursor-pointer inline-flex items-center gap-1.5 hover:border-teal-500 hover:text-teal-600 dark:hover:text-teal-400 transition" title="Falar diretamente com o Suporte Re-Store sobre este pedido">
+                    <button type="button" data-order-number="${this.escapeHtml(o.order_number)}" onclick="App.openSupportChat({ orderNumber: this.getAttribute('data-order-number'), orderId: ${parseInt(o.id, 10)} })" class="btn-outline text-xs py-1.5 px-3 cursor-pointer inline-flex items-center gap-1.5 hover:border-teal-500 hover:text-teal-600 dark:hover:text-teal-400 transition" title="Falar diretamente com o Suporte Re-Store sobre este pedido">
                       <i data-lucide="headphones" class="w-3.5 h-3.5 pointer-events-none"></i>
                       <span>Falar com o Suporte</span>
                     </button>
@@ -3222,23 +3252,23 @@ const App = {
                     <div class="p-4 rounded-2xl border ${isUsed ? 'border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40 opacity-60' : 'border-teal-200 dark:border-teal-900 bg-teal-50/50 dark:bg-teal-950/30'} flex flex-col justify-between">
                       <div>
                         <div class="flex items-center justify-between mb-2">
-                          <span class="font-extrabold text-sm ${isUsed ? 'text-gray-500' : 'text-teal-600 dark:text-teal-400'} inline-flex items-center gap-1">${d.discount_type === 'free_shipping' ? '<i data-lucide="truck" class="w-4 h-4 inline"></i> Frete Grátis' : `${d.discount_type} OFF`}</span>
+                          <span class="font-extrabold text-sm ${isUsed ? 'text-gray-500' : 'text-teal-600 dark:text-teal-400'} inline-flex items-center gap-1">${d.discount_type === 'free_shipping' ? '<i data-lucide="truck" class="w-4 h-4 inline"></i> Frete Grátis' : `${this.escapeHtml(d.discount_type)} OFF`}</span>
                           <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${isUsed ? 'bg-gray-200 text-gray-600' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-300'}">
                             ${isUsed ? 'Utilizado' : 'Disponível ✓'}
                           </span>
                         </div>
                         <div class="bg-white dark:bg-gray-800 p-2 rounded-xl border dark:border-gray-700 text-center font-mono font-bold text-sm tracking-wider my-2 select-all text-gray-800 dark:text-gray-200">
-                          ${d.code}
+                          ${this.escapeHtml(d.code)}
                         </div>
-                        <div class="text-[11px] text-gray-400 text-center">Custo: ${d.points_cost} pontos</div>
+                        <div class="text-[11px] text-gray-400 text-center">Custo: ${parseInt(d.points_cost, 10) || 0} pontos</div>
                       </div>
 
                       ${!isUsed ? `
                         <div class="flex gap-2 mt-3">
-                          <button type="button" onclick="navigator.clipboard.writeText('${d.code}'); ToastManager.show('Código ${d.code} copiado!', 'info');" class="btn-outline text-[11px] py-1.5 flex-1 cursor-pointer">
+                          <button type="button" data-coupon-code="${this.escapeHtml(d.code)}" onclick="const c = this.getAttribute('data-coupon-code'); navigator.clipboard.writeText(c); ToastManager.show('Código ' + c + ' copiado!', 'info');" class="btn-outline text-[11px] py-1.5 flex-1 cursor-pointer">
                             Copiar
                           </button>
-                          <button type="button" onclick="App.appliedCouponCode = '${d.code}'; ToastManager.show('Cupom ${d.code} selecionado para o checkout!', 'success'); App.navigateTo('cart');" class="btn-primary text-[11px] py-1.5 flex-1 cursor-pointer">
+                          <button type="button" data-coupon-code="${this.escapeHtml(d.code)}" onclick="const c = this.getAttribute('data-coupon-code'); App.appliedCouponCode = c; ToastManager.show('Cupom ' + c + ' selecionado para o checkout!', 'success'); App.navigateTo('cart');" class="btn-primary text-[11px] py-1.5 flex-1 cursor-pointer">
                             Usar no Carrinho
                           </button>
                         </div>
@@ -3401,16 +3431,16 @@ const App = {
       <div class="max-w-3xl mx-auto space-y-8 animate-fade-in">
         <div class="p-5 sm:p-6 rounded-3xl border dark:border-gray-800 bg-white dark:bg-gray-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
           <div class="flex items-center gap-3 sm:gap-4 min-w-0">
-            <img src="${user.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200'}" class="w-14 h-14 sm:w-16 sm:h-16 rounded-full object-cover border-2 border-teal-500 shrink-0">
+            <img src="${this.sanitizeUrl(user.avatar, 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200')}" class="w-14 h-14 sm:w-16 sm:h-16 rounded-full object-cover border-2 border-teal-500 shrink-0">
             <div class="min-w-0 flex-1">
               <h1 class="text-lg sm:text-xl font-extrabold text-gray-900 dark:text-white flex items-center gap-2 flex-wrap">
-                <span class="truncate">${user.name}</span>
+                <span class="truncate">${this.escapeHtml(user.name)}</span>
                 ${isPJ ? '<span class="text-xs bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200 px-2 py-0.5 rounded-full font-bold shrink-0">CNPJ Verificado ✓</span>' : ''}
               </h1>
-              <div class="text-xs text-gray-500 truncate">${user.email} • ${user.city || 'São Paulo'}, ${user.state || 'SP'}${user.created_at ? ' • Membro desde ' + DateHelper.formatDate(user.created_at) : ''}</div>
+              <div class="text-xs text-gray-500 truncate">${this.escapeHtml(user.email)} • ${this.escapeHtml(user.city || 'São Paulo')}, ${this.escapeHtml(user.state || 'SP')}${user.created_at ? ' • Membro desde ' + DateHelper.formatDate(user.created_at) : ''}</div>
               <div class="mt-2 flex items-center gap-2 flex-wrap">
-                <span class="badge-points inline-flex items-center gap-1.5"><i data-lucide="sprout" class="w-3.5 h-3.5"></i> ${user.points} Pontos Verdes</span>
-                <span class="bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200 text-xs px-2.5 py-0.5 rounded-full font-bold">Nível ${user.level}</span>
+                <span class="badge-points inline-flex items-center gap-1.5"><i data-lucide="sprout" class="w-3.5 h-3.5"></i> ${parseInt(user.points, 10) || 0} Pontos Verdes</span>
+                <span class="bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200 text-xs px-2.5 py-0.5 rounded-full font-bold">Nível ${parseInt(user.level, 10) || 1}</span>
               </div>
             </div>
           </div>
@@ -3425,11 +3455,11 @@ const App = {
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Nome Completo</label>
-                <input type="text" id="prof-name" value="${user.name}" required class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 text-sm">
+                <input type="text" id="prof-name" value="${this.escapeHtml(user.name)}" required class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 text-sm">
               </div>
               <div>
                 <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Telefone / WhatsApp</label>
-                <input type="text" id="prof-phone" value="${user.phone || ''}" placeholder="(11) 99999-9999" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 text-sm">
+                <input type="text" id="prof-phone" value="${this.escapeHtml(user.phone || '')}" placeholder="(11) 99999-9999" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 text-sm">
               </div>
               <div>
                 <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Tipo de Conta / Empresa Verificada</label>
@@ -3440,7 +3470,7 @@ const App = {
               </div>
               <div id="cnpj-box" style="display: ${isPJ ? 'block' : 'none'};">
                 <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Número de CNPJ</label>
-                <input type="text" id="prof-cnpj" value="${isPJ ? (user.cnpj || '') : ''}" placeholder="00.000.000/0001-00" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 text-sm font-mono">
+                <input type="text" id="prof-cnpj" value="${isPJ ? this.escapeHtml(user.cnpj || '') : ''}" placeholder="00.000.000/0001-00" class="w-full px-3 py-2 border rounded-xl dark:bg-gray-700 text-sm font-mono">
               </div>
               <div>
                 <label class="block text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Foto de Perfil (Upload Local)</label>
@@ -3502,13 +3532,13 @@ const App = {
                   <div class="review-display space-y-3">
                     <div class="flex flex-wrap items-center justify-between gap-3 border-b dark:border-gray-700 pb-3">
                       <div class="flex items-center gap-3">
-                        <img src="${r.product_image || 'https://images.unsplash.com/photo-1544816155-12df9643f363?w=100'}" onclick="App.navigateTo('product-detail', { productId: ${r.product_id}, id: ${r.product_id} })" class="w-12 h-12 rounded-xl object-cover border border-gray-200 dark:border-gray-700 cursor-pointer hover:opacity-85 transition" title="Ver detalhes do produto">
+                        <img src="${this.sanitizeUrl(r.product_image, 'https://images.unsplash.com/photo-1544816155-12df9643f363?w=100')}" onclick="App.navigateTo('product-detail', { productId: ${parseInt(r.product_id, 10)}, id: ${parseInt(r.product_id, 10)} })" class="w-12 h-12 rounded-xl object-cover border border-gray-200 dark:border-gray-700 cursor-pointer hover:opacity-85 transition" title="Ver detalhes do produto">
                         <div>
-                          <button type="button" onclick="App.navigateTo('product-detail', { productId: ${r.product_id}, id: ${r.product_id} })" class="font-bold text-sm text-gray-900 dark:text-white hover:text-teal-600 text-left cursor-pointer transition">
-                            ${r.product_name}
+                          <button type="button" onclick="App.navigateTo('product-detail', { productId: ${parseInt(r.product_id, 10)}, id: ${parseInt(r.product_id, 10)} })" class="font-bold text-sm text-gray-900 dark:text-white hover:text-teal-600 text-left cursor-pointer transition">
+                            ${this.escapeHtml(r.product_name)}
                           </button>
                           <div class="flex items-center gap-2 mt-0.5">
-                            <span class="text-amber-400 text-xs font-bold">${'★'.repeat(r.rating)}${'☆'.repeat(5 - r.rating)}</span>
+                            <span class="text-amber-400 text-xs font-bold">${'★'.repeat(Math.max(1, Math.min(5, parseInt(r.rating || 5, 10))))}${'☆'.repeat(5 - Math.max(1, Math.min(5, parseInt(r.rating || 5, 10))))}</span>
                             <span class="text-[11px] text-gray-400" title="${DateHelper.formatDateTime(r.created_at)}">• ${DateHelper.formatDateTime(r.created_at) || 'Recente'}</span>
                             <span class="text-[10px] text-emerald-700 bg-emerald-50 dark:bg-emerald-950 px-2 py-0.2 rounded-full font-bold">✓ Compra Verificada</span>
                           </div>
@@ -3516,25 +3546,25 @@ const App = {
                       </div>
 
                       <div class="flex items-center gap-2">
-                        <button type="button" onclick="App.toggleEditReview(${r.id})" class="btn-outline text-xs py-1.5 px-3 flex items-center gap-1 cursor-pointer font-semibold">
+                        <button type="button" onclick="App.toggleEditReview(${parseInt(r.id, 10)})" class="btn-outline text-xs py-1.5 px-3 flex items-center gap-1 cursor-pointer font-semibold">
                           <i data-lucide="pencil" class="w-3.5 h-3.5 pointer-events-none"></i>
                           <span>Editar</span>
                         </button>
-                        <button type="button" onclick="App.deleteReview(${r.id})" class="text-xs text-red-500 hover:text-red-700 hover:underline px-2 py-1.5 cursor-pointer font-semibold flex items-center gap-1">
+                        <button type="button" onclick="App.deleteReview(${parseInt(r.id, 10)})" class="text-xs text-red-500 hover:text-red-700 hover:underline px-2 py-1.5 cursor-pointer font-semibold flex items-center gap-1">
                           <i data-lucide="trash-2" class="w-3.5 h-3.5 pointer-events-none"></i>
                           <span>Excluir</span>
                         </button>
                       </div>
                     </div>
 
-                    <p class="text-xs text-gray-700 dark:text-gray-300 leading-relaxed">${r.comment || 'Sem comentário por escrito.'}</p>
+                    <p class="text-xs text-gray-700 dark:text-gray-300 leading-relaxed">${this.escapeHtml(r.comment) || 'Sem comentário por escrito.'}</p>
 
                     <!-- FOTOS ANEXADAS -->
                     ${r.images && r.images.length > 0 ? `
                       <div class="flex flex-wrap gap-2 pt-1">
                         ${r.images.map(img => `
-                          <div class="w-16 h-16 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 cursor-pointer hover:opacity-90 hover:scale-105 transition shadow-sm" onclick="App.openImageModal('${img.image_url}', 'Foto da sua avaliação: ${r.product_name}')">
-                            <img src="${img.image_url}" class="w-full h-full object-cover" alt="Foto">
+                          <div class="w-16 h-16 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 cursor-pointer hover:opacity-90 hover:scale-105 transition shadow-sm" data-modal-img="${this.sanitizeUrl(img.image_url)}" data-modal-title="Foto da sua avaliação: ${this.escapeHtml(r.product_name)}" onclick="App.openImageModal(this.getAttribute('data-modal-img'), this.getAttribute('data-modal-title'))">
+                            <img src="${this.sanitizeUrl(img.image_url)}" class="w-full h-full object-cover" alt="Foto">
                           </div>
                         `).join('')}
                       </div>
@@ -3542,7 +3572,7 @@ const App = {
                   </div>
 
                   <!-- FORMULÁRIO DE EDIÇÃO INLINE -->
-                  <form class="review-edit-form hidden flex-col gap-3 w-full pt-1" onsubmit="event.preventDefault(); App.submitReviewEdit(${r.id}, this);">
+                  <form class="review-edit-form hidden flex-col gap-3 w-full pt-1" onsubmit="event.preventDefault(); App.submitReviewEdit(${parseInt(r.id, 10)}, this);">
                     <div class="flex items-center justify-between border-b dark:border-gray-700 pb-2">
                       <span class="text-xs font-bold text-teal-800 dark:text-teal-200">Editar Avaliação</span>
                       <div class="flex items-center gap-2">
@@ -3562,7 +3592,7 @@ const App = {
                       rows="3" 
                       class="w-full p-2.5 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-teal-500"
                       required
-                    >${r.comment || ''}</textarea>
+                    >${this.escapeHtml(r.comment)}</textarea>
 
                     <!-- Gestão de Fotos Existentes -->
                     ${r.images && r.images.length > 0 ? `
@@ -3571,8 +3601,8 @@ const App = {
                         <div class="flex flex-wrap gap-2">
                           ${r.images.map(img => `
                             <div class="review-existing-thumb relative group w-14 h-14 rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600 flex-shrink-0">
-                              <img src="${img.image_url}" class="w-full h-full object-cover">
-                              <button type="button" onclick="App.markReviewImageForDeletion(${img.id}, this, this.closest('form'))" class="absolute top-0 right-0 bg-red-600 hover:bg-red-700 text-white text-[10px] w-4 h-4 flex items-center justify-center rounded-bl font-bold cursor-pointer" title="Remover foto">✕</button>
+                              <img src="${this.sanitizeUrl(img.image_url)}" class="w-full h-full object-cover">
+                              <button type="button" onclick="App.markReviewImageForDeletion(${parseInt(img.id, 10)}, this, this.closest('form'))" class="absolute top-0 right-0 bg-red-600 hover:bg-red-700 text-white text-[10px] w-4 h-4 flex items-center justify-center rounded-bl font-bold cursor-pointer" title="Remover foto">✕</button>
                             </div>
                           `).join('')}
                         </div>
@@ -3730,23 +3760,23 @@ const App = {
 
               <div class="space-y-3">
                 ${moderationNotices.map(n => `
-                  <div id="seller-mod-notice-${n.id}" class="p-4 rounded-2xl bg-white dark:bg-gray-800 border border-red-200 dark:border-red-900/50 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  <div id="seller-mod-notice-${parseInt(n.id, 10)}" class="p-4 rounded-2xl bg-white dark:bg-gray-800 border border-red-200 dark:border-red-900/50 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
                     <div class="space-y-1">
                       <div class="flex items-center gap-2">
                         <span class="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300">Anúncio Excluído</span>
-                        <span class="text-xs font-bold text-gray-900 dark:text-white">Produto: "${(n.product_name || 'Produto').replace(/"/g, '&quot;')}"</span>
+                        <span class="text-xs font-bold text-gray-900 dark:text-white">Produto: "${this.escapeHtml(n.product_name || 'Produto')}"</span>
                         <span class="text-[11px] text-gray-400 dark:text-gray-500">• ${DateHelper.formatDateTime(n.created_at)}</span>
                       </div>
                       <p class="text-xs text-red-800 dark:text-red-300 leading-relaxed">
-                        <strong>Motivo informado pela moderação:</strong> ${n.reason || n.message}
+                        <strong>Motivo informado pela moderação:</strong> ${this.escapeHtml(n.reason || n.message)}
                       </p>
                     </div>
                     <div class="flex items-center gap-2 shrink-0">
-                      <button type="button" onclick="App.openChatWithUser(9)" class="btn-primary text-xs py-1.5 px-3 flex items-center gap-1.5 cursor-pointer">
+                      <button type="button" onclick="App.openSupportChat()" class="btn-primary text-xs py-1.5 px-3 flex items-center gap-1.5 cursor-pointer">
                         <i data-lucide="message-circle" class="w-3.5 h-3.5"></i>
                         <span>Falar com o Suporte</span>
                       </button>
-                      <button type="button" onclick="App.dismissModerationNotice(${n.id})" title="Dispensar este aviso" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer transition">
+                      <button type="button" onclick="App.dismissModerationNotice(${parseInt(n.id, 10)})" title="Dispensar este aviso" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer transition">
                         <i data-lucide="x" class="w-4 h-4"></i>
                       </button>
                     </div>
@@ -3919,26 +3949,26 @@ const App = {
             <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               ${products.map(p => `
                 <div class="p-4 rounded-2xl border dark:border-gray-800 bg-white dark:bg-gray-800 flex items-center justify-between gap-3">
-                  <div class="flex items-center gap-3 cursor-pointer min-w-0 flex-1" onclick="App.navigateTo('product-detail', { productId: ${p.id} })" title="Ver Detalhes do Produto">
-                    <img src="${p.primary_image}" class="w-12 h-12 rounded-xl object-cover hover:opacity-80 transition shrink-0">
+                  <div class="flex items-center gap-3 cursor-pointer min-w-0 flex-1" onclick="App.navigateTo('product-detail', { productId: ${parseInt(p.id, 10)} })" title="Ver Detalhes do Produto">
+                    <img src="${this.sanitizeUrl(p.primary_image, 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=200')}" class="w-12 h-12 rounded-xl object-cover hover:opacity-80 transition shrink-0">
                     <div class="min-w-0 flex-1">
-                      <div class="font-bold text-sm text-gray-900 dark:text-white truncate hover:text-teal-600 transition">${p.name}</div>
+                      <div class="font-bold text-sm text-gray-900 dark:text-white truncate hover:text-teal-600 transition">${this.escapeHtml(p.name)}</div>
                       <div class="text-xs text-gray-500">R$ ${parseFloat(p.price).toFixed(2).replace('.', ',')}</div>
                       <div class="mt-1 flex flex-wrap gap-1">
                         ${parseInt(p.stock) <= 0
                           ? '<span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700">Esgotado</span>'
                           : (parseInt(p.stock) <= 3
-                            ? `<span class="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700"><i data-lucide="alert-triangle" class="w-3 h-3 inline"></i> Estoque baixo: ${p.stock} un.</span>`
-                            : `<span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Estoque: ${p.stock} un.</span>`)}
+                            ? `<span class="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700"><i data-lucide="alert-triangle" class="w-3 h-3 inline"></i> Estoque baixo: ${parseInt(p.stock, 10)} un.</span>`
+                            : `<span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Estoque: ${parseInt(p.stock, 10)} un.</span>`)}
                       </div>
-                      <div class="text-[11px] text-gray-400 mt-1 flex items-center gap-1 truncate"><i data-lucide="map-pin" class="w-3 h-3 text-teal-600 shrink-0"></i> <span>${p.location || 'Local não informado'}</span></div>
+                      <div class="text-[11px] text-gray-400 mt-1 flex items-center gap-1 truncate"><i data-lucide="map-pin" class="w-3 h-3 text-teal-600 shrink-0"></i> <span>${this.escapeHtml(p.location || 'Local não informado')}</span></div>
                     </div>
                   </div>
                   <div class="flex items-center gap-1 shrink-0">
-                    <button type="button" onclick="App.navigateTo('edit-product', { productId: ${p.id} })" title="Editar Anúncio" class="text-teal-600 hover:text-teal-800 hover:bg-teal-50 dark:hover:bg-teal-950/50 p-2 rounded-lg cursor-pointer transition">
+                    <button type="button" onclick="App.navigateTo('edit-product', { productId: ${parseInt(p.id, 10)} })" title="Editar Anúncio" class="text-teal-600 hover:text-teal-800 hover:bg-teal-50 dark:hover:bg-teal-950/50 p-2 rounded-lg cursor-pointer transition">
                       <i data-lucide="pencil" class="w-4 h-4"></i>
                     </button>
-                    <button type="button" onclick="App.deleteProductSeller(${p.id})" title="Excluir Anúncio" class="text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/50 p-2 rounded-lg cursor-pointer transition">
+                    <button type="button" onclick="App.deleteProductSeller(${parseInt(p.id, 10)})" title="Excluir Anúncio" class="text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/50 p-2 rounded-lg cursor-pointer transition">
                       <i data-lucide="trash-2" class="w-4 h-4"></i>
                     </button>
                   </div>
@@ -4063,10 +4093,10 @@ const App = {
         </div>
 
         <!-- FORMULÁRIO RESPONSIVO -->
-        <form onsubmit="App.submitAdminDeleteProduct(event, ${productId}, ${sellerId})" class="p-4 sm:p-6 space-y-3.5 sm:space-y-4 overflow-y-auto flex-1">
+        <form onsubmit="App.submitAdminDeleteProduct(event, ${parseInt(productId, 10)}, ${sellerId ? parseInt(sellerId, 10) : 'null'})" class="p-4 sm:p-6 space-y-3.5 sm:space-y-4 overflow-y-auto flex-1">
           <div class="p-3 bg-gray-50 dark:bg-gray-800 rounded-xl sm:rounded-2xl border dark:border-gray-700 text-xs">
             <span class="text-gray-500 block">Produto a ser excluído:</span>
-            <strong class="text-gray-900 dark:text-white text-xs sm:text-sm block mt-0.5 line-clamp-2">${productName}</strong>
+            <strong class="text-gray-900 dark:text-white text-xs sm:text-sm block mt-0.5 line-clamp-2">${this.escapeHtml(productName)}</strong>
           </div>
 
           <div>
@@ -4231,7 +4261,7 @@ const App = {
     try {
       const data = await AdminManager.listUsers();
       if (!data.success) {
-        container.innerHTML = `<div class="text-center py-12 text-red-500">${data.error || 'Erro ao carregar painel de administração.'}</div>`;
+        container.innerHTML = `<div class="text-center py-12 text-red-500">${this.escapeHtml(data.error || 'Erro ao carregar painel de administração.')}</div>`;
         return;
       }
 
@@ -4377,17 +4407,17 @@ const App = {
       const locationStr = [u.city, u.state].filter(Boolean).join(', ') || 'Local não informado';
 
       return `
-        <div class="p-4 space-y-3 admin-user-item hover:bg-gray-50/50 dark:hover:bg-gray-700/30 transition" data-name="${(u.name || '').toLowerCase()}" data-email="${(u.email || '').toLowerCase()}" data-city="${(u.city || '').toLowerCase()}">
+        <div class="p-4 space-y-3 admin-user-item hover:bg-gray-50/50 dark:hover:bg-gray-700/30 transition" data-name="${this.escapeHtml((u.name || '').toLowerCase())}" data-email="${this.escapeHtml((u.email || '').toLowerCase())}" data-city="${this.escapeHtml((u.city || '').toLowerCase())}">
           <!-- CABEÇALHO DO CARD -->
           <div class="flex items-center gap-3">
-            <img src="${u.avatar}" class="w-11 h-11 rounded-full object-cover border border-gray-200 dark:border-gray-700 shrink-0" alt="Avatar">
+            <img src="${this.sanitizeUrl(u.avatar, 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100')}" class="w-11 h-11 rounded-full object-cover border border-gray-200 dark:border-gray-700 shrink-0" alt="Avatar">
             <div class="min-w-0 flex-1">
               <div class="font-bold text-sm text-gray-900 dark:text-white flex items-center flex-wrap gap-1.5">
-                <span class="truncate">${u.name}</span>
+                <span class="truncate">${this.escapeHtml(u.name)}</span>
                 ${isSupportUser ? '<span class="text-[10px] bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-bold px-2 py-0.5 rounded-full border border-amber-300 dark:border-amber-800 shrink-0">🛡️ Suporte</span>' : ''}
                 ${u.is_verified_business ? '<span class="text-[10px] bg-teal-100 dark:bg-teal-950 text-teal-800 dark:text-teal-300 font-bold px-2 py-0.5 rounded-full shrink-0">🏢 Empresa</span>' : ''}
               </div>
-              <div class="text-[11px] text-gray-400 font-mono truncate">ID #${u.id} • ${u.email}</div>
+              <div class="text-[11px] text-gray-400 font-mono truncate">ID #${parseInt(u.id, 10)} • ${this.escapeHtml(u.email)}</div>
             </div>
           </div>
 
@@ -4397,14 +4427,14 @@ const App = {
               <span class="text-[10px] uppercase font-bold text-gray-400 block">Localização</span>
               <div class="text-gray-800 dark:text-gray-200 font-medium truncate flex items-center gap-1">
                 <i data-lucide="map-pin" class="w-3 h-3 text-teal-600 shrink-0"></i>
-                <span class="truncate">${locationStr}</span>
+                <span class="truncate">${this.escapeHtml(locationStr)}</span>
               </div>
             </div>
 
             <div class="p-2 rounded-xl bg-gray-50 dark:bg-gray-700/50 border dark:border-gray-700 space-y-0.5">
               <span class="text-[10px] uppercase font-bold text-gray-400 block">Nível & Pontos</span>
               <div class="text-gray-800 dark:text-gray-200 font-semibold truncate">
-                ${u.points || 0} pts (Nv. ${u.level || 1})
+                ${parseInt(u.points, 10) || 0} pts (Nv. ${parseInt(u.level, 10) || 1})
               </div>
             </div>
           </div>
@@ -4412,13 +4442,14 @@ const App = {
           <!-- PRODUTOS E AÇÕES -->
           <div class="flex items-center justify-between gap-2 pt-1">
             <span class="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-bold ${u.total_products > 0 ? 'bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800' : 'bg-gray-100 dark:bg-gray-700 text-gray-400'}">
-              ${u.total_products} anúncio(s)
+              ${parseInt(u.total_products, 10) || 0} anúncio(s)
             </span>
 
             <div class="flex items-center gap-2">
               <button 
                 type="button" 
-                onclick="App.openAdminUserProducts(${u.id}, '${(u.name || '').replace(/'/g, "\\'")}')" 
+                data-user-name="${this.escapeHtml(u.name)}"
+                onclick="App.openAdminUserProducts(${parseInt(u.id, 10)}, this.getAttribute('data-user-name'))" 
                 class="px-3 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 transition"
               >
                 <i data-lucide="package" class="w-3.5 h-3.5"></i>
@@ -4426,7 +4457,7 @@ const App = {
               </button>
               <button 
                 type="button" 
-                onclick="App.openChatWithUser(${u.id})" 
+                onclick="App.openChatWithUser(${parseInt(u.id, 10)})" 
                 title="Conversar pelo chat"
                 class="p-2 rounded-xl text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 active:scale-95 transition cursor-pointer"
               >
@@ -4449,50 +4480,51 @@ const App = {
       const locationStr = [u.city, u.state].filter(Boolean).join(', ') || 'Local não informado';
 
       return `
-        <tr class="hover:bg-gray-50/50 dark:hover:bg-gray-700/30 transition admin-user-item" data-name="${(u.name || '').toLowerCase()}" data-email="${(u.email || '').toLowerCase()}" data-city="${(u.city || '').toLowerCase()}">
+        <tr class="hover:bg-gray-50/50 dark:hover:bg-gray-700/30 transition admin-user-item" data-name="${this.escapeHtml((u.name || '').toLowerCase())}" data-email="${this.escapeHtml((u.email || '').toLowerCase())}" data-city="${this.escapeHtml((u.city || '').toLowerCase())}">
           <td class="py-3.5 px-4">
             <div class="flex items-center gap-3">
-              <img src="${u.avatar}" class="w-9 h-9 rounded-full object-cover border border-gray-200 dark:border-gray-700 shrink-0" alt="Avatar">
+              <img src="${this.sanitizeUrl(u.avatar, 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100')}" class="w-9 h-9 rounded-full object-cover border border-gray-200 dark:border-gray-700 shrink-0" alt="Avatar">
               <div>
                 <div class="font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
-                  <span>${u.name}</span>
+                  <span>${this.escapeHtml(u.name)}</span>
                   ${isSupportUser ? '<span class="text-[10px] bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-bold px-2 py-0.5 rounded-full border border-amber-300 dark:border-amber-800">🛡️ Suporte</span>' : ''}
                   ${u.is_verified_business ? '<span class="text-[10px] bg-teal-100 dark:bg-teal-950 text-teal-800 dark:text-teal-300 font-bold px-2 py-0.5 rounded-full">🏢 Empresa</span>' : ''}
                 </div>
-                <div class="text-[11px] text-gray-400 font-mono">ID #${u.id} • ${u.email}</div>
+                <div class="text-[11px] text-gray-400 font-mono">ID #${parseInt(u.id, 10)} • ${this.escapeHtml(u.email)}</div>
               </div>
             </div>
           </td>
           <td class="py-3.5 px-4">
             <div class="text-gray-700 dark:text-gray-300 flex items-center gap-1">
               <i data-lucide="map-pin" class="w-3.5 h-3.5 text-teal-600"></i>
-              <span>${locationStr}</span>
+              <span>${this.escapeHtml(locationStr)}</span>
             </div>
-            ${u.phone ? `<div class="text-[11px] text-gray-400">${u.phone}</div>` : ''}
+            ${u.phone ? `<div class="text-[11px] text-gray-400">${this.escapeHtml(u.phone)}</div>` : ''}
           </td>
           <td class="py-3.5 px-4">
-            <div class="font-semibold text-gray-800 dark:text-gray-200">${u.points || 0} pts (Nível ${u.level || 1})</div>
-            <div class="text-[11px] text-gray-400">${u.business_name ? u.business_name : 'Pessoa Física'}</div>
+            <div class="font-semibold text-gray-800 dark:text-gray-200">${parseInt(u.points, 10) || 0} pts (Nível ${parseInt(u.level, 10) || 1})</div>
+            <div class="text-[11px] text-gray-400">${u.business_name ? this.escapeHtml(u.business_name) : 'Pessoa Física'}</div>
           </td>
           <td class="py-3.5 px-4 text-center">
             <span class="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-bold ${u.total_products > 0 ? 'bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800' : 'bg-gray-100 dark:bg-gray-700 text-gray-400'}">
-              ${u.total_products} produto(s)
+              ${parseInt(u.total_products, 10) || 0} produto(s)
             </span>
           </td>
           <td class="py-3.5 px-4 text-right">
             <div class="inline-flex items-center gap-1.5 justify-end">
               <button 
                 type="button" 
-                onclick="App.openAdminUserProducts(${u.id}, '${(u.name || '').replace(/'/g, "\\'")}')" 
+                data-user-name="${this.escapeHtml(u.name)}"
+                onclick="App.openAdminUserProducts(${parseInt(u.id, 10)}, this.getAttribute('data-user-name'))" 
                 title="Ver produtos deste usuário"
                 class="px-2.5 py-1.5 rounded-xl bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 hover:bg-teal-100 transition font-bold text-xs inline-flex items-center gap-1 cursor-pointer active:scale-95"
               >
                 <i data-lucide="package" class="w-3.5 h-3.5"></i>
-                <span>Ver Produtos (${u.total_products})</span>
+                <span>Ver Produtos (${parseInt(u.total_products, 10) || 0})</span>
               </button>
               <button 
                 type="button" 
-                onclick="App.openChatWithUser(${u.id})" 
+                onclick="App.openChatWithUser(${parseInt(u.id, 10)})" 
                 title="Conversar pelo chat de suporte"
                 class="p-1.5 rounded-xl text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition cursor-pointer active:scale-95"
               >
@@ -4574,7 +4606,7 @@ const App = {
               <i data-lucide="package-search" class="w-4 h-4 sm:w-5 sm:h-5"></i>
             </div>
             <div class="min-w-0">
-              <h3 class="text-sm sm:text-base font-extrabold text-gray-900 dark:text-white truncate">Produtos de ${userName}</h3>
+              <h3 class="text-sm sm:text-base font-extrabold text-gray-900 dark:text-white truncate">Produtos de ${this.escapeHtml(userName)}</h3>
               <p class="text-[11px] sm:text-xs text-gray-500 truncate">Gerencie e modere os anúncios cadastrados por este usuário</p>
             </div>
           </div>
@@ -4617,7 +4649,7 @@ const App = {
       if (!container) return;
 
       if (!data.success) {
-        container.innerHTML = `<div class="text-center py-12 text-red-500 text-xs sm:text-sm">${data.error || 'Erro ao carregar produtos.'}</div>`;
+        container.innerHTML = `<div class="text-center py-12 text-red-500 text-xs sm:text-sm">${this.escapeHtml(data.error || 'Erro ao carregar produtos.')}</div>`;
         return;
       }
 
@@ -4639,15 +4671,15 @@ const App = {
             <div class="rounded-2xl border dark:border-gray-800 bg-white dark:bg-gray-800 p-3 shadow-xs flex flex-col justify-between space-y-3">
               <div>
                 <div class="aspect-square rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-700 relative mb-2">
-                  <img src="${p.primary_image}" class="w-full h-full object-cover" alt="${(p.name || '').replace(/"/g, '&quot;')}" loading="lazy">
+                  <img src="${this.sanitizeUrl(p.primary_image, 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=600')}" class="w-full h-full object-cover" alt="${this.escapeHtml(p.name)}" loading="lazy">
                   <span class="absolute top-2 left-2 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-black/60 text-white backdrop-blur">
-                    ${p.category}
+                    ${this.escapeHtml(p.category)}
                   </span>
                 </div>
-                <h4 class="font-bold text-sm text-gray-900 dark:text-white line-clamp-1" title="${(p.name || '').replace(/"/g, '&quot;')}">${p.name}</h4>
+                <h4 class="font-bold text-sm text-gray-900 dark:text-white line-clamp-1" title="${this.escapeHtml(p.name)}">${this.escapeHtml(p.name)}</h4>
                 <div class="flex items-center justify-between mt-1 text-xs">
                   <span class="font-extrabold text-teal-600 dark:text-teal-400">R$ ${parseFloat(p.price).toFixed(2).replace('.', ',')}</span>
-                  <span class="text-gray-400 font-medium">Estoque: ${p.stock} un.</span>
+                  <span class="text-gray-400 font-medium">Estoque: ${parseInt(p.stock, 10) || 0} un.</span>
                 </div>
               </div>
 
@@ -4656,7 +4688,7 @@ const App = {
                 <div class="grid grid-cols-2 gap-2">
                   <button 
                     type="button" 
-                    onclick="App.closeAdminModal('admin-user-products-modal'); App.navigateTo('product-detail', { id: ${p.id} });" 
+                    onclick="App.closeAdminModal('admin-user-products-modal'); App.navigateTo('product-detail', { id: ${parseInt(p.id, 10)} });" 
                     class="btn-outline py-2 text-xs font-bold flex items-center justify-center gap-1 cursor-pointer active:scale-95"
                   >
                     <i data-lucide="eye" class="w-3.5 h-3.5"></i>
@@ -4664,7 +4696,7 @@ const App = {
                   </button>
                   <button 
                     type="button" 
-                    onclick="App.closeAdminModal('admin-user-products-modal'); App.navigateTo('edit-product', { productId: ${p.id} });" 
+                    onclick="App.closeAdminModal('admin-user-products-modal'); App.navigateTo('edit-product', { productId: ${parseInt(p.id, 10)} });" 
                     class="btn-primary py-2 text-xs font-bold flex items-center justify-center gap-1 cursor-pointer active:scale-95"
                   >
                     <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
@@ -4673,7 +4705,8 @@ const App = {
                 </div>
                 <button 
                   type="button" 
-                  onclick="App.promptDeleteProductAsAdmin(${p.id}, '${(p.name || '').replace(/'/g, "\\'")}', ${userId});" 
+                  data-prod-name="${this.escapeHtml(p.name)}"
+                  onclick="App.promptDeleteProductAsAdmin(${parseInt(p.id, 10)}, this.getAttribute('data-prod-name'), ${parseInt(userId, 10)});" 
                   class="w-full py-2.5 text-xs rounded-xl bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/50 border border-red-200 dark:border-red-900 font-bold transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-98"
                 >
                   <i data-lucide="trash-2" class="w-4 h-4"></i>
@@ -5031,7 +5064,7 @@ const App = {
               </div>
               <div>
                 <div class="font-bold">Modo de Moderação Suporte/Admin</div>
-                <div>Você está editando este anúncio com privilégios de moderação. Anunciante original: <strong>${p.seller_name || 'ID #' + p.seller_id}</strong>.</div>
+                <div>Você está editando este anúncio com privilégios de moderação. Anunciante original: <strong>${this.escapeHtml(p.seller_name || 'ID #' + parseInt(p.seller_id, 10))}</strong>.</div>
               </div>
             </div>
           ` : ''}
@@ -5098,7 +5131,7 @@ const App = {
 
             <div>
               <label class="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Descrição Detalhada & Impacto Ecológico *</label>
-              <textarea id="edit-prod-desc" rows="4" required class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 text-sm">${p.description || ''}</textarea>
+              <textarea id="edit-prod-desc" rows="4" required class="w-full px-4 py-2 border rounded-xl dark:bg-gray-700 text-sm">${this.escapeHtml(p.description || '')}</textarea>
             </div>
 
             <!-- GESTÃO DE FOTOS -->
@@ -5164,11 +5197,11 @@ const App = {
     } else {
       existingContainer.innerHTML = visibleExisting.map((img, idx) => `
         <div class="relative aspect-square rounded-xl overflow-hidden border-2 ${idx === 0 && this.editNewImages.length === 0 ? 'border-teal-500 ring-2 ring-teal-300' : 'border-gray-200 dark:border-gray-700'} shadow-sm bg-gray-100 dark:bg-gray-800">
-          <img src="${img.image_url}" class="w-full h-full object-cover">
+          <img src="${this.sanitizeUrl(img.image_url)}" class="w-full h-full object-cover">
           <span class="absolute bottom-0 inset-x-0 ${idx === 0 ? 'bg-teal-600' : 'bg-black/60'} text-white text-[9px] font-bold text-center py-0.5 pointer-events-none">
             ${idx === 0 ? 'Principal' : `#${idx + 1}`}
           </span>
-          <button type="button" onclick="App.removeEditExistingImage(${img.id})" title="Remover esta foto" class="absolute top-1 right-1 bg-red-500 hover:bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-black shadow cursor-pointer transition">
+          <button type="button" onclick="App.removeEditExistingImage(${parseInt(img.id, 10)})" title="Remover esta foto" class="absolute top-1 right-1 bg-red-500 hover:bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-black shadow cursor-pointer transition">
             ✕
           </button>
         </div>
@@ -5591,7 +5624,7 @@ const App = {
     if (!res || !res.success || !res.partner) {
       win.innerHTML = `
         <div class="p-6 text-center my-auto space-y-3">
-          <div class="text-sm text-red-500">${res?.error || 'Não foi possível carregar a conversa.'}</div>
+          <div class="text-sm text-red-500">${this.escapeHtml(res?.error || 'Não foi possível carregar a conversa.')}</div>
           <button type="button" onclick="App.toggleMobileChatList(true)" class="btn-outline text-xs py-1.5 px-3 cursor-pointer">Voltar às Conversas</button>
         </div>
       `;
@@ -5609,7 +5642,8 @@ const App = {
       ChatManager.activeProductId = null;
     }
     const currentUserId = AuthManager.currentUser ? parseInt(AuthManager.currentUser.id, 10) : 0;
-    const partnerAvatar = partner.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(partner.name)}&background=0d9488&color=fff&size=80`;
+    const partnerAvatarFallback = `https://ui-avatars.com/api/?name=${encodeURIComponent(partner.name || 'U')}&background=0d9488&color=fff&size=80`;
+    const partnerAvatar = this.sanitizeUrl(partner.avatar, partnerAvatarFallback);
 
     win.innerHTML = `
       <!-- CABEÇALHO DO CHAT -->
@@ -5642,7 +5676,7 @@ const App = {
       ${product ? `
         <div class="p-2.5 mx-4 mt-3 bg-teal-50/80 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800/60 rounded-2xl flex items-center justify-between shadow-sm">
           <div class="flex items-center gap-2.5 min-w-0">
-            <img src="${product.image_url || 'https://images.unsplash.com/photo-1544816155-12df9643f363?w=100'}" class="w-9 h-9 rounded-xl object-cover shrink-0 border border-teal-200 dark:border-teal-700">
+            <img src="${this.sanitizeUrl(product.image_url, 'https://images.unsplash.com/photo-1544816155-12df9643f363?w=100')}" class="w-9 h-9 rounded-xl object-cover shrink-0 border border-teal-200 dark:border-teal-700">
             <div class="min-w-0">
               <div class="text-[10px] text-teal-800 dark:text-teal-300 font-bold uppercase tracking-wider">Negociando Produto</div>
               <div class="font-bold text-xs text-gray-900 dark:text-white truncate">${this.escapeHtml(product.name)}</div>
@@ -5721,7 +5755,7 @@ const App = {
           'Aceita negociar o valor?',
           'Pode me enviar mais fotos/detalhes?'
         ]).map(q => `
-          <button type="button" onclick="App.applyQuickQuestion('${this.escapeHtml(q)}')" class="text-[11px] font-medium bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-1.5 rounded-full whitespace-nowrap hover:border-teal-500 hover:text-teal-600 dark:hover:text-teal-400 transition text-gray-700 dark:text-gray-300 cursor-pointer shadow-sm">
+          <button type="button" data-quick-q="${this.escapeHtml(q)}" onclick="App.applyQuickQuestion(this.getAttribute('data-quick-q'))" class="text-[11px] font-medium bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-1.5 rounded-full whitespace-nowrap hover:border-teal-500 hover:text-teal-600 dark:hover:text-teal-400 transition text-gray-700 dark:text-gray-300 cursor-pointer shadow-sm">
             ${this.escapeHtml(q)}
           </button>
         `).join('')}
@@ -6016,7 +6050,8 @@ const App = {
 
     convsList.innerHTML = convs.map(c => {
       const isActive = activePartnerId && parseInt(c.user.id, 10) === parseInt(activePartnerId, 10);
-      const avatar = c.user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(c.user.name)}&background=0d9488&color=fff&size=60`;
+      const avatarFallback = `https://ui-avatars.com/api/?name=${encodeURIComponent(c.user.name || 'U')}&background=0d9488&color=fff&size=60`;
+      const avatar = this.sanitizeUrl(c.user.avatar, avatarFallback);
       const lastMsgText = c.last_message ? this.escapeHtml(c.last_message.message) : 'Iniciou a conversa';
       const time = c.last_message ? DateHelper.formatConversationTime(c.last_message.created_at) : '';
       const fullTime = c.last_message ? DateHelper.formatDateTime(c.last_message.created_at) : '';
